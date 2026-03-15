@@ -245,11 +245,73 @@ def _render_bar(fraction: float, width: int = 20) -> str:
     return f"[green]{'━' * filled}[/][dim]{'━' * (width - filled)}[/]"
 
 
-def _spinner_label(text: str, style: str = "") -> RichTable:
-    """Create a grid with an animated spinner + text label."""
-    grid = RichTable.grid(padding=(0, 1))
-    grid.add_row(Spinner("dots"), Text(text, style=style))
-    return grid
+class _LiveSpinnerLabel:
+    """Renderable: animated spinner + description + live elapsed time.
+
+    Recomputes elapsed time on every Rich render cycle so the counter
+    ticks up alongside the animated spinner.
+    """
+
+    def __init__(self, text: str, style: str = "", start: float | None = None) -> None:
+        self._text = text
+        self._style = style
+        self._spinner = Spinner("dots")
+        self._start = start if start is not None else _time.monotonic()
+
+    def __rich_console__(self, console, options):
+        grid = RichTable.grid(padding=(0, 1))
+        elapsed = _fmt_elapsed(_time.monotonic() - self._start)
+        grid.add_row(
+            self._spinner,
+            Text(self._text, style=self._style),
+            Text(elapsed, style="dim"),
+        )
+        yield grid
+
+
+class _LiveProgressLabel:
+    """Renderable: spinner + description + progress bar + row counts + live elapsed + ETA.
+
+    Used for determinate progress steps (streaming Arrow publish) where
+    row counts and a progress bar are shown alongside an animated spinner.
+    """
+
+    def __init__(
+        self,
+        text: str,
+        *,
+        bar: str | None = None,
+        completed: int = 0,
+        total: int | None = None,
+        start: float | None = None,
+        eta: str = "",
+    ) -> None:
+        self._text = text
+        self._bar = bar
+        self._completed = completed
+        self._total = total
+        self._spinner = Spinner("dots")
+        self._start = start if start is not None else _time.monotonic()
+        self._eta = eta
+
+    def __rich_console__(self, console, options):
+        from rich.markup import render as render_markup
+
+        elapsed = _fmt_elapsed(_time.monotonic() - self._start)
+        if self._total and self._bar:
+            label = render_markup(
+                f"{self._text}  {self._bar} "
+                f"{self._completed:,} / {self._total:,} rows"
+                f"  [dim]{elapsed}{self._eta}[/]"
+            )
+        else:
+            label = render_markup(
+                f"{self._text}  "
+                f"[dim]{self._completed:,} rows  {elapsed}[/]"
+            )
+        grid = RichTable.grid(padding=(0, 1))
+        grid.add_row(self._spinner, label)
+        yield grid
 
 
 def _fmt_elapsed(seconds: float) -> str:
@@ -299,10 +361,7 @@ class ModelNode:
             self._step_start = _time.monotonic()
             self._total = total
             self._completed = 0
-            if total is not None:
-                label = f"[yellow]⏳[/] {description}  [dim]0 / {total:,} rows[/]"
-            else:
-                label = _spinner_label(description)
+            label = _LiveSpinnerLabel(description, start=self._step_start)
             self._current_node = self._branch.add(label)
             self._live.update(self._root_tree)
 
@@ -319,15 +378,19 @@ class ModelNode:
                 if pct > 0.01:
                     remaining = elapsed / pct * (1 - pct)
                     eta = f"  ETA {_fmt_elapsed(remaining)}"
-                self._current_node.label = (
-                    f"[yellow]⏳[/] {self._current_desc}  "
-                    f"{bar} {self._completed:,} / {self._total:,} rows"
-                    f"  [dim]{_fmt_elapsed(elapsed)}{eta}[/]"
+                self._current_node.label = _LiveProgressLabel(
+                    self._current_desc,
+                    bar=bar,
+                    completed=self._completed,
+                    total=self._total,
+                    start=self._step_start,
+                    eta=eta,
                 )
             else:
-                self._current_node.label = (
-                    f"[yellow]⏳[/] {self._current_desc}  "
-                    f"[dim]{self._completed:,} rows  {_fmt_elapsed(elapsed)}[/]"
+                self._current_node.label = _LiveProgressLabel(
+                    self._current_desc,
+                    completed=self._completed,
+                    start=self._step_start,
                 )
             self._live.update(self._root_tree)
 
@@ -442,7 +505,7 @@ def cli_tree_progress(
         @contextmanager
         def model_context(model_key: str):
             with lock:
-                branch = tree.add(_spinner_label(model_key, style="bold blue"))
+                branch = tree.add(_LiveSpinnerLabel(model_key, style="bold blue"))
                 live.update(tree)
             node = ModelNode(branch, tree, live, lock, model_key)
             with _model_progress_context(node):
