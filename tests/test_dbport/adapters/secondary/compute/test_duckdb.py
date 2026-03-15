@@ -166,6 +166,49 @@ class TestDuckDBComputeAdapterCloseEdgeCases:
         assert ad._con is None
 
 
+class TestEnsureExtensionsFallback:
+    def test_load_failure_triggers_install_then_load(self, tmp_path: Path, monkeypatch):
+        """When LOAD fails, ensure_extensions tries INSTALL + LOAD."""
+        from unittest.mock import MagicMock
+
+        ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        mock_con = MagicMock()
+        call_log: list[str] = []
+
+        def tracking_execute(sql, *args, **kwargs):
+            call_log.append(sql)
+            if sql.startswith("LOAD") and sum(1 for c in call_log if c.startswith("LOAD")) == 1:
+                raise Exception("extension not found")
+
+        mock_con.execute = tracking_execute
+        # Bypass _get_con by injecting the mock connection
+        ad._con = mock_con
+        monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
+
+        ad.ensure_extensions()
+        assert any("INSTALL" in c for c in call_log)
+        ad._con = None  # prevent close from calling mock
+
+    def test_install_and_load_both_fail_raises_runtime_error(self, tmp_path: Path, monkeypatch):
+        """When both LOAD and INSTALL+LOAD fail, RuntimeError is raised."""
+        from unittest.mock import MagicMock
+
+        ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        mock_con = MagicMock()
+
+        def always_fail(sql, *args, **kwargs):
+            if "iceberg" in sql.lower() or "httpfs" in sql.lower():
+                raise Exception("not available")
+
+        mock_con.execute = always_fail
+        ad._con = mock_con
+        monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
+
+        with pytest.raises(RuntimeError, match="could not be loaded"):
+            ad.ensure_extensions()
+        ad._con = None
+
+
 class TestDuckDBComputeAdapterClose:
     def test_close_sets_con_to_none(self, tmp_path: Path):
         ad = DuckDBComputeAdapter(tmp_path / "dbport.duckdb")

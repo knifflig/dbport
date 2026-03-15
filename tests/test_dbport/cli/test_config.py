@@ -196,6 +196,116 @@ _RICH_LOCK = (
 )
 
 
+class TestConfigRunHook:
+    _LOCK_WITH_HOOK = (
+        'default_model = "a.x"\n\n'
+        '[models."a.x"]\n'
+        'agency = "a"\n'
+        'dataset_id = "x"\n'
+        'model_root = "."\n'
+        'duckdb_path = "data/x.duckdb"\n'
+        'run_hook = "sql/main.sql"\n'
+    )
+
+    _LOCK_NO_HOOK = (
+        'default_model = "a.x"\n\n'
+        '[models."a.x"]\n'
+        'agency = "a"\n'
+        'dataset_id = "x"\n'
+        'model_root = "."\n'
+        'duckdb_path = "data/x.duckdb"\n'
+    )
+
+    def test_show_current_hook(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, self._LOCK_WITH_HOOK)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "run-hook",
+        ])
+        assert result.exit_code == 0
+        assert "sql/main.sql" in result.output
+
+    def test_show_no_hook_set(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, self._LOCK_NO_HOOK)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "run-hook",
+        ])
+        assert result.exit_code == 0
+        assert "No run hook" in result.output
+
+    def test_show_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, self._LOCK_WITH_HOOK)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "run-hook",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["run_hook"] == "sql/main.sql"
+        assert data["data"]["model"] == "a.x"
+
+    def test_set_hook(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, self._LOCK_NO_HOOK)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "run-hook", "sql/transform.sql",
+        ])
+        assert result.exit_code == 0
+        assert "sql/transform.sql" in result.output
+
+        # Verify persisted
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models"]["a.x"]["run_hook"] == "sql/transform.sql"
+
+    def test_set_hook_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, self._LOCK_NO_HOOK)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "run-hook", "run.py",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["run_hook"] == "run.py"
+
+    def test_set_hook_normalizes_path(self, tmp_path: Path):
+        """Hook path relative to CWD is normalized relative to model_root."""
+        import os
+
+        repo = _setup_repo(tmp_path)
+        model_lock = (
+            'default_model = "a.x"\n\n'
+            '[models."a.x"]\n'
+            'agency = "a"\n'
+            'dataset_id = "x"\n'
+            'model_root = "models/x"\n'
+            'duckdb_path = "models/x/data/x.duckdb"\n'
+        )
+        _write_lock(repo, model_lock)
+        model_dir = repo / "models" / "x"
+        model_dir.mkdir(parents=True)
+
+        # Set hook from repo root as if CWD is repo root
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(str(repo))
+            result = runner.invoke(app, [
+                "--project", str(repo),
+                "config", "run-hook", "models/x/sql/main.sql",
+            ])
+        finally:
+            os.chdir(old_cwd)
+
+        assert result.exit_code == 0
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models"]["a.x"]["run_hook"] == "sql/main.sql"
+
+
 class TestConfigInfo:
     def test_info_default_summary(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)

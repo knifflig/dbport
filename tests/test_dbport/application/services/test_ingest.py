@@ -144,6 +144,32 @@ class TestIngestServiceSkip:
         svc.execute(declaration)
         assert scanned == []  # scan not called → skipped
 
+    def test_skip_fires_progress_callback(self, compute, lock):
+        """progress_callback.log is called when ingest is skipped."""
+        from dbport.infrastructure.progress import progress_callback
+
+        catalog = _FakeCatalog(snapshot_id=100)
+        svc = IngestService(catalog, compute, lock)
+        declaration = InputDeclaration(table_address="wifor.emp")
+
+        # First load
+        svc.execute(declaration)
+
+        # Set up progress callback for the skip path
+        logged: list[str] = []
+
+        class _CB:
+            def log(self, msg: str) -> None:
+                logged.append(msg)
+
+        token = progress_callback.set(_CB())
+        try:
+            svc.execute(declaration)
+        finally:
+            progress_callback.reset(token)
+
+        assert any("Skipping" in m for m in logged)
+
     def test_re_ingests_when_snapshot_changes(self, compute, lock):
         catalog = _FakeCatalog(snapshot_id=100)
         svc = IngestService(catalog, compute, lock)
