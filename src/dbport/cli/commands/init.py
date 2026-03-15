@@ -9,7 +9,14 @@ import typer
 
 from ..context import read_lock_models
 from ..errors import cli_error_handler
-from ..render import cli_progress, print_error, print_info, print_json, print_success
+from ..render import (
+    cli_progress,
+    cli_tree_progress,
+    print_error,
+    print_info,
+    print_json,
+    print_success,
+)
 
 
 _SQL_TEMPLATE = """\
@@ -124,23 +131,31 @@ def _resolve_model_paths_from_data(cli_ctx, model_data: dict) -> tuple[str, str,
     return _agency, _dataset_id, model_root, duckdb_path
 
 
-def _sync_single_model(cli_ctx, model_key: str, model_data: dict) -> None:
-    """Sync a single existing model by creating a DBPort instance."""
+def _do_sync(cli_ctx, model_key: str, model_data: dict) -> None:
+    """Create a DBPort instance for the model, triggering sync in __init__."""
     from ...adapters.primary.client import DBPort
 
     _agency, _dataset_id, model_root, duckdb_path = _resolve_model_paths_from_data(
         cli_ctx, model_data
     )
+    with DBPort(
+        agency=_agency,
+        dataset_id=_dataset_id,
+        lock_path=str(cli_ctx.lockfile_path),
+        duckdb_path=duckdb_path,
+        model_root=model_root,
+    ):
+        pass  # sync happens in __init__
 
-    with cli_progress(enabled=not cli_ctx.json_output):
-        with DBPort(
-            agency=_agency,
-            dataset_id=_dataset_id,
-            lock_path=str(cli_ctx.lockfile_path),
-            duckdb_path=duckdb_path,
-            model_root=model_root,
-        ):
-            pass  # sync happens in __init__
+
+def _sync_single_model(cli_ctx, model_key: str, model_data: dict) -> None:
+    """Sync a single existing model with tree progress display."""
+    with cli_tree_progress(
+        enabled=not cli_ctx.json_output,
+        title="Initializing",
+    ) as model_ctx:
+        with model_ctx(model_key):
+            _do_sync(cli_ctx, model_key, model_data)
 
     if cli_ctx.json_output:
         print_json("init", {"synced": [model_key], "total": 1})
@@ -149,7 +164,9 @@ def _sync_single_model(cli_ctx, model_key: str, model_data: dict) -> None:
 
 
 def _sync_all_models(cli_ctx, models: dict) -> None:
-    """Sync all models in the lock file with the warehouse."""
+    """Sync all models in the lock file, running in parallel with tree progress."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     if not models:
         print_error(
             f"No models found in {cli_ctx.lockfile_path}. "
@@ -157,35 +174,35 @@ def _sync_all_models(cli_ctx, models: dict) -> None:
         )
         raise typer.Exit(1)
 
-    synced = []
-    with cli_progress(enabled=not cli_ctx.json_output):
-        for model_key, model_data in models.items():
-            try:
-                _agency, _dataset_id, model_root, duckdb_path = (
-                    _resolve_model_paths_from_data(cli_ctx, model_data)
-                )
+    synced: list[str] = []
+    failed: list[str] = []
 
-                from ...adapters.primary.client import DBPort
+    with cli_tree_progress(
+        enabled=not cli_ctx.json_output,
+        title="Initializing models",
+    ) as model_ctx:
+        def _sync_worker(model_key: str, model_data: dict) -> str:
+            with model_ctx(model_key):
+                _do_sync(cli_ctx, model_key, model_data)
+            return model_key
 
-                with DBPort(
-                    agency=_agency,
-                    dataset_id=_dataset_id,
-                    lock_path=str(cli_ctx.lockfile_path),
-                    duckdb_path=duckdb_path,
-                    model_root=model_root,
-                ):
-                    pass  # sync happens in __init__
-                synced.append(model_key)
-            except Exception as exc:
-                if not cli_ctx.json_output:
-                    print_error(f"Failed to sync {model_key}: {exc}")
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {
+                pool.submit(_sync_worker, key, data): key
+                for key, data in models.items()
+            }
+            for fut in as_completed(futures):
+                key = futures[fut]
+                try:
+                    fut.result()
+                    synced.append(key)
+                except Exception:
+                    failed.append(key)
 
     if cli_ctx.json_output:
         print_json("init", {"synced": synced, "total": len(models)})
     else:
         print_success(f"Synced {len(synced)}/{len(models)} model(s)")
-        for key in synced:
-            print_info(f"  {key}")
 
 
 # ---------------------------------------------------------------------------
