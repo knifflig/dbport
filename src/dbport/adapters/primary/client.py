@@ -175,6 +175,9 @@ class DBPort:
         # Auto-detect schema from warehouse if table exists
         self._auto_detect_schema()
 
+        # Sync local DuckDB state with lock + warehouse
+        self._sync_local_state()
+
         # Update last_fetched_at on every run (fire-and-forget)
         self._update_last_fetched()
 
@@ -317,6 +320,16 @@ class DBPort:
                 )
         except Exception as exc:
             logger.debug("Auto-schema detection skipped: %s", exc)
+
+    def _sync_local_state(self) -> None:
+        """Sync DuckDB with lock file: output table + inputs."""
+        from ...application.services.sync import SyncService
+
+        try:
+            svc = SyncService(self._catalog, self._compute, self._lock)
+            svc.execute(self._dataset.table_address)
+        except Exception as exc:
+            logger.debug("Local sync skipped: %s", exc)
 
     def _update_last_fetched(self) -> None:
         from ...application.services.fetch import FetchService

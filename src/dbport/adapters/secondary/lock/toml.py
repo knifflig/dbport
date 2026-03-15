@@ -377,3 +377,19 @@ class TomlLockAdapter:
                 return
         versions.append(raw)
         self._save(doc)
+
+    # ------------------------------------------------------------------
+    # ILockStore — run hook
+    # ------------------------------------------------------------------
+
+    def read_run_hook(self) -> str | None:
+        doc = self._load()
+        m = self._model_doc(doc)
+        return m.get("run_hook")
+
+    def write_run_hook(self, hook: str) -> None:
+        doc = self._load()
+        m = self._model_doc(doc)
+        self._ensure_model_header(m)
+        m["run_hook"] = hook
+        self._save(doc)

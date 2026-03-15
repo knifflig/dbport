@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 # Standard schemas created on every new DuckDB database.
 _INIT_SCHEMAS = ("inputs", "staging", "outputs")
 
+# Extensions installed on every new DuckDB connection.
+_REQUIRED_EXTENSIONS = ("iceberg", "httpfs")
+
 
 class DuckDBComputeAdapter:
     """File-backed DuckDB connection with schema initialisation.
@@ -40,6 +43,23 @@ class DuckDBComputeAdapter:
                 self._con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
             logger.debug("DuckDB connected: %s", self._path)
         return self._con
+
+    def ensure_extensions(self) -> None:
+        """Install and load required DuckDB extensions.
+
+        Called explicitly when warehouse operations are needed (publish).
+        Uses LOAD first (fast if pre-installed), falls back to INSTALL + LOAD.
+        """
+        con = self._get_con()
+        for ext in _REQUIRED_EXTENSIONS:
+            try:
+                con.execute(f"LOAD {ext}")
+            except Exception:
+                try:
+                    con.execute(f"INSTALL {ext}")
+                    con.execute(f"LOAD {ext}")
+                except Exception:
+                    logger.warning("Could not install DuckDB extension: %s", ext)
 
     # ------------------------------------------------------------------
     # ICompute

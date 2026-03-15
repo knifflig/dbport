@@ -36,6 +36,10 @@ class ICompute(Protocol):
         """Unregister a previously registered Arrow view."""
         ...
 
+    def ensure_extensions(self) -> None:
+        """Install and load required DuckDB extensions for warehouse operations."""
+        ...
+
     def close(self) -> None:
         """Release the DuckDB connection."""
         ...

@@ -85,15 +85,14 @@ class TestIcebergCatalogAdapterInit:
 
 
 class TestEnsureWarehouseAttached:
-    def test_loads_iceberg_extension(self):
+    def test_calls_ensure_extensions(self):
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
 
         adapter._ensure_warehouse_attached(compute)
 
-        calls = [str(c) for c in compute.execute.call_args_list]
-        assert any("LOAD iceberg" in c for c in calls)
+        compute.ensure_extensions.assert_called_once()
 
     def test_configures_s3_path_style(self):
         adapter = IcebergCatalogAdapter(_make_creds(
@@ -139,12 +138,12 @@ class TestEnsureWarehouseAttached:
         # Second call should not execute any SQL
         assert call_count_2 == call_count_1
 
-    def test_raises_when_iceberg_unavailable(self):
+    def test_raises_when_extensions_unavailable(self):
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
-        compute.execute.side_effect = RuntimeError("extension not found")
+        compute.ensure_extensions.side_effect = RuntimeError("extension not found")
 
-        with pytest.raises(RuntimeError, match="iceberg extension is required"):
+        with pytest.raises(RuntimeError, match="extension not found"):
             adapter._ensure_warehouse_attached(compute)
 
     def test_token_without_bearer_prefix(self):
@@ -705,24 +704,14 @@ class TestCatalogConnectionFailures:
 
 
 class TestEnsureWarehouseAttachedEdgeCases:
-    def test_load_fails_install_then_load_succeeds(self):
-        """When LOAD iceberg fails, tries INSTALL + LOAD."""
+    def test_ensure_extensions_delegated_to_compute(self):
+        """Extension loading is delegated to compute.ensure_extensions()."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
-        call_count = [0]
+        compute.execute.return_value.fetchone.return_value = (0,)
 
-        def execute_side_effect(sql, *args, **kwargs):
-            call_count[0] += 1
-            if sql == "LOAD iceberg" and call_count[0] == 1:
-                raise RuntimeError("not found")
-            result = MagicMock()
-            result.fetchone.return_value = (0,)
-            return result
-
-        compute.execute.side_effect = execute_side_effect
         adapter._ensure_warehouse_attached(compute)
-        calls = [str(c) for c in compute.execute.call_args_list]
-        assert any("INSTALL iceberg" in c for c in calls)
+        compute.ensure_extensions.assert_called_once()
 
     def test_already_attached_warehouse_skips_attach(self):
         """When warehouse already in duckdb_databases, ATTACH is skipped."""

@@ -1,4 +1,4 @@
-"""dbp run — execute SQL transforms."""
+"""dbp run — run the complete model workflow: sync, execute, publish."""
 
 from __future__ import annotations
 
@@ -14,18 +14,17 @@ from ..render import print_info, print_json, print_success
 
 def run_cmd(
     ctx: typer.Context,
-    target: Optional[str] = typer.Argument(None, help="Path to .sql file to execute."),
+    version: Optional[str] = typer.Option(None, "--version", help="Version to publish after execution."),
     timing: bool = typer.Option(False, "--timing", help="Print execution duration."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not publish."),
+    refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
 ) -> None:
-    """Run the model workflow (SQL files)."""
+    """Run the complete model workflow: sync, execute, publish."""
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
 
     with cli_error_handler("run", json_output=cli_ctx.json_output):
-        if not target:
-            raise RuntimeError("No target specified. Usage: dbp run <path/to/file.sql>")
-
         from ...adapters.primary.client import DBPort
 
         paths = resolve_model_paths(cli_ctx)
@@ -39,14 +38,39 @@ def run_cmd(
             duckdb_path=paths.duckdb_path,
             model_root=paths.model_root,
         ) as port:
-            port.execute(target)
+            # Read run_hook from lock
+            run_hook = port._lock.read_run_hook()
+            if not run_hook:
+                raise RuntimeError(
+                    "No run_hook configured for this model. "
+                    "Set it with: dbp config run-hook <path>"
+                )
+
+            # Execute the model
+            port.execute(run_hook)
+
+            # Publish if version provided
+            if version:
+                mode = None
+                if dry_run:
+                    mode = "dry"
+                elif refresh:
+                    mode = "refresh"
+                port.publish(version=version, mode=mode)
 
         elapsed = time.monotonic() - t0
 
         if cli_ctx.json_output:
-            data = {"target": target, "elapsed_seconds": round(elapsed, 3)}
+            data: dict = {
+                "run_hook": run_hook,
+                "elapsed_seconds": round(elapsed, 3),
+            }
+            if version:
+                data["version"] = version
             print_json("run", data)
         else:
-            print_success(f"Executed {target}")
+            print_success(f"Executed model via {run_hook}")
+            if version:
+                print_info(f"  Published version: {version}")
             if timing:
                 print_info(f"  Duration: {elapsed:.2f}s")

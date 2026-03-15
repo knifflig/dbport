@@ -121,27 +121,17 @@ class IcebergCatalogAdapter:
     # ------------------------------------------------------------------
 
     def _ensure_warehouse_attached(self, compute: Any) -> None:
-        """Load the iceberg extension and ATTACH the warehouse (idempotent).
+        """Load extensions, configure S3, and ATTACH the warehouse (idempotent).
 
-        Raises RuntimeError if the iceberg extension cannot be loaded.
+        Extensions are installed via the compute adapter's ensure_extensions().
         """
         if self._warehouse_attached:
             return
 
-        creds = self._creds
+        # Load extensions (iceberg, httpfs) — delegated to compute adapter
+        compute.ensure_extensions()
 
-        # Load iceberg extension (mandatory)
-        try:
-            compute.execute("LOAD iceberg")
-        except Exception:
-            try:
-                compute.execute("INSTALL iceberg")
-                compute.execute("LOAD iceberg")
-            except Exception as exc:
-                raise RuntimeError(
-                    "DuckDB iceberg extension is required but could not be loaded. "
-                    "Run .claude/setup.sh to install the extension."
-                ) from exc
+        creds = self._creds
 
         # S3 path-style configuration for Supabase
         if creds.s3_endpoint:
