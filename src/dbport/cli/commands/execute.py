@@ -9,7 +9,7 @@ import typer
 
 from ..context import resolve_model_paths
 from ..errors import cli_error_handler
-from ..render import print_info, print_json, print_success
+from ..render import cli_progress, print_info, print_json, print_success
 
 
 def execute_cmd(
@@ -27,19 +27,26 @@ def execute_cmd(
             raise RuntimeError("No target specified. Usage: dbp execute <path/to/file.sql>")
 
         from ...adapters.primary.client import DBPort
+        from ...infrastructure.progress import progress_callback
 
         paths = resolve_model_paths(cli_ctx)
 
         t0 = time.monotonic()
 
-        with DBPort(
-            agency=paths.agency,
-            dataset_id=paths.dataset_id,
-            lock_path=paths.lock_path,
-            duckdb_path=paths.duckdb_path,
-            model_root=paths.model_root,
-        ) as port:
-            port.execute(target)
+        with cli_progress(enabled=not cli_ctx.json_output and not cli_ctx.quiet):
+            with DBPort(
+                agency=paths.agency,
+                dataset_id=paths.dataset_id,
+                lock_path=paths.lock_path,
+                duckdb_path=paths.duckdb_path,
+                model_root=paths.model_root,
+            ) as port:
+                cb = progress_callback.get(None)
+                if cb:
+                    cb.started(f"Executing {target}")
+                port.execute(target)
+                if cb:
+                    cb.finished(f"Executed {target}")
 
         elapsed = time.monotonic() - t0
 

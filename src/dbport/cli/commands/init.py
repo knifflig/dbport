@@ -8,7 +8,7 @@ from typing import Optional
 import typer
 
 from ..errors import cli_error_handler
-from ..render import print_error, print_info, print_json, print_success
+from ..render import cli_progress, print_error, print_info, print_json, print_success
 
 
 _SQL_TEMPLATE = """\
@@ -82,6 +82,8 @@ def _scaffold_model(
     agency: str | None, path: str | None, force: bool,
 ) -> None:
     """Create a new model scaffold and register in the lock file."""
+    from ...infrastructure.progress import progress_callback
+
     project_name = name
     _dataset = dataset or project_name
     _agency = agency or "default"
@@ -105,53 +107,68 @@ def _scaffold_model(
             )
             raise typer.Exit(1)
 
-    # Create scaffold directories
-    target.mkdir(parents=True, exist_ok=True)
-    sql_dir = target / "sql"
-    sql_dir.mkdir(exist_ok=True)
-    data_dir = target / "data"
-    data_dir.mkdir(exist_ok=True)
+    with cli_progress(enabled=not cli_ctx.json_output):
+        cb = progress_callback.get(None)
 
-    fmt = {"agency": _agency, "dataset": _dataset}
+        # Create scaffold directories
+        if cb:
+            cb.started(f"Scaffolding model '{project_name}'")
 
-    # Write starter files only if they don't exist (never overwrite model files)
-    ddl_file = sql_dir / "create_output.sql"
-    if not ddl_file.exists() or force:
-        ddl_file.write_text(_SQL_TEMPLATE.format(**fmt), encoding="utf-8")
+        target.mkdir(parents=True, exist_ok=True)
+        sql_dir = target / "sql"
+        sql_dir.mkdir(exist_ok=True)
+        data_dir = target / "data"
+        data_dir.mkdir(exist_ok=True)
 
-    main_sql = sql_dir / "main.sql"
-    if not main_sql.exists() or force:
-        main_sql.write_text(_MAIN_SQL_TEMPLATE.format(**fmt), encoding="utf-8")
+        fmt = {"agency": _agency, "dataset": _dataset}
 
-    if template in ("python", "hybrid"):
-        run_py = target / "run.py"
-        if not run_py.exists() or force:
-            run_py.write_text(_RUN_PY_TEMPLATE.format(**fmt), encoding="utf-8")
+        # Write starter files only if they don't exist (never overwrite model files)
+        ddl_file = sql_dir / "create_output.sql"
+        if not ddl_file.exists() or force:
+            ddl_file.write_text(_SQL_TEMPLATE.format(**fmt), encoding="utf-8")
 
-    # Register model in the repo-root lock file
-    repo_root = cli_ctx.project_path
-    lock_path = cli_ctx.lockfile_path
+        main_sql = sql_dir / "main.sql"
+        if not main_sql.exists() or force:
+            main_sql.write_text(_MAIN_SQL_TEMPLATE.format(**fmt), encoding="utf-8")
 
-    try:
-        model_root_rel = str(target.relative_to(repo_root))
-    except ValueError:
-        model_root_rel = str(target)
+        if template in ("python", "hybrid"):
+            run_py = target / "run.py"
+            if not run_py.exists() or force:
+                run_py.write_text(_RUN_PY_TEMPLATE.format(**fmt), encoding="utf-8")
 
-    duckdb_rel = f"{model_root_rel}/data/{_dataset}.duckdb"
+        if cb:
+            cb.finished()
 
-    _register_model(lock_path, _agency, _dataset, model_root_rel, duckdb_rel)
+        # Register model in the repo-root lock file
+        if cb:
+            cb.started("Registering model in lock file")
 
-    # Set run_hook based on template
-    if template in ("python", "hybrid"):
-        run_hook = "run.py"
-    else:
-        run_hook = "sql/main.sql"
-    _set_run_hook(lock_path, _agency, _dataset, model_root_rel, duckdb_rel, run_hook)
+        repo_root = cli_ctx.project_path
+        lock_path = cli_ctx.lockfile_path
 
-    # Always set the newly initialized model as the default
-    from ..context import write_default_model
-    model_key = f"{_agency}.{_dataset}"
-    write_default_model(lock_path, model_key)
+        try:
+            model_root_rel = str(target.relative_to(repo_root))
+        except ValueError:
+            model_root_rel = str(target)
+
+        duckdb_rel = f"{model_root_rel}/data/{_dataset}.duckdb"
+
+        _register_model(lock_path, _agency, _dataset, model_root_rel, duckdb_rel)
+
+        # Set run_hook based on template
+        if template in ("python", "hybrid"):
+            run_hook = "run.py"
+        else:
+            run_hook = "sql/main.sql"
+        _set_run_hook(lock_path, _agency, _dataset, model_root_rel, duckdb_rel, run_hook)
+
+        # Always set the newly initialized model as the default
+        from ..context import write_default_model
+        model_key = f"{_agency}.{_dataset}"
+        write_default_model(lock_path, model_key)
+
+        if cb:
+            cb.finished()
 
     if cli_ctx.json_output:
         print_json("init", {
@@ -192,36 +209,37 @@ def _sync_models(cli_ctx) -> None:
         raise typer.Exit(1)
 
     synced = []
-    for model_key, model_data in models.items():
-        _agency = model_data.get("agency", "default")
-        _dataset_id = model_data.get("dataset_id", model_key)
-        raw_root = model_data.get("model_root", ".")
-        model_root = str((cli_ctx.project_path / raw_root).resolve())
+    with cli_progress(enabled=not cli_ctx.json_output):
+        for model_key, model_data in models.items():
+            _agency = model_data.get("agency", "default")
+            _dataset_id = model_data.get("dataset_id", model_key)
+            raw_root = model_data.get("model_root", ".")
+            model_root = str((cli_ctx.project_path / raw_root).resolve())
 
-        raw_db = model_data.get("duckdb_path", "")
-        if raw_db:
-            db_path = Path(raw_db)
-            if not db_path.is_absolute():
-                db_path = cli_ctx.project_path / db_path
-        else:
-            db_path = Path(model_root) / "data" / f"{_dataset_id}.duckdb"
-        duckdb_path = str(db_path.resolve())
+            raw_db = model_data.get("duckdb_path", "")
+            if raw_db:
+                db_path = Path(raw_db)
+                if not db_path.is_absolute():
+                    db_path = cli_ctx.project_path / db_path
+            else:
+                db_path = Path(model_root) / "data" / f"{_dataset_id}.duckdb"
+            duckdb_path = str(db_path.resolve())
 
-        try:
-            from ...adapters.primary.client import DBPort
+            try:
+                from ...adapters.primary.client import DBPort
 
-            with DBPort(
-                agency=_agency,
-                dataset_id=_dataset_id,
-                lock_path=str(cli_ctx.lockfile_path),
-                duckdb_path=duckdb_path,
-                model_root=model_root,
-            ):
-                pass  # init + sync happens in __init__
-            synced.append(model_key)
-        except Exception as exc:
-            if not cli_ctx.json_output:
-                print_error(f"Failed to sync {model_key}: {exc}")
+                with DBPort(
+                    agency=_agency,
+                    dataset_id=_dataset_id,
+                    lock_path=str(cli_ctx.lockfile_path),
+                    duckdb_path=duckdb_path,
+                    model_root=model_root,
+                ):
+                    pass  # init + sync happens in __init__
+                synced.append(model_key)
+            except Exception as exc:
+                if not cli_ctx.json_output:
+                    print_error(f"Failed to sync {model_key}: {exc}")
 
     if cli_ctx.json_output:
         print_json("init", {"synced": synced, "total": len(models)})

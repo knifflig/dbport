@@ -308,6 +308,11 @@ class DBPort:
     def _auto_detect_schema(self) -> None:
         """Auto-detect output schema from warehouse table if it exists."""
         from ...application.services.auto_schema import AutoSchemaService
+        from ...infrastructure.progress import progress_callback
+
+        cb = progress_callback.get(None)
+        if cb:
+            cb.started("Detecting schema from warehouse")
 
         try:
             svc = AutoSchemaService(self._catalog, self._compute, self._lock)
@@ -318,7 +323,14 @@ class DBPort:
                     "Auto-detected schema from warehouse for %s",
                     self._dataset.table_address,
                 )
+                if cb:
+                    cb.finished("Schema detected from warehouse")
+            else:
+                if cb:
+                    cb.finished("No existing warehouse table")
         except Exception as exc:
+            if cb:
+                cb.finished("Schema detection skipped")
             logger.debug("Auto-schema detection skipped: %s", exc)
 
     def _sync_local_state(self) -> None:
@@ -333,6 +345,14 @@ class DBPort:
 
     def _update_last_fetched(self) -> None:
         from ...application.services.fetch import FetchService
+        from ...infrastructure.progress import progress_callback
+
+        cb = progress_callback.get(None)
+        if cb:
+            cb.started("Updating warehouse timestamp")
 
         svc = FetchService(self._dataset, self._catalog)
         svc.execute()
+
+        if cb:
+            cb.finished()

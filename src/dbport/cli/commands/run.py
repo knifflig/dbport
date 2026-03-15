@@ -9,7 +9,7 @@ import typer
 
 from ..context import resolve_model_paths
 from ..errors import cli_error_handler
-from ..render import print_info, print_json, print_success
+from ..render import cli_progress, print_info, print_json, print_success
 
 
 def run_cmd(
@@ -26,37 +26,44 @@ def run_cmd(
 
     with cli_error_handler("run", json_output=cli_ctx.json_output):
         from ...adapters.primary.client import DBPort
+        from ...infrastructure.progress import progress_callback
 
         paths = resolve_model_paths(cli_ctx)
 
         t0 = time.monotonic()
 
-        with DBPort(
-            agency=paths.agency,
-            dataset_id=paths.dataset_id,
-            lock_path=paths.lock_path,
-            duckdb_path=paths.duckdb_path,
-            model_root=paths.model_root,
-        ) as port:
-            # Read run_hook from lock
-            run_hook = port._lock.read_run_hook()
-            if not run_hook:
-                raise RuntimeError(
-                    "No run_hook configured for this model. "
-                    "Set it with: dbp config run-hook <path>"
-                )
+        with cli_progress(enabled=not cli_ctx.json_output and not cli_ctx.quiet):
+            with DBPort(
+                agency=paths.agency,
+                dataset_id=paths.dataset_id,
+                lock_path=paths.lock_path,
+                duckdb_path=paths.duckdb_path,
+                model_root=paths.model_root,
+            ) as port:
+                # Read run_hook from lock
+                run_hook = port._lock.read_run_hook()
+                if not run_hook:
+                    raise RuntimeError(
+                        "No run_hook configured for this model. "
+                        "Set it with: dbp config run-hook <path>"
+                    )
 
-            # Execute the model
-            port.execute(run_hook)
+                # Execute the model
+                cb = progress_callback.get(None)
+                if cb:
+                    cb.started(f"Executing {run_hook}")
+                port.execute(run_hook)
+                if cb:
+                    cb.finished(f"Executed {run_hook}")
 
-            # Publish if version provided
-            if version:
-                mode = None
-                if dry_run:
-                    mode = "dry"
-                elif refresh:
-                    mode = "refresh"
-                port.publish(version=version, mode=mode)
+                # Publish if version provided
+                if version:
+                    mode = None
+                    if dry_run:
+                        mode = "dry"
+                    elif refresh:
+                        mode = "refresh"
+                    port.publish(version=version, mode=mode)
 
         elapsed = time.monotonic() - t0
 

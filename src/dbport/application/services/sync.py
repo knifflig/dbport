@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from ...domain.entities.input import InputDeclaration
+from ...infrastructure.progress import progress_callback
 from ...domain.ports.catalog import ICatalog
 from ...domain.ports.compute import ICompute
 from ...domain.ports.lock import ILockStore
@@ -41,11 +42,18 @@ class SyncService:
         if schema is None:
             return
 
+        cb = progress_callback.get(None)
+        if cb:
+            cb.started(f"Creating output table {table_address}")
+
         ns = table_address.split(".", 1)[0] if "." in table_address else None
         if ns:
             self._compute.execute(f"CREATE SCHEMA IF NOT EXISTS {ns}")
         self._compute.execute(schema.ddl.statement)
         logger.debug("Output table synced from lock schema: %s", table_address)
+
+        if cb:
+            cb.finished()
 
     def _sync_inputs(self) -> None:
         """Reload inputs that are missing or stale in DuckDB."""
@@ -65,6 +73,9 @@ class SyncService:
             try:
                 ingest_svc.execute(declaration)
             except Exception as exc:
+                cb = progress_callback.get(None)
+                if cb:
+                    cb.failed(f"Failed to sync {record.table_address}")
                 logger.warning(
                     "Failed to sync input %s: %s",
                     record.table_address,
