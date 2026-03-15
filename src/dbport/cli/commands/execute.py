@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 import typer
 
@@ -14,7 +13,7 @@ from ..render import cli_progress, print_info, print_json, print_success
 
 def execute_cmd(
     ctx: typer.Context,
-    target: Optional[str] = typer.Argument(None, help="Path to .sql file to execute."),
+    target: str | None = typer.Argument(None, help="Path to .sql file to execute."),
     timing: bool = typer.Option(False, "--timing", help="Print execution duration."),
 ) -> None:
     """Execute SQL transforms in DuckDB."""

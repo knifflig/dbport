@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,6 @@ from dbport.domain.entities.input import IngestRecord
 from dbport.domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 from dbport.domain.entities.version import VersionRecord
 
-
 _DDL = "CREATE OR REPLACE TABLE wifor.emp (geo VARCHAR, year SMALLINT, value DOUBLE)"
 _DDL_MULTILINE = (
     "CREATE OR REPLACE TABLE wifor.emp (\n"
@@ -22,7 +21,7 @@ _DDL_MULTILINE = (
     "    value DOUBLE\n"
     ");"
 )
-_NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -453,7 +452,7 @@ class TestTomlLockFlatMode:
         lock = TomlLockAdapter(tmp_path / "dbport.lock", model_key="")
         record = VersionRecord(
             version="2026-03-14",
-            published_at=datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc),
+            published_at=datetime(2026, 3, 14, 12, 0, 0, tzinfo=UTC),
             rows=100,
             completed=True,
         )
@@ -533,7 +532,6 @@ class TestDefaultModelRoundTrip:
         assert doc2["models"]["a.x"]["agency"] == "a"
 
     def test_save_without_default_model_has_no_key(self, tmp_path: Path):
-        import tomllib
 
         lock_path = tmp_path / "dbport.lock"
         adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".")

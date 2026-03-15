@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from dbport.application.services.sync import SyncService
 from dbport.domain.entities.input import IngestRecord
 from dbport.domain.entities.schema import SqlDdl

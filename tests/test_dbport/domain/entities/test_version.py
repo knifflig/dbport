@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
 from dbport.domain.entities.version import DatasetVersion, VersionRecord
 
-
-_NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=UTC)
 
 
 class TestDatasetVersion:

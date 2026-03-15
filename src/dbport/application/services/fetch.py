@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ...domain.entities.dataset import DatasetKey
 from ...domain.ports.catalog import ICatalog
@@ -23,7 +23,7 @@ class FetchService:
 
     def execute(self) -> datetime:
         """Update last_fetched_at. Returns the timestamp written."""
-        now = datetime.now(timezone.utc).replace(microsecond=0)
+        now = datetime.now(UTC).replace(microsecond=0)
         ts_str = now.isoformat().replace("+00:00", "Z")
         table_address = self._key.table_address
         try:

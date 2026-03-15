@@ -11,7 +11,6 @@ from dbport.adapters.secondary.lock.toml import TomlLockAdapter
 from dbport.application.services.ingest import IngestService
 from dbport.domain.entities.input import InputDeclaration
 
-
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------

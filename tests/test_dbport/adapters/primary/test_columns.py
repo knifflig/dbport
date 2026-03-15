@@ -7,7 +7,6 @@ import pytest
 from dbport.adapters.primary.columns import ColumnConfig, ColumnRegistry
 from dbport.domain.entities.codelist import CodelistEntry
 
-
 # ---------------------------------------------------------------------------
 # In-memory ILockStore test double
 # ---------------------------------------------------------------------------

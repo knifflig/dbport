@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from dbport.application.services.fetch import FetchService
 from dbport.domain.entities.dataset import DatasetKey
@@ -35,7 +35,7 @@ class TestFetchService:
         svc = FetchService(self._key(), catalog)
         result = svc.execute()
         assert isinstance(result, datetime)
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_writes_last_fetched_at_property(self):
         catalog = _FakeCatalog(exists=True)

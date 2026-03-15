@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 from ...domain.entities.codelist import ColumnCodelist
 from ...domain.entities.dataset import Dataset
@@ -50,7 +51,7 @@ class PublishService:
         - "dry": validate schemas only; no data is written to the warehouse.
         - "refresh": overwrite an existing version, ignoring the completed checkpoint.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from ...adapters.secondary.catalog.drift import SchemaDriftError, check_schema_drift
 
@@ -113,7 +114,7 @@ class PublishService:
             from ...domain.entities.version import VersionRecord
             return VersionRecord(
                 version=version.version,
-                published_at=datetime.now(timezone.utc).replace(microsecond=0),
+                published_at=datetime.now(UTC).replace(microsecond=0),
                 params=version.params,
                 rows=0,
                 completed=False,

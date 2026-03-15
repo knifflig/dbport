@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from .context import CliContext, resolve_context
@@ -45,9 +43,9 @@ def main_callback(
         False, "--version", callback=_version_callback, is_eager=True,
         help="Show version and exit.",
     ),
-    project: Optional[str] = ProjectOption,
-    lockfile: Optional[str] = LockfileOption,
-    model: Optional[str] = ModelOption,
+    project: str | None = ProjectOption,
+    lockfile: str | None = LockfileOption,
+    model: str | None = ModelOption,
     verbose: bool = VerboseOption,
     quiet: bool = QuietOption,
     json_output: bool = JsonOption,

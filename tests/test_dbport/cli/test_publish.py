@@ -163,7 +163,7 @@ class TestPublishCommand:
         mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
 
     def test_publish_refresh_no_version_uses_latest(self, tmp_path: Path):
-        """dbp publish --refresh with no --version uses latest completed."""
+        """Dbp publish --refresh with no --version uses latest completed."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_port()

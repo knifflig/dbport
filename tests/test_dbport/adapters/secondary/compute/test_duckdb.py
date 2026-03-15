@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter, _INIT_SCHEMAS
+from dbport.adapters.secondary.compute.duckdb import _INIT_SCHEMAS, DuckDBComputeAdapter
 
 
 @pytest.fixture

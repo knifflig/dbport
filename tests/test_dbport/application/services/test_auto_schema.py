@@ -15,7 +15,6 @@ from dbport.application.services.auto_schema import (
 )
 from dbport.domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 
-
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------

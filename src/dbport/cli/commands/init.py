@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -17,7 +16,6 @@ from ..render import (
     print_json,
     print_success,
 )
-
 
 _SQL_TEMPLATE = """\
 -- Output schema for {dataset}
@@ -59,11 +57,11 @@ if __name__ == "__main__":
 
 def init_cmd(
     ctx: typer.Context,
-    name: Optional[str] = typer.Argument(None, help="Model key (agency.dataset) or new project name."),
+    name: str | None = typer.Argument(None, help="Model key (agency.dataset) or new project name."),
     template: str = typer.Option("sql", "--template", help="Template type: sql, python, or hybrid."),
-    dataset: Optional[str] = typer.Option(None, "--dataset", help="Output dataset ID."),
-    agency: Optional[str] = typer.Option(None, "--agency", help="Agency identifier."),
-    path: Optional[str] = typer.Option(None, "--path", help="Target directory (default: ./<name>)."),
+    dataset: str | None = typer.Option(None, "--dataset", help="Output dataset ID."),
+    agency: str | None = typer.Option(None, "--agency", help="Agency identifier."),
+    path: str | None = typer.Option(None, "--path", help="Target directory (default: ./<name>)."),
     force: bool = typer.Option(False, "--force", help="Overwrite existing files."),
 ) -> None:
     """Initialize or sync models.

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from ..context import (
@@ -17,11 +15,11 @@ from ..render import cli_tree_progress, print_info, print_json, print_success
 
 def publish_cmd(
     ctx: typer.Context,
-    model: Optional[str] = typer.Argument(None, help="Model key (agency.dataset_id)."),
-    version: Optional[str] = typer.Option(None, "--version", help="Version identifier for this publish."),
+    model: str | None = typer.Argument(None, help="Model key (agency.dataset_id)."),
+    version: str | None = typer.Option(None, "--version", help="Version identifier for this publish."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not write data."),
     refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
-    message: Optional[str] = typer.Option(None, "--message", "-m", help="Publish note for history."),
+    message: str | None = typer.Option(None, "--message", "-m", help="Publish note for history."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
     strict: bool = typer.Option(False, "--strict", help="Fail on warnings."),
 ) -> None:

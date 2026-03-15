@@ -85,8 +85,8 @@ def print_panel(title: str, content: str) -> None:
 
 # -- Progress helpers --------------------------------------------------------
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from rich.progress import (
     BarColumn,
@@ -195,7 +195,7 @@ class RichProgressAdapter:
 
 
 @contextmanager
-def cli_progress(*, enabled: bool = True) -> Generator[None, None, None]:
+def cli_progress(*, enabled: bool = True) -> Generator[None]:
     """Context manager that wires Rich progress to the progress contextvar.
 
     When *enabled* is ``False`` (JSON mode), yields a no-op context — the
@@ -231,7 +231,7 @@ def cli_progress(*, enabled: bool = True) -> Generator[None, None, None]:
 
 import threading
 import time as _time
-from typing import Callable
+from collections.abc import Callable
 
 from rich.live import Live
 from rich.spinner import Spinner
@@ -478,7 +478,7 @@ def cli_tree_progress(
     *,
     enabled: bool = True,
     title: str = "Initializing",
-) -> Generator[Callable[[str], contextmanager], None, None]:
+) -> Generator[Callable[[str], contextmanager]]:
     """Render a Rich tree with per-model progress branches.
 
     Yields a *model_context* factory: call ``model_context(model_key)`` to get

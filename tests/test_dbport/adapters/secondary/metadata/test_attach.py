@@ -7,8 +7,6 @@ import gzip
 import hashlib
 import json
 
-import pytest
-
 from dbport.adapters.secondary.metadata.attach import (
     attach_codelist_csv,
     attach_metadata_json,

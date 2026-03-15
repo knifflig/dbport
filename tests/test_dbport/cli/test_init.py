@@ -42,7 +42,7 @@ class TestInitCommand:
         assert (project_dir / "data").is_dir()
 
     def test_init_writes_to_repo_root_lock(self, tmp_path: Path):
-        """init must write to the repo-root dbport.lock, not model dir."""
+        """Init must write to the repo-root dbport.lock, not model dir."""
         repo = _setup_repo(tmp_path)
         result = runner.invoke(app, [
             "--project", str(repo),
@@ -302,7 +302,7 @@ class TestInitSyncExistingModel:
     """Tests for `dbp init <model_key>` syncing an existing model."""
 
     def test_init_with_existing_model_key_syncs(self, tmp_path: Path):
-        """dbp init test.table1 should sync, not scaffold, when model exists."""
+        """Dbp init test.table1 should sync, not scaffold, when model exists."""
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
         (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
@@ -318,7 +318,7 @@ class TestInitSyncExistingModel:
         assert "Created model" not in result.output
 
     def test_init_with_agency_dataset_syncs_existing(self, tmp_path: Path):
-        """dbp init --agency test --dataset table1 should sync when model exists."""
+        """Dbp init --agency test --dataset table1 should sync when model exists."""
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
         (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
@@ -334,7 +334,7 @@ class TestInitSyncExistingModel:
         assert "Created model" not in result.output
 
     def test_init_with_unknown_name_scaffolds(self, tmp_path: Path):
-        """dbp init brand_new should scaffold when name not in lock."""
+        """Dbp init brand_new should scaffold when name not in lock."""
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
         result = runner.invoke(app, [
@@ -346,7 +346,7 @@ class TestInitSyncExistingModel:
         assert "Created model" in result.output
 
     def test_init_with_unknown_agency_dataset_scaffolds(self, tmp_path: Path):
-        """dbp init --agency new --dataset thing should scaffold."""
+        """Dbp init --agency new --dataset thing should scaffold."""
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
         result = runner.invoke(app, [
@@ -358,7 +358,7 @@ class TestInitSyncExistingModel:
         assert "Created model" in result.output
 
     def test_init_no_args_syncs_all(self, tmp_path: Path):
-        """dbp init with no args should sync all models."""
+        """Dbp init with no args should sync all models."""
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)
         (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
@@ -374,7 +374,7 @@ class TestInitSyncExistingModel:
         assert "Synced 2/2" in result.output
 
     def test_init_no_args_empty_lock_fails(self, tmp_path: Path):
-        """dbp init with no args and no models should error."""
+        """Dbp init with no args and no models should error."""
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", "# empty lock\n")
         result = runner.invoke(app, [
@@ -409,7 +409,7 @@ class TestInitSyncExistingModel:
         assert "Synced 1/2" in result.output
 
     def test_init_no_args_json_output(self, tmp_path: Path):
-        """dbp init with --json syncing all models."""
+        """Dbp init with --json syncing all models."""
         import json
         repo = _setup_repo(tmp_path)
         _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,7 @@ from dbport.domain.entities.dataset import Dataset
 from dbport.domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 from dbport.domain.entities.version import DatasetVersion, VersionRecord
 
-_NOW = datetime(2026, 3, 9, 14, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 9, 14, 0, 0, tzinfo=UTC)
 _DDL = "CREATE OR REPLACE TABLE wifor.emp (geo VARCHAR, year SMALLINT)"
 
 

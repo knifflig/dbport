@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from dbport.adapters.primary.client import DBPort
 
 
@@ -268,9 +266,10 @@ class TestDBPortAutoSchema:
     def test_auto_detect_schema_refreshes_columns(self, tmp_path: Path):
         """When auto-schema succeeds, columns._refresh() is called."""
         import pyarrow as pa
+
+        from dbport.adapters.primary.columns import ColumnRegistry
         from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
-        from dbport.adapters.primary.columns import ColumnRegistry
         from dbport.domain.entities.dataset import Dataset
 
         mock_catalog = MagicMock()
