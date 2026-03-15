@@ -243,14 +243,30 @@ def resolve_model_key(ctx: CliContext, model_arg: str | None = None) -> tuple[st
     if model_arg and model_arg in models:
         return model_arg, models[model_arg]
 
-    # 2. Fall through to standard resolution
-    model_data = _resolve_model_data(ctx, models)
-    # Find the key that corresponds to this model_data
-    for key, data in models.items():
-        if data is model_data:
-            return key, data
-    # Shouldn't happen, but safe fallback
-    return next(iter(models.items()))
+    # 2. --model flag (explicit model directory)
+    if ctx.model_dir is not None:
+        result = _find_model(models, ctx.model_dir)
+        if result is None:
+            raise RuntimeError(
+                f"No model with model_root='{ctx.model_dir}' in {ctx.lockfile_path}. "
+                f"Available: {[d.get('model_root', '.') for d in models.values()]}"
+            )
+        return result
+
+    # 3. CWD match
+    cwd_root = _cwd_model_root(ctx.project_path)
+    result = _find_model(models, cwd_root)
+    if result is not None:
+        return result
+
+    # 4. default_model from lock file
+    default_key = read_default_model(ctx.lockfile_path)
+    if default_key and default_key in models:
+        return default_key, models[default_key]
+
+    # 5. Fallback: first model
+    key = next(iter(models))
+    return key, models[key]
 
 
 def read_lock_versions(lockfile_path: Path, model_key: str) -> list[dict]:

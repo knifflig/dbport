@@ -373,6 +373,61 @@ class TestInitSyncExistingModel:
         assert result.exit_code == 0, result.output
         assert "Synced 2/2" in result.output
 
+    def test_init_no_args_empty_lock_fails(self, tmp_path: Path):
+        """dbp init with no args and no models should error."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", "# empty lock\n")
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init",
+        ])
+        assert result.exit_code != 0
+        assert "No models found" in result.output
+
+    def test_init_no_args_sync_failure_counted(self, tmp_path: Path):
+        """Sync failure for one model should not crash the whole sync."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        (repo / "examples" / "other").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+        call_count = 0
+
+        def _side_effect(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("sync failed")
+            return mp
+
+        with patch(_PATCH_TARGET, side_effect=_side_effect):
+            result = runner.invoke(app, [
+                "--project", str(repo),
+                "init",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "Synced 1/2" in result.output
+
+    def test_init_no_args_json_output(self, tmp_path: Path):
+        """dbp init with --json syncing all models."""
+        import json
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        (repo / "examples" / "other").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--project", str(repo),
+                "init",
+            ])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["total"] == 2
+
     def test_init_single_model_json_output(self, tmp_path: Path):
         """JSON output for single model sync."""
         import json

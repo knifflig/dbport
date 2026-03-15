@@ -232,6 +232,23 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
 
+    def test_run_json_output_with_version(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--version", "2026-03-15",
+            ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["version"] == "2026-03-15"
+
     def test_run_model_key_in_json_output(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MULTI_MODEL_LOCK)

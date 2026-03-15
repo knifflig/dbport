@@ -373,6 +373,49 @@ class TestResolveModelKey:
         key, data = resolve_model_key(ctx, "nonexistent")
         assert key == "a.x"
 
+    def test_resolves_via_model_dir_flag(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+            '\n[models."b.y"]\nagency = "b"\ndataset_id = "y"\nmodel_root = "m/y"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="m/y")
+        key, data = resolve_model_key(ctx)
+        assert key == "b.y"
+
+    def test_model_dir_flag_not_found_raises(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="nonexistent")
+        with pytest.raises(RuntimeError, match="No model with model_root"):
+            resolve_model_key(ctx)
+
+    def test_resolves_via_cwd(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+            '\n[models."b.y"]\nagency = "b"\ndataset_id = "y"\nmodel_root = "m/y"\n'
+        )
+        (tmp_path / "m" / "y").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path / "m" / "y")
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        key, data = resolve_model_key(ctx)
+        assert key == "b.y"
+
+    def test_fallback_to_first_model(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+        )
+        monkeypatch.chdir(tmp_path)  # no CWD match, no default_model
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        key, data = resolve_model_key(ctx)
+        assert key == "a.x"
+
     def test_raises_when_no_models(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")

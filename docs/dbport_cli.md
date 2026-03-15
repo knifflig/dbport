@@ -242,10 +242,11 @@ Model Resolution
 
 When a command needs to resolve which model to operate on, the following precedence applies:
 
-	1.	--model flag — explicit model directory relative to project root
-	2.	CWD matching — current working directory relative to repo root, matched against model_root entries in the lock
-	3.	default_model — persisted in dbport.lock, set automatically on dbp init and changeable via dbp config default
-	4.	First model — fallback for single-model repos or when running from the repo root
+	1.	Positional MODEL argument — explicit model key (agency.dataset_id), supported by dbp run, dbp publish, and dbp init
+	2.	--model flag — explicit model directory relative to project root
+	3.	CWD matching — current working directory relative to repo root, matched against model_root entries in the lock
+	4.	default_model — persisted in dbport.lock, set automatically on dbp init and changeable via dbp config default
+	5.	First model — fallback for single-model repos or when running from the repo root
 
 ⸻
 
@@ -432,29 +433,41 @@ dbp load --refresh
 
 dbp run
 
-Execute SQL transforms.
+Run the complete model workflow: sync, execute, and optionally publish.
+
+This is the primary command for running a model end-to-end. It performs the full lifecycle in a single invocation: initializes (syncs) the model, executes the configured run hook, and optionally publishes the result.
 
 Interface
 
-dbp run [TARGET]
+dbp run [MODEL]
 
 Arguments
 
-TARGET            Path to .sql file to execute (required)
+MODEL             Model key (agency.dataset_id) to run. Optional — falls back to model resolution (see Model Resolution above).
 
 Flags
 
+--version TEXT     Version to publish after execution
 --timing          Print execution duration
+--dry-run         Validate only; do not publish
+--refresh         Overwrite existing version
 
 Behavior
-	•	Requires a target .sql file path
-	•	Calls port.execute(target)
-	•	Optionally measures and reports elapsed time
+	•	Resolves the model from the positional argument or default model resolution
+	•	Creates a DBPort instance, triggering init-time sync (schema detection, input loading)
+	•	Reads the run_hook from the lock file and executes it via port.execute()
+	•	If --version is provided, publishes after execution
+	•	If --refresh or --dry-run is used without --version, falls back to the latest completed version from the lock file
+	•	Progress is displayed as a Rich tree (same renderer as dbp init) with sync steps, execution, and publish as child nodes
 
 Example usage
 
-dbp run sql/main.sql
-dbp run sql/staging.sql --timing
+dbp run                                       # run default model
+dbp run test.table1                           # run specific model
+dbp run --version 2026-03-15                  # run and publish
+dbp run test.table1 --version 2026-03-15      # run specific model and publish
+dbp run --refresh                             # run and overwrite latest version
+dbp run --timing                              # show execution duration
 
 ⸻
 
@@ -464,11 +477,15 @@ Publish the current output dataset to the warehouse.
 
 Interface
 
-dbp publish
+dbp publish [MODEL]
+
+Arguments
+
+MODEL             Model key (agency.dataset_id) to publish. Optional — falls back to model resolution (see Model Resolution above).
 
 Flags
 
---version TEXT     Version identifier (required, e.g. "2026-03-15")
+--version TEXT     Version identifier (e.g. "2026-03-15"). Optional — falls back to the latest completed version in the lock file.
 --dry-run          Validate only; do not write data (mode="dry")
 --refresh          Overwrite existing version (mode="refresh")
 --message TEXT     Publish note for history
@@ -480,11 +497,21 @@ Publish modes
 	•	--dry-run: schema validation only, no data written
 	•	--refresh: overwrite existing version unconditionally
 
+Version resolution
+
+When --version is not provided, the command reads the lock file and uses the latest completed version. This enables patterns like `dbp publish --refresh` to overwrite the latest version of the default model without specifying the version explicitly. If no completed versions exist in the lock, the command fails with a clear error.
+
+Progress display
+
+Publish uses the same Rich tree renderer as dbp init, showing sync steps and publish progress (including streaming Arrow row counts and ETA for large datasets) as child nodes under the model.
+
 Example usage
 
 dbp publish --version 2026-03-15
+dbp publish test.table1 --version 2026-03-15
+dbp publish --refresh                             # overwrite latest version of default model
+dbp publish test.table1 --refresh                 # overwrite latest version of specific model
 dbp publish --version 2026-03-15 --dry-run
-dbp publish --version 2026-03-15 --refresh
 dbp publish --version 2026-03-15 --message "Quarterly recompute"
 
 ⸻
@@ -832,8 +859,10 @@ src/dbport/cli/context.py
 
 Resolved CLI runtime context:
 	•	CliContext dataclass (project_path, lockfile_path, model_dir, output modes)
-	•	Model resolution logic (--model flag > CWD match > default_model > first model)
-	•	Lock file read/write helpers (read_lock_models, read_default_model, write_default_model)
+	•	Model resolution logic (positional MODEL arg > --model flag > CWD match > default_model > first model)
+	•	Lock file read/write helpers (read_lock_models, read_default_model, write_default_model, read_lock_versions)
+	•	Model-key-based resolution: resolve_model_key(ctx, model_arg) returns (key, data) tuple
+	•	Path resolution from model data: resolve_model_paths_from_data(ctx, model_data) returns ModelPaths
 
 src/dbport/cli/options.py
 
@@ -844,10 +873,10 @@ src/dbport/cli/render.py
 Rich output helpers:
 	•	Tables, panels, summaries, and JSON serialization helpers
 	•	Module-level console respects --no-color
-	•	`RichProgressAdapter` — flat spinner/progress bar for single-task progress (used by `dbp run`, `dbp execute`, etc.)
+	•	`RichProgressAdapter` — flat spinner/progress bar for single-task progress (used by `dbp execute`, scaffold operations)
 	•	`ModelNode` — per-model tree progress callback with animated spinners for indeterminate tasks and text-based progress bars (row counts, ETA) for determinate tasks like streaming Arrow publish
-	•	`cli_progress()` — context manager wiring Rich progress to the `progress_callback` contextvar
-	•	`cli_tree_progress()` — context manager rendering a Rich tree with per-model branches; yields a `model_context` factory for thread-safe per-model progress
+	•	`cli_progress()` — context manager wiring Rich progress to the `progress_callback` contextvar (flat display)
+	•	`cli_tree_progress()` — context manager rendering a Rich tree with per-model branches; yields a `model_context` factory for thread-safe per-model progress. Used by `dbp init`, `dbp run`, and `dbp publish`
 
 src/dbport/cli/errors.py
 
@@ -877,20 +906,20 @@ Default output uses Rich for:
 
 Progress display
 
-Commands that perform long-running operations (init, load, publish) show real-time progress using Rich:
+Commands that perform long-running operations show real-time progress using Rich.
 
-Single-task commands (load, run, execute) use a flat spinner/progress bar:
+Single-task commands (load, execute) use a flat spinner/progress bar:
 	•	Indeterminate tasks show an animated spinner with a description
 	•	Determinate tasks (e.g. streaming Arrow publish) show a progress bar with row counts, elapsed time, and ETA
 
-Multi-model commands (init with no args) use a Rich tree layout:
+Model-level commands (init, run, publish) use a Rich tree layout:
 	•	Each model is a parent node with an animated spinner while in progress, then ✓ or ✗ when done
-	•	Sync steps appear as child nodes under each model
-	•	Indeterminate steps show animated spinners (e.g. schema detection, loading)
+	•	Steps (sync, execute, publish) appear as child nodes under each model
+	•	Indeterminate steps show animated spinners with live elapsed time (e.g. schema detection, loading, executing)
 	•	Determinate steps show text-based progress bars: `━━━━━━━━━━ 500,000 / 1,485,615 rows  ETA 0:02:45`
-	•	Multiple models run in parallel; the tree updates thread-safely from concurrent workers
+	•	For `dbp init` with multiple models, models run in parallel; the tree updates thread-safely from concurrent workers
 
-Even single-model init (`dbp init test.table1`) uses the tree layout for consistency.
+All tree-based commands (`dbp init`, `dbp run`, `dbp publish`) use the same `cli_tree_progress` renderer for a consistent experience.
 
 Machine output
 
@@ -960,8 +989,11 @@ dbp status
 
 dbp schema sql/create_output.sql
 dbp load
-dbp run sql/main.sql --timing
-dbp publish --version 2026-03-15
+dbp run --version 2026-03-15 --timing            # full lifecycle: sync, execute, publish
+dbp publish --refresh                             # re-publish latest version
+
+dbp run wifor.emp__regional_trends --timing       # address specific model
+dbp publish wifor.emp__regional_trends --refresh  # re-publish specific model
 
 dbp config info --inputs
 dbp config info --history
