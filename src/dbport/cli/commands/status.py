@@ -6,7 +6,7 @@ import typer
 
 from ..context import read_lock_models
 from ..errors import cli_error_handler
-from ..render import print_info, print_json, print_panel, print_table, print_warning
+from ..render import print_info, print_json, print_table, print_warning
 
 
 def status_cmd(

@@ -28,6 +28,8 @@ history but never credentials.
 
 from __future__ import annotations
 
+import os
+import tempfile
 import tomllib
 from datetime import datetime
 from pathlib import Path
@@ -194,7 +196,20 @@ class TomlLockAdapter:
             for ver in doc.get("versions", []):
                 _write_array_item(lines, "versions", ver)
 
-        self._path.write_text("\n".join(lines), encoding="utf-8")
+        content = "\n".join(lines)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(self._path.parent), suffix=".dbport.tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp_name, str(self._path))
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
     # ------------------------------------------------------------------
     # ILockStore — schema

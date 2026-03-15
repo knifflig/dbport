@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from dbport.domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 
-
 _SAMPLE_DDL = "CREATE OR REPLACE TABLE wifor.emp (geo VARCHAR, year SMALLINT, value DOUBLE)"
 
 

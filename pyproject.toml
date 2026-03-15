@@ -50,7 +50,7 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
-dbport = ["**/*.py"]
+dbport = ["**/*.py", "py.typed"]
 
 [tool.setuptools.package-dir]
 dbport = "src/dbport"

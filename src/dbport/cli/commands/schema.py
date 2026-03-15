@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
-from ..context import resolve_dataset, resolve_model_paths
+from ..context import resolve_model_paths
 from ..errors import cli_error_handler
 from ..render import print_info, print_json, print_success, print_table, print_warning
 
 
 def schema_cmd(
     ctx: typer.Context,
-    source: Optional[str] = typer.Argument(None, help="Path to .sql DDL file to apply."),
+    source: str | None = typer.Argument(None, help="Path to .sql DDL file to apply."),
     diff: bool = typer.Option(False, "--diff", help="Show schema diff between lock and DuckDB."),
 ) -> None:
     """Show or apply the output schema contract."""

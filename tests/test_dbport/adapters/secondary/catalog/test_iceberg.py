@@ -9,6 +9,7 @@ import pytest
 
 from dbport.adapters.secondary.catalog.iceberg import (
     IcebergCatalogAdapter,
+    _sql_escape,
     _write_column_docs,
     _write_table_properties,
 )
@@ -23,6 +24,60 @@ def _make_creds(**overrides) -> WarehouseCreds:
     )
     defaults.update(overrides)
     return WarehouseCreds(**defaults)
+
+
+class TestSqlEscape:
+    def test_clean_string_unchanged(self):
+        assert _sql_escape("hello") == "hello"
+
+    def test_single_quote_doubled(self):
+        assert _sql_escape("O'Brien") == "O''Brien"
+
+    def test_multiple_quotes(self):
+        assert _sql_escape("it's a 'test'") == "it''s a ''test''"
+
+    def test_empty_string(self):
+        assert _sql_escape("") == ""
+
+
+class TestCredentialsEscapedInSql:
+    def test_s3_credentials_with_quotes_do_not_break_sql(self):
+        adapter = IcebergCatalogAdapter(_make_creds(
+            s3_endpoint="https://s3.example.com",
+            s3_access_key="key'with'quotes",
+            s3_secret_key="secret'key",
+            s3_region="eu-west-1",
+        ))
+        compute = MagicMock()
+        compute.execute.return_value.fetchone.return_value = (0,)
+
+        adapter._ensure_warehouse_attached(compute)
+
+        calls = [str(c) for c in compute.execute.call_args_list]
+        key_call = next(c for c in calls if "s3_access_key_id" in c)
+        assert "key''with''quotes" in key_call
+
+    def test_catalog_token_with_quotes_escaped(self):
+        adapter = IcebergCatalogAdapter(_make_creds(catalog_token="tok'en"))
+        compute = MagicMock()
+        compute.execute.return_value.fetchone.return_value = (0,)
+
+        adapter._ensure_warehouse_attached(compute)
+
+        calls = [str(c) for c in compute.execute.call_args_list]
+        secret_call = next(c for c in calls if "SECRET" in c)
+        assert "tok''en" in secret_call
+
+    def test_warehouse_name_with_quotes_escaped(self):
+        adapter = IcebergCatalogAdapter(_make_creds(warehouse="my'wh"))
+        compute = MagicMock()
+        compute.execute.return_value.fetchone.return_value = (0,)
+
+        adapter._ensure_warehouse_attached(compute)
+
+        calls = [str(c) for c in compute.execute.call_args_list]
+        attach_call = next(c for c in calls if "ATTACH" in c)
+        assert "my''wh" in attach_call
 
 
 class TestIcebergCatalogAdapterInit:
@@ -78,10 +133,24 @@ class TestIcebergCatalogAdapterInit:
         adapter = IcebergCatalogAdapter(_make_creds())
         assert adapter._parse_address("wifor.foo") == ("wifor", "foo")
 
-    def test_parse_address_invalid_raises(self):
+    def test_parse_address_with_underscores(self):
+        adapter = IcebergCatalogAdapter(_make_creds())
+        assert adapter._parse_address("estat.nama_10r_3empers") == ("estat", "nama_10r_3empers")
+
+    def test_parse_address_invalid_no_dot(self):
         adapter = IcebergCatalogAdapter(_make_creds())
         with pytest.raises(ValueError, match="Invalid table address"):
             adapter._parse_address("no_dot")
+
+    def test_parse_address_invalid_special_chars(self):
+        adapter = IcebergCatalogAdapter(_make_creds())
+        with pytest.raises(ValueError, match="Invalid table address"):
+            adapter._parse_address("foo.bar;DROP TABLE")
+
+    def test_parse_address_invalid_spaces(self):
+        adapter = IcebergCatalogAdapter(_make_creds())
+        with pytest.raises(ValueError, match="Invalid table address"):
+            adapter._parse_address("foo bar.baz")
 
 
 class TestEnsureWarehouseAttached:
@@ -481,9 +550,9 @@ class TestIngestRetry:
 
     def test_non_transient_error_not_retried(self):
         """Non-transient errors propagate immediately."""
-        from dbport.domain.entities.input import InputDeclaration
-
         import pyarrow as pa
+
+        from dbport.domain.entities.input import InputDeclaration
 
         arrow_schema = pa.schema([pa.field("id", pa.int32())])
 
@@ -787,6 +856,7 @@ class TestIngestViaArrowImportError:
     def test_raises_runtime_error_without_pyiceberg(self, monkeypatch):
         """_ingest_via_arrow raises RuntimeError if pyiceberg is not installed."""
         import builtins as _builtins
+
         from dbport.domain.entities.input import InputDeclaration
 
         real_import = _builtins.__import__

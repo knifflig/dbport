@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
-
 
 # Global options — used in the main app callback
 ProjectOption = typer.Option(None, "--project", help="Project root directory.")

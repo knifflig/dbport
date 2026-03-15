@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 import time
-
 from io import StringIO
 
 from rich.console import Console
@@ -16,12 +15,12 @@ from dbport.cli.render import (
     RichProgressAdapter,
     _ConditionalColumn,
     _ConditionalTextColumn,
+    _fmt_elapsed,
     _LiveProgressLabel,
     _LiveSpinnerLabel,
-    _SpinnerOrCheckColumn,
-    _fmt_elapsed,
     _model_progress_context,
     _render_bar,
+    _SpinnerOrCheckColumn,
     cli_progress,
     cli_tree_progress,
     configure_cli_logging,

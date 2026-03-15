@@ -8,7 +8,6 @@ import pytest
 
 from dbport.cli.context import (
     CliContext,
-    ModelPaths,
     _cwd_model_root,
     _find_model,
     _find_repo_root,

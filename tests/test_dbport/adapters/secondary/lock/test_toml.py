@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,6 @@ from dbport.domain.entities.input import IngestRecord
 from dbport.domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 from dbport.domain.entities.version import VersionRecord
 
-
 _DDL = "CREATE OR REPLACE TABLE wifor.emp (geo VARCHAR, year SMALLINT, value DOUBLE)"
 _DDL_MULTILINE = (
     "CREATE OR REPLACE TABLE wifor.emp (\n"
@@ -22,7 +21,7 @@ _DDL_MULTILINE = (
     "    value DOUBLE\n"
     ");"
 )
-_NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -453,7 +452,7 @@ class TestTomlLockFlatMode:
         lock = TomlLockAdapter(tmp_path / "dbport.lock", model_key="")
         record = VersionRecord(
             version="2026-03-14",
-            published_at=datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc),
+            published_at=datetime(2026, 3, 14, 12, 0, 0, tzinfo=UTC),
             rows=100,
             completed=True,
         )
@@ -533,7 +532,6 @@ class TestDefaultModelRoundTrip:
         assert doc2["models"]["a.x"]["agency"] == "a"
 
     def test_save_without_default_model_has_no_key(self, tmp_path: Path):
-        import tomllib
 
         lock_path = tmp_path / "dbport.lock"
         adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".")
@@ -544,3 +542,66 @@ class TestDefaultModelRoundTrip:
 
         raw = lock_path.read_text(encoding="utf-8")
         assert "default_model" not in raw
+
+
+class TestRunHook:
+    def test_read_run_hook_returns_none_when_not_set(self, lock):
+        assert lock.read_run_hook() is None
+
+    def test_write_and_read_run_hook(self, lock):
+        lock.write_run_hook("sql/main.sql")
+        assert lock.read_run_hook() == "sql/main.sql"
+
+    def test_write_run_hook_overwrites(self, lock):
+        lock.write_run_hook("sql/old.sql")
+        lock.write_run_hook("run.py")
+        assert lock.read_run_hook() == "run.py"
+
+
+class TestAtomicWriteErrorHandling:
+    def test_original_file_preserved_on_write_failure(self, tmp_path: Path):
+        """If os.replace fails, the original lock file is not corrupted."""
+        import os
+        from unittest.mock import patch
+
+        lock_path = tmp_path / "dbport.lock"
+        adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb")
+        adapter.write_run_hook("sql/first.sql")
+
+        original_content = lock_path.read_text(encoding="utf-8")
+
+        # Monkeypatch os.replace to fail
+        with patch("dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("disk full")):
+            with pytest.raises(OSError, match="disk full"):
+                adapter.write_run_hook("sql/second.sql")
+
+        # Original file should be unchanged
+        assert lock_path.read_text(encoding="utf-8") == original_content
+
+    def test_temp_file_cleaned_up_on_failure(self, tmp_path: Path):
+        """Temp file is removed when os.replace fails."""
+        import glob
+        from unittest.mock import patch
+
+        lock_path = tmp_path / "dbport.lock"
+        adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb")
+
+        with patch("dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("fail")):
+            with pytest.raises(OSError):
+                adapter.write_run_hook("sql/main.sql")
+
+        # No .dbport.tmp files should remain
+        tmp_files = glob.glob(str(tmp_path / "*.dbport.tmp"))
+        assert tmp_files == []
+
+    def test_unlink_failure_suppressed(self, tmp_path: Path):
+        """When both os.replace and os.unlink fail, unlink OSError is suppressed."""
+        from unittest.mock import patch
+
+        lock_path = tmp_path / "dbport.lock"
+        adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb")
+
+        with patch("dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("disk full")), \
+             patch("dbport.adapters.secondary.lock.toml.os.unlink", side_effect=OSError("perm denied")):
+            with pytest.raises(OSError, match="disk full"):
+                adapter.write_run_hook("sql/main.sql")

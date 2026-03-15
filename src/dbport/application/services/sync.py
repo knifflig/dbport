@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 
 from ...domain.entities.input import InputDeclaration
-from ...infrastructure.progress import progress_callback
 from ...domain.ports.catalog import ICatalog
 from ...domain.ports.compute import ICompute
 from ...domain.ports.lock import ILockStore
+from ...infrastructure.progress import progress_callback
 
 logger = logging.getLogger(__name__)
 

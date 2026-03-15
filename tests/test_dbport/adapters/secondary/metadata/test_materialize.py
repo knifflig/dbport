@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
 
 from dbport.adapters.secondary.metadata.materialize import MetadataAdapter
 from dbport.domain.entities.codelist import CodelistEntry, ColumnCodelist
@@ -16,7 +14,7 @@ from dbport.domain.entities.version import DatasetVersion
 
 _KEY = DatasetKey(agency="wifor", dataset_id="emp")
 _VERSION = DatasetVersion(version="2026-03-09", params={"wstatus": "EMP"})
-_NOW = datetime(2026, 3, 9, 14, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 9, 14, 0, 0, tzinfo=UTC)
 
 
 def _make_codelists(**overrides) -> ColumnCodelist:

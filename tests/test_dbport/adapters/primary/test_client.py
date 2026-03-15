@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from dbport.adapters.primary.client import DBPort
 
 
@@ -264,24 +262,117 @@ class TestDBPortMethods:
         client.close()  # should not raise
 
 
+class TestDBPortModelRoot:
+    def test_explicit_model_root_kwarg(self, tmp_path: Path):
+        """When model_root is provided, it is used as caller_dir."""
+        creds = {
+            "ICEBERG_REST_URI": "https://catalog.example.com",
+            "ICEBERG_CATALOG_TOKEN": "tok",
+            "ICEBERG_WAREHOUSE": "wh",
+        }
+        model_dir = tmp_path / "my_model"
+        model_dir.mkdir()
+        with patch.dict(os.environ, creds):
+            client = DBPort(
+                agency="wifor",
+                dataset_id="emp",
+                lock_path=str(tmp_path / "dbport.lock"),
+                duckdb_path=str(tmp_path / "dbport.duckdb"),
+                model_root=str(model_dir),
+            )
+            assert client._dataset.model_root == str(model_dir.resolve())
+            client.close()
+
+
+class TestDBPortDuckdbPathRelative:
+    def test_duckdb_path_outside_repo_root(self, tmp_path: Path):
+        """When duckdb_path is outside repo_root, falls back to absolute string."""
+        creds = {
+            "ICEBERG_REST_URI": "https://catalog.example.com",
+            "ICEBERG_CATALOG_TOKEN": "tok",
+            "ICEBERG_WAREHOUSE": "wh",
+        }
+        # Use a sibling directory so relative_to(repo_root) raises ValueError
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        external = tmp_path / "external"
+        external.mkdir()
+        db_path = external / "dbport.duckdb"
+        with patch.dict(os.environ, creds):
+            client = DBPort(
+                agency="wifor",
+                dataset_id="emp",
+                lock_path=str(repo_dir / "dbport.lock"),
+                duckdb_path=str(db_path),
+            )
+            # Should not raise — duckdb_path_rel falls back to absolute
+            assert client._dataset.duckdb_path == str(db_path)
+            client.close()
+
+
+class TestDBPortRunMethod:
+    def test_run_delegates_to_run_service(self, tmp_path: Path):
+        creds = {
+            "ICEBERG_REST_URI": "https://catalog.example.com",
+            "ICEBERG_CATALOG_TOKEN": "tok",
+            "ICEBERG_WAREHOUSE": "wh",
+        }
+        with patch.dict(os.environ, creds):
+            client = DBPort(
+                agency="wifor",
+                dataset_id="emp",
+                lock_path=str(tmp_path / "dbport.lock"),
+                duckdb_path=str(tmp_path / "dbport.duckdb"),
+            )
+            mock_svc = MagicMock()
+            with patch(
+                "dbport.application.services.run.RunService",
+                return_value=mock_svc,
+            ):
+                client.run(version="v1", mode="dry")
+            mock_svc.execute.assert_called_once_with(client, version="v1", mode="dry")
+            client.close()
+
+    def test_run_hook_property(self, tmp_path: Path):
+        creds = {
+            "ICEBERG_REST_URI": "https://catalog.example.com",
+            "ICEBERG_CATALOG_TOKEN": "tok",
+            "ICEBERG_WAREHOUSE": "wh",
+        }
+        with patch.dict(os.environ, creds):
+            client = DBPort(
+                agency="wifor",
+                dataset_id="emp",
+                lock_path=str(tmp_path / "dbport.lock"),
+                duckdb_path=str(tmp_path / "dbport.duckdb"),
+            )
+            # No hook set initially
+            assert client.run_hook is None
+            # Set a hook
+            client._lock.write_run_hook("sql/main.sql")
+            assert client.run_hook == "sql/main.sql"
+            client.close()
+
+
 class TestDBPortAutoSchema:
-    def test_auto_detect_schema_refreshes_columns(self, tmp_path: Path):
-        """When auto-schema succeeds, columns._refresh() is called."""
+    def _make_auto_schema_client(self, tmp_path: Path, mock_catalog=None):
+        """Helper to create a DBPort instance for auto-schema tests."""
         import pyarrow as pa
+
+        from dbport.adapters.primary.columns import ColumnRegistry
         from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
-        from dbport.adapters.primary.columns import ColumnRegistry
         from dbport.domain.entities.dataset import Dataset
 
-        mock_catalog = MagicMock()
-        mock_catalog.table_exists.return_value = True
-        mock_catalog.load_arrow_schema.return_value = pa.schema([
-            pa.field("geo", pa.string()),
-            pa.field("year", pa.int16()),
-        ])
-        # update_table_properties is called by _update_last_fetched
-        mock_catalog.update_table_properties = MagicMock()
-        mock_catalog.get_table_property.return_value = None
+        if mock_catalog is None:
+            mock_catalog = MagicMock()
+            mock_catalog.table_exists.return_value = True
+            mock_catalog.load_arrow_schema.return_value = pa.schema([
+                pa.field("geo", pa.string()),
+                pa.field("year", pa.int16()),
+            ])
+            mock_catalog.update_table_properties = MagicMock()
+            mock_catalog.get_table_property.return_value = None
 
         client = DBPort.__new__(DBPort)
         client._compute = DuckDBComputeAdapter(tmp_path / "test.duckdb")
@@ -300,13 +391,148 @@ class TestDBPortAutoSchema:
             model_root=str(tmp_path),
         )
         client.columns = ColumnRegistry(client._lock)
+        return client
 
+    def test_auto_detect_schema_refreshes_columns(self, tmp_path: Path):
+        """When auto-schema succeeds, columns._refresh() is called."""
+        client = self._make_auto_schema_client(tmp_path)
         client._auto_detect_schema()
 
-        # Schema should have been auto-detected and columns refreshed
         schema = client._lock.read_schema()
         assert schema is not None
         assert schema.source == "warehouse"
         assert hasattr(client.columns, "geo")
         assert hasattr(client.columns, "year")
+        client._compute.close()
+
+    def test_auto_detect_schema_with_progress_callback(self, tmp_path: Path):
+        """Progress callback is called during auto-schema detection."""
+        from dbport.infrastructure.progress import progress_callback
+
+        client = self._make_auto_schema_client(tmp_path)
+        cb = MagicMock()
+        token = progress_callback.set(cb)
+        try:
+            client._auto_detect_schema()
+        finally:
+            progress_callback.reset(token)
+
+        cb.started.assert_called_once()
+        cb.finished.assert_called_once_with("Schema detected from warehouse")
+        client._compute.close()
+
+    def test_auto_detect_schema_no_table_with_callback(self, tmp_path: Path):
+        """When auto-schema returns None, callback reports 'No existing warehouse table'."""
+        from dbport.infrastructure.progress import progress_callback
+
+        mock_catalog = MagicMock()
+        mock_catalog.table_exists.return_value = False
+        mock_catalog.load_arrow_schema.return_value = None
+        mock_catalog.update_table_properties = MagicMock()
+        mock_catalog.get_table_property.return_value = None
+
+        client = self._make_auto_schema_client(tmp_path, mock_catalog=mock_catalog)
+
+        # Patch AutoSchemaService to return None
+        with patch("dbport.application.services.auto_schema.AutoSchemaService") as mock_cls:
+            mock_cls.return_value.execute.return_value = None
+            cb = MagicMock()
+            token = progress_callback.set(cb)
+            try:
+                client._auto_detect_schema()
+            finally:
+                progress_callback.reset(token)
+
+        cb.finished.assert_called_once_with("No existing warehouse table")
+        client._compute.close()
+
+    def test_auto_detect_schema_exception_with_callback(self, tmp_path: Path):
+        """When auto-schema raises, callback reports 'Schema detection skipped'."""
+        from dbport.infrastructure.progress import progress_callback
+
+        mock_catalog = MagicMock()
+        mock_catalog.table_exists.side_effect = RuntimeError("network error")
+
+        client = self._make_auto_schema_client(tmp_path, mock_catalog=mock_catalog)
+
+        with patch("dbport.application.services.auto_schema.AutoSchemaService") as mock_cls:
+            mock_cls.return_value.execute.side_effect = RuntimeError("network error")
+            cb = MagicMock()
+            token = progress_callback.set(cb)
+            try:
+                client._auto_detect_schema()
+            finally:
+                progress_callback.reset(token)
+
+        cb.finished.assert_called_once_with("Schema detection skipped")
+        client._compute.close()
+
+
+class TestDBPortSyncLocalState:
+    def test_sync_exception_does_not_propagate(self, tmp_path: Path):
+        """_sync_local_state swallows exceptions."""
+        from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
+        from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+        from dbport.domain.entities.dataset import Dataset
+
+        client = DBPort.__new__(DBPort)
+        client._compute = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        client._lock = TomlLockAdapter(
+            tmp_path / "dbport.lock",
+            model_key="wifor.emp",
+            model_root=".",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+        )
+        client._catalog = MagicMock()
+        client._dataset = Dataset(
+            agency="wifor",
+            dataset_id="emp",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+            lock_path=str(tmp_path / "dbport.lock"),
+            model_root=str(tmp_path),
+        )
+
+        with patch("dbport.application.services.sync.SyncService") as mock_cls:
+            mock_cls.return_value.execute.side_effect = RuntimeError("sync failed")
+            client._sync_local_state()  # should not raise
+
+        client._compute.close()
+
+
+class TestDBPortUpdateLastFetched:
+    def test_update_last_fetched_with_callback(self, tmp_path: Path):
+        """Progress callback is invoked during _update_last_fetched."""
+        from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
+        from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+        from dbport.domain.entities.dataset import Dataset
+        from dbport.infrastructure.progress import progress_callback
+
+        client = DBPort.__new__(DBPort)
+        client._compute = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        client._lock = TomlLockAdapter(
+            tmp_path / "dbport.lock",
+            model_key="wifor.emp",
+            model_root=".",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+        )
+        client._catalog = MagicMock()
+        client._dataset = Dataset(
+            agency="wifor",
+            dataset_id="emp",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+            lock_path=str(tmp_path / "dbport.lock"),
+            model_root=str(tmp_path),
+        )
+
+        with patch("dbport.application.services.fetch.FetchService") as mock_cls:
+            mock_cls.return_value.execute.return_value = None
+            cb = MagicMock()
+            token = progress_callback.set(cb)
+            try:
+                client._update_last_fetched()
+            finally:
+                progress_callback.reset(token)
+
+        cb.started.assert_called_once_with("Updating warehouse timestamp")
+        cb.finished.assert_called_once()
         client._compute.close()

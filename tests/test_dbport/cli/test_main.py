@@ -2,7 +2,7 @@
 
 from typer.testing import CliRunner
 
-from dbport.cli.main import app, get_cli_ctx
+from dbport.cli.main import app
 
 runner = CliRunner()
 
@@ -69,6 +69,7 @@ class TestCliEntrypoint:
     def test_main_invokes_app(self):
         """Calling main() should invoke the typer app."""
         from unittest.mock import patch
+
         import dbport.cli as cli_mod
 
         with patch.object(cli_mod, "app") as mock_app:

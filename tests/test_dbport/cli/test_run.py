@@ -75,8 +75,12 @@ def _mock_dbport(run_hook="sql/main.sql"):
     mock_port = MagicMock()
     mock_port.__enter__ = MagicMock(return_value=mock_port)
     mock_port.__exit__ = MagicMock(return_value=False)
-    mock_port._lock = MagicMock()
-    mock_port._lock.read_run_hook.return_value = run_hook
+    mock_port.run_hook = run_hook
+    if run_hook is None:
+        mock_port.run.side_effect = RuntimeError(
+            "No run_hook configured for this model. "
+            "Set it with: dbp config run-hook <path>"
+        )
     return mock_port
 
 
@@ -113,7 +117,7 @@ class TestRunCommand:
             ])
         assert result.exit_code == 0
         assert "Executed" in result.output
-        mp.execute.assert_called_once_with("sql/main.sql")
+        mp.run.assert_called_once_with(version=None, mode=None)
 
     def test_run_with_model_positional_arg(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -144,8 +148,7 @@ class TestRunCommand:
                 "run", "--version", "2026-03-15",
             ])
         assert result.exit_code == 0
-        mp.execute.assert_called_once_with("sql/main.sql")
-        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
+        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_with_timing(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -202,7 +205,7 @@ class TestRunCommand:
                 "run", "--version", "2026-03-15", "--dry-run",
             ])
         assert result.exit_code == 0
-        mp.publish.assert_called_once_with(version="2026-03-15", mode="dry")
+        mp.run.assert_called_once_with(version="2026-03-15", mode="dry")
 
     def test_run_refresh_mode(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -216,7 +219,7 @@ class TestRunCommand:
                 "run", "--version", "2026-03-15", "--refresh",
             ])
         assert result.exit_code == 0
-        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
+        mp.run.assert_called_once_with(version="2026-03-15", mode="refresh")
 
     def test_run_refresh_without_version_uses_latest(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -230,7 +233,7 @@ class TestRunCommand:
                 "run", "--refresh",
             ])
         assert result.exit_code == 0
-        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
+        mp.run.assert_called_once_with(version="2026-03-15", mode="refresh")
 
     def test_run_json_output_with_version(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"

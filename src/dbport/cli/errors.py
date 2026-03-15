@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from . import render
 
 
 @contextmanager
-def cli_error_handler(command: str, *, json_output: bool = False) -> Generator[None, None, None]:
+def cli_error_handler(command: str, *, json_output: bool = False) -> Generator[None]:
     """Catch known exceptions and render them as CLI errors."""
     try:
         yield

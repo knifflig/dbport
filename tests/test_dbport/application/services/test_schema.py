@@ -102,3 +102,25 @@ class TestDefineSchemaServiceUnqualifiedTable:
         schema = svc.execute("CREATE TABLE my_table (id INT)", base_dir="/tmp")
         assert len(schema.columns) == 1
         assert schema.columns[0].name == "id"
+
+
+class TestDefineSchemaServicePathTraversal:
+    def test_relative_traversal_rejected(self, compute, lock, tmp_path: Path):
+        svc = DefineSchemaService(compute, lock)
+        with pytest.raises(ValueError, match="escapes base directory"):
+            svc.execute("../../etc/passwd.sql", base_dir=str(tmp_path))
+
+    def test_valid_relative_path_still_works(self, compute, lock, tmp_path: Path):
+        sub = tmp_path / "sql"
+        sub.mkdir()
+        (sub / "create.sql").write_text(_DDL, encoding="utf-8")
+        svc = DefineSchemaService(compute, lock)
+        schema = svc.execute("sql/create.sql", base_dir=str(tmp_path))
+        assert len(schema.columns) == 3
+
+    def test_absolute_path_bypasses_check(self, compute, lock, tmp_path: Path):
+        sql_file = tmp_path / "abs.sql"
+        sql_file.write_text(_DDL, encoding="utf-8")
+        svc = DefineSchemaService(compute, lock)
+        schema = svc.execute(str(sql_file), base_dir="/ignored")
+        assert len(schema.columns) == 3

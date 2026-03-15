@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
 from dbport.adapters.secondary.metadata.codelists import (
     generate_csv_for_attached,
     generate_csv_for_column,
 )
-from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,7 @@ from dbport.domain.entities.dataset import Dataset
 from dbport.domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 from dbport.domain.entities.version import DatasetVersion, VersionRecord
 
-_NOW = datetime(2026, 3, 9, 14, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 3, 9, 14, 0, 0, tzinfo=UTC)
 _DDL = "CREATE OR REPLACE TABLE wifor.emp (geo VARCHAR, year SMALLINT)"
 
 
@@ -204,6 +204,40 @@ class TestPublishServiceIdempotent:
         # Should return the existing record without calling write_versioned
         assert result.version == "2026-03-09"
         assert catalog.written_versions == []
+
+
+class TestPublishServiceIdempotentProgressCallback:
+    def test_skip_fires_progress_callback(self, tmp_path: Path):
+        """progress_callback.log is called when version already completed."""
+        from dbport.infrastructure.progress import progress_callback
+
+        dataset = Dataset(
+            agency="wifor",
+            dataset_id="emp",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+            lock_path=str(tmp_path / "dbport.lock"),
+            model_root=str(tmp_path),
+        )
+        lock = _FakeLock()
+        lock._versions = [_make_version_record(version="2026-03-09", completed=True)]
+
+        svc = PublishService(
+            dataset, _FakeCatalog(), _FakeCompute(), lock, _FakeMetadata(tmp_path)
+        )
+
+        logged: list[str] = []
+
+        class _CB:
+            def log(self, msg: str) -> None:
+                logged.append(msg)
+
+        token = progress_callback.set(_CB())
+        try:
+            svc.execute(DatasetVersion(version="2026-03-09"))
+        finally:
+            progress_callback.reset(token)
+
+        assert any("already completed" in m for m in logged)
 
 
 class TestPublishServiceFullFlow:

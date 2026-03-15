@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from ..context import _resolve_model_data, read_lock_models, resolve_model_paths
 from ..errors import cli_error_handler
-from ..render import cli_progress, print_info, print_json, print_success, print_warning
+from ..render import cli_progress, print_json, print_success, print_warning
 
 
 def load_cmd(
     ctx: typer.Context,
-    dataset: Optional[str] = typer.Argument(None, help="Table address to load (e.g. estat.table_name)."),
+    dataset: str | None = typer.Argument(None, help="Table address to load (e.g. estat.table_name)."),
     refresh: bool = typer.Option(False, "--refresh", help="Force re-load even if snapshot unchanged."),
 ) -> None:
     """Load configured or explicit inputs into DuckDB."""
