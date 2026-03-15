@@ -234,7 +234,22 @@ import time as _time
 from typing import Callable
 
 from rich.live import Live
+from rich.spinner import Spinner
+from rich.table import Table as RichTable
 from rich.tree import Tree
+
+
+def _render_bar(fraction: float, width: int = 20) -> str:
+    """Render a text-based progress bar using Rich markup."""
+    filled = int(fraction * width)
+    return f"[green]{'━' * filled}[/][dim]{'━' * (width - filled)}[/]"
+
+
+def _spinner_label(text: str, style: str = "") -> RichTable:
+    """Create a grid with an animated spinner + text label."""
+    grid = RichTable.grid(padding=(0, 1))
+    grid.add_row(Spinner("dots"), Text(text, style=style))
+    return grid
 
 
 def _fmt_elapsed(seconds: float) -> str:
@@ -270,6 +285,8 @@ class ModelNode:
         self._step_start: float = 0.0
         self._model_start: float = _time.monotonic()
         self._model_failed = False
+        self._total: int | None = None
+        self._completed: int = 0
 
     # -- ProgressCallback protocol -------------------------------------------
 
@@ -280,14 +297,39 @@ class ModelNode:
                 self._finish_current_node()
             self._current_desc = description
             self._step_start = _time.monotonic()
-            self._current_node = self._branch.add(
-                f"[yellow]⏳[/] {description}"
-            )
+            self._total = total
+            self._completed = 0
+            if total is not None:
+                label = f"[yellow]⏳[/] {description}  [dim]0 / {total:,} rows[/]"
+            else:
+                label = _spinner_label(description)
+            self._current_node = self._branch.add(label)
             self._live.update(self._root_tree)
 
     def update(self, advance: int) -> None:
-        # Row-level updates don't map well to tree labels; skip for now
-        pass
+        with self._lock:
+            if self._current_node is None:
+                return
+            self._completed += advance
+            elapsed = _time.monotonic() - self._step_start
+            if self._total and self._total > 0:
+                pct = self._completed / self._total
+                bar = _render_bar(pct)
+                eta = ""
+                if pct > 0.01:
+                    remaining = elapsed / pct * (1 - pct)
+                    eta = f"  ETA {_fmt_elapsed(remaining)}"
+                self._current_node.label = (
+                    f"[yellow]⏳[/] {self._current_desc}  "
+                    f"{bar} {self._completed:,} / {self._total:,} rows"
+                    f"  [dim]{_fmt_elapsed(elapsed)}{eta}[/]"
+                )
+            else:
+                self._current_node.label = (
+                    f"[yellow]⏳[/] {self._current_desc}  "
+                    f"[dim]{self._completed:,} rows  {_fmt_elapsed(elapsed)}[/]"
+                )
+            self._live.update(self._root_tree)
 
     def log(self, message: str) -> None:
         with self._lock:
@@ -309,6 +351,8 @@ class ModelNode:
                     f"[red bold]✗[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
                 )
                 self._current_node = None
+                self._total = None
+                self._completed = 0
                 self._model_failed = True
                 self._live.update(self._root_tree)
 
@@ -350,6 +394,8 @@ class ModelNode:
             f"[green bold]✓[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
         )
         self._current_node = None
+        self._total = None
+        self._completed = 0
 
 
 @contextmanager
@@ -396,7 +442,7 @@ def cli_tree_progress(
         @contextmanager
         def model_context(model_key: str):
             with lock:
-                branch = tree.add(f"[yellow]⏳[/] [bold blue]{model_key}[/]")
+                branch = tree.add(_spinner_label(model_key, style="bold blue"))
                 live.update(tree)
             node = ModelNode(branch, tree, live, lock, model_key)
             with _model_progress_context(node):
