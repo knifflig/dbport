@@ -238,6 +238,28 @@ class DBPort:
         svc = TransformService(self._compute)
         svc.execute(sql_or_path, base_dir=self._dataset.model_root)
 
+    def run(
+        self,
+        *,
+        version: str | None = None,
+        mode: str | None = None,
+    ) -> None:
+        """Execute the configured run hook, optionally publishing afterward.
+
+        Reads the ``run_hook`` path from ``dbport.lock`` and dispatches by
+        file extension (``.sql`` or ``.py``).  If *version* is provided,
+        ``publish()`` is called after the hook completes.
+        """
+        from ...application.services.run import RunService
+
+        svc = RunService(self._compute, self._lock)
+        svc.execute(self, version=version, mode=mode)
+
+    @property
+    def run_hook(self) -> str | None:
+        """Return the configured run hook path, or None if not set."""
+        return self._lock.read_run_hook()
+
     def publish(
         self,
         *,
@@ -267,7 +289,7 @@ class DBPort:
         try:
             self._compute.close()
         except Exception:
-            pass
+            logger.debug("Error closing compute adapter", exc_info=True)
 
     # ------------------------------------------------------------------
     # Context manager

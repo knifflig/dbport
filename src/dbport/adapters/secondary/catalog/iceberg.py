@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from ....infrastructure.credentials import WarehouseCreds
@@ -20,6 +20,11 @@ if TYPE_CHECKING:
     from ....domain.entities.version import DatasetVersion, VersionRecord
 
 logger = logging.getLogger(__name__)
+
+
+def _sql_escape(value: str) -> str:
+    """Escape a string for safe inclusion in a SQL single-quoted literal."""
+    return value.replace("'", "''")
 
 
 def _write_table_properties(table: Any, properties: dict[str, str]) -> None:
@@ -110,10 +115,15 @@ class IcebergCatalogAdapter:
             )
         return self._catalog
 
+    _TABLE_ADDR_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$")
+
     def _parse_address(self, table_address: str) -> tuple[str, str]:
+        if not self._TABLE_ADDR_RE.match(table_address):
+            raise ValueError(
+                f"Invalid table address (expected 'schema.table' with identifier characters): "
+                f"{table_address!r}"
+            )
         parts = table_address.split(".", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid table address (expected 'schema.table'): {table_address!r}")
         return parts[0], parts[1]
 
     # ------------------------------------------------------------------
@@ -137,20 +147,21 @@ class IcebergCatalogAdapter:
         if creds.s3_endpoint:
             s3_endpoint = creds.s3_endpoint.replace("https://", "").replace("http://", "")
             compute.execute("SET s3_url_style='path'")
-            compute.execute(f"SET s3_endpoint='{s3_endpoint}'")
+            compute.execute(f"SET s3_endpoint='{_sql_escape(s3_endpoint)}'")
             if creds.s3_access_key:
-                compute.execute(f"SET s3_access_key_id='{creds.s3_access_key}'")
+                compute.execute(f"SET s3_access_key_id='{_sql_escape(creds.s3_access_key)}'")
             if creds.s3_secret_key:
-                compute.execute(f"SET s3_secret_access_key='{creds.s3_secret_key}'")
+                compute.execute(f"SET s3_secret_access_key='{_sql_escape(creds.s3_secret_key)}'")
             if creds.s3_region:
-                compute.execute(f"SET s3_region='{creds.s3_region}'")
+                compute.execute(f"SET s3_region='{_sql_escape(creds.s3_region)}'")
+
 
         # REST catalog secret
         compute.execute(
             "CREATE OR REPLACE SECRET dbport_iceberg_catalog ("
             " TYPE ICEBERG,"
-            f" ENDPOINT '{creds.catalog_uri}',"
-            f" TOKEN '{creds.catalog_token}'"
+            f" ENDPOINT '{_sql_escape(creds.catalog_uri)}',"
+            f" TOKEN '{_sql_escape(creds.catalog_token)}'"
             ")"
         )
 
@@ -160,7 +171,7 @@ class IcebergCatalogAdapter:
         ).fetchone()[0]
         if not already:
             compute.execute(
-                f"ATTACH '{creds.warehouse}' AS dbport_warehouse ("
+                f"ATTACH '{_sql_escape(creds.warehouse)}' AS dbport_warehouse ("
                 "  TYPE ICEBERG,"
                 "  SECRET dbport_iceberg_catalog,"
                 "  ACCESS_DELEGATION_MODE 'none',"
@@ -692,12 +703,12 @@ class IcebergCatalogAdapter:
                     )
                     snap_id, snap_ts_ms = self.current_snapshot(table_address)
                     snap_ts = (
-                        datetime.fromtimestamp(snap_ts_ms / 1000, tz=timezone.utc)
+                        datetime.fromtimestamp(snap_ts_ms / 1000, tz=UTC)
                         if snap_ts_ms is not None else None
                     )
                     return VersionRecord(
                         version=version.version,
-                        published_at=datetime.now(timezone.utc).replace(microsecond=0),
+                        published_at=datetime.now(UTC).replace(microsecond=0),
                         iceberg_snapshot_id=snap_id,
                         iceberg_snapshot_timestamp=snap_ts,
                         params=version.params,
@@ -772,11 +783,11 @@ class IcebergCatalogAdapter:
         snap_id, snap_ts_ms = self.current_snapshot(table_address)
         snap_ts: datetime | None = None
         if snap_ts_ms is not None:
-            snap_ts = datetime.fromtimestamp(snap_ts_ms / 1000, tz=timezone.utc)
+            snap_ts = datetime.fromtimestamp(snap_ts_ms / 1000, tz=UTC)
 
         return VersionRecord(
             version=version.version,
-            published_at=datetime.now(timezone.utc).replace(microsecond=0),
+            published_at=datetime.now(UTC).replace(microsecond=0),
             iceberg_snapshot_id=snap_id,
             iceberg_snapshot_timestamp=snap_ts,
             params=version.params,

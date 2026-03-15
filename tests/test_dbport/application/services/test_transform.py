@@ -87,3 +87,34 @@ class TestTransformServiceSqlFile:
         sql_file.write_text("SELECT 1", encoding="utf-8")
         svc.execute("q.sql", base_dir=str(tmp_path))
         assert compute.executed_sql == []
+
+
+class TestTransformServicePathTraversal:
+    def test_relative_traversal_rejected(self, tmp_path: Path):
+        compute = _FakeCompute()
+        svc = TransformService(compute)
+        with pytest.raises(ValueError, match="escapes base directory"):
+            svc.execute("../../etc/passwd.sql", base_dir=str(tmp_path))
+
+    def test_dot_dot_in_middle_rejected(self, tmp_path: Path):
+        compute = _FakeCompute()
+        svc = TransformService(compute)
+        with pytest.raises(ValueError, match="escapes base directory"):
+            svc.execute("sub/../../other.sql", base_dir=str(tmp_path))
+
+    def test_valid_relative_path_still_works(self, tmp_path: Path):
+        compute = _FakeCompute()
+        svc = TransformService(compute)
+        sub = tmp_path / "sql"
+        sub.mkdir()
+        (sub / "ok.sql").write_text("SELECT 1", encoding="utf-8")
+        svc.execute("sql/ok.sql", base_dir=str(tmp_path))
+        assert len(compute.executed_files) == 1
+
+    def test_absolute_path_bypasses_check(self, tmp_path: Path):
+        compute = _FakeCompute()
+        svc = TransformService(compute)
+        sql_file = tmp_path / "abs.sql"
+        sql_file.write_text("SELECT 1", encoding="utf-8")
+        svc.execute(str(sql_file), base_dir="/ignored")
+        assert len(compute.executed_files) == 1

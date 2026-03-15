@@ -26,6 +26,10 @@ class TransformService:
             path = Path(stripped)
             if not path.is_absolute():
                 path = Path(base_dir) / path
+                resolved = path.resolve()
+                base_resolved = Path(base_dir).resolve()
+                if not str(resolved).startswith(str(base_resolved)):
+                    raise ValueError(f"SQL file path escapes base directory: {stripped!r}")
             self._compute.execute_file(str(path))
         else:
             self._compute.execute(stripped)

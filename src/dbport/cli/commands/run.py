@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 import typer
 
@@ -18,8 +17,8 @@ from ..render import cli_tree_progress, print_info, print_json, print_success
 
 def run_cmd(
     ctx: typer.Context,
-    model: Optional[str] = typer.Argument(None, help="Model key (agency.dataset_id)."),
-    version: Optional[str] = typer.Option(None, "--version", help="Version to publish after execution."),
+    model: str | None = typer.Argument(None, help="Model key (agency.dataset_id)."),
+    version: str | None = typer.Option(None, "--version", help="Version to publish after execution."),
     timing: bool = typer.Option(False, "--timing", help="Print execution duration."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not publish."),
     refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
@@ -50,26 +49,12 @@ def run_cmd(
                     duckdb_path=paths.duckdb_path,
                     model_root=paths.model_root,
                 ) as port:
-                    # Read run_hook from lock
-                    run_hook = port._lock.read_run_hook()
-                    if not run_hook:
-                        raise RuntimeError(
-                            "No run_hook configured for this model. "
-                            "Set it with: dbp config run-hook <path>"
-                        )
+                    # Read hook path for display / JSON output
+                    run_hook = port.run_hook
 
-                    # Execute the model
-                    cb = progress_callback.get(None)
-                    if cb:
-                        cb.started(f"Executing {run_hook}")
-                    port.execute(run_hook)
-                    if cb:
-                        cb.finished(f"Executed {run_hook}")
-
-                    # Publish if version provided
+                    # Resolve version for --dry-run / --refresh fallbacks
                     pub_version = version
                     if pub_version is None and (refresh or dry_run):
-                        # Use latest completed version from lock
                         lock_versions = read_lock_versions(
                             cli_ctx.lockfile_path, model_key
                         )
@@ -77,13 +62,18 @@ def run_cmd(
                         if completed:
                             pub_version = completed[-1]["version"]
 
-                    if pub_version:
-                        mode = None
-                        if dry_run:
-                            mode = "dry"
-                        elif refresh:
-                            mode = "refresh"
-                        port.publish(version=pub_version, mode=mode)
+                    mode = None
+                    if dry_run:
+                        mode = "dry"
+                    elif refresh:
+                        mode = "refresh"
+
+                    cb = progress_callback.get(None)
+                    if cb:
+                        cb.started(f"Executing {run_hook or 'run hook'}")
+                    port.run(version=pub_version, mode=mode)
+                    if cb:
+                        cb.finished(f"Executed {run_hook or 'run hook'}")
 
         elapsed = time.monotonic() - t0
 

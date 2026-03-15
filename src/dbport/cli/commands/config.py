@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -25,7 +24,7 @@ config_app = typer.Typer(
 @config_app.command(name="default")
 def default_cmd(
     ctx: typer.Context,
-    model_key: Optional[str] = typer.Argument(None, help="Model key (agency.dataset_id) to set as default."),
+    model_key: str | None = typer.Argument(None, help="Model key (agency.dataset_id) to set as default."),
 ) -> None:
     """Show or set the default model for this project."""
     from ..context import read_default_model, read_lock_models, write_default_model
@@ -65,10 +64,10 @@ def default_cmd(
 @config_app.command(name="run-hook")
 def run_hook_cmd(
     ctx: typer.Context,
-    hook_path: Optional[str] = typer.Argument(None, help="Path to run hook file (e.g. sql/main.sql or run.py)."),
+    hook_path: str | None = typer.Argument(None, help="Path to run hook file (e.g. sql/main.sql or run.py)."),
 ) -> None:
     """Show or set the run hook for the resolved model."""
-    from ..context import read_lock_models, resolve_model_paths
+    from ..context import resolve_model_paths
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
@@ -109,12 +108,21 @@ def run_hook_cmd(
                 model_root=raw_root,
                 duckdb_path=raw_db,
             )
-            adapter.write_run_hook(hook_path)
+            # Normalize hook_path: resolve relative to CWD, store relative to model_root
+            abs_model_root = (cli_ctx.project_path / raw_root).resolve()
+            hook = Path(hook_path)
+            if not hook.is_absolute():
+                hook = (Path.cwd() / hook).resolve()
+            try:
+                normalized = str(hook.relative_to(abs_model_root))
+            except ValueError:
+                normalized = hook_path  # Outside model_root — store as-is
+            adapter.write_run_hook(normalized)
 
             if cli_ctx.json_output:
-                print_json("config run-hook", {"run_hook": hook_path, "model": model_key})
+                print_json("config run-hook", {"run_hook": normalized, "model": model_key})
             else:
-                print_success(f"Run hook set to: {hook_path}")
+                print_success(f"Run hook set to: {normalized}")
 
 
 @config_app.command(name="info")
@@ -125,7 +133,7 @@ def info_cmd(
     raw: bool = typer.Option(False, "--raw", help="Show raw lock file TOML."),
 ) -> None:
     """Inspect persisted lock file state for the resolved model."""
-    from ..context import _read_lock_doc, read_default_model, read_lock_models, _resolve_model_data
+    from ..context import _resolve_model_data, read_default_model, read_lock_models
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)

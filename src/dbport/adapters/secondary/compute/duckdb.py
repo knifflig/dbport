@@ -58,8 +58,10 @@ class DuckDBComputeAdapter:
                 try:
                     con.execute(f"INSTALL {ext}")
                     con.execute(f"LOAD {ext}")
-                except Exception:
-                    logger.warning("Could not install DuckDB extension: %s", ext)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Required DuckDB extension '{ext}' could not be loaded: {exc}"
+                    ) from exc
 
     # ------------------------------------------------------------------
     # ICompute
@@ -103,5 +105,5 @@ class DuckDBComputeAdapter:
             try:
                 self._con.close()
             except Exception:
-                pass
+                logger.debug("Error closing DuckDB connection", exc_info=True)
             self._con = None
