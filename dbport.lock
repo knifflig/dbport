@@ -50,34 +50,6 @@ iceberg_snapshot_timestamp = 2026-03-14T12:12:47.609000Z
 rows = 1485615
 completed = true
 
-[models."test.table1_v2"]
-agency = "test"
-dataset_id = "table1_v2"
-model_root = "examples/minimal"
-duckdb_path = "/home/user/lmi_tools/examples/minimal/data/table1_v2.duckdb"
-
-[models."test.table1_v2".schema]
-ddl = "CREATE OR REPLACE TABLE test.table1 (\n    geo    VARCHAR NOT NULL,\n    year   INTEGER NOT NULL,\n    value  DOUBLE\n);"
-source = "local"
-
-[[models."test.table1_v2".schema.columns]]
-column_name = "geo"
-column_pos = 0
-sql_type = "VARCHAR"
-codelist_id = "geo"
-
-[[models."test.table1_v2".schema.columns]]
-column_name = "year"
-column_pos = 1
-sql_type = "INTEGER"
-codelist_id = "year"
-
-[[models."test.table1_v2".schema.columns]]
-column_name = "value"
-column_pos = 2
-sql_type = "DOUBLE"
-codelist_id = "value"
-
 [models."test.cli_table1"]
 agency = "test"
 dataset_id = "cli_table1"
