@@ -1,0 +1,69 @@
+[project]
+name = "dbport"
+version = "0.1.0"
+description = "DuckDB-native runtime for building reproducible warehouse datasets"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "duckdb>=1.1",
+    "pyarrow>=17.0",
+    "pyiceberg[s3fs]>=0.8",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "typer>=0.9",
+    "rich>=13.0",
+]
+
+[project.scripts]
+dbp = "dbport.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "responses>=0.26.0",
+]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+packages = [
+    "dbport",
+    "dbport.domain",
+    "dbport.domain.entities",
+    "dbport.domain.ports",
+    "dbport.application",
+    "dbport.application.services",
+    "dbport.adapters",
+    "dbport.adapters.primary",
+    "dbport.adapters.secondary",
+    "dbport.adapters.secondary.catalog",
+    "dbport.adapters.secondary.compute",
+    "dbport.adapters.secondary.lock",
+    "dbport.adapters.secondary.metadata",
+    "dbport.infrastructure",
+    "dbport.cli",
+    "dbport.cli.commands",
+]
+
+[tool.setuptools.package-data]
+dbport = ["**/*.py"]
+
+[tool.setuptools.package-dir]
+dbport = "src/dbport"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/test_dbport"]
+
+[tool.coverage.run]
+source = ["dbport"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 0
+fail_under = 95

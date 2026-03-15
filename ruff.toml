@@ -1,0 +1,28 @@
+#:schema ./schemas/ruff-permissive.schema.json
+
+target-version = "py313"
+line-length = 100
+fix = true
+extend-exclude = ["src/__bkg__", "__archive__"]
+
+[lint]
+select = [
+	"E",   # pycodestyle errors
+	"W",   # pycodestyle warnings
+	"F",   # pyflakes
+	"D",   # pydocstyle
+	"I",   # isort
+	"UP",  # pyupgrade
+	"ANN",
+	"B",   # flake8-bugbear
+]
+ignore = ["D107", "D203", "D213"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true

@@ -1,0 +1,7 @@
+INSERT INTO test.cli_table1
+SELECT
+    geo,
+    CAST(substr(time_period, 1, 4) AS INTEGER) AS year,
+    obs_value                                  AS value
+FROM estat.nama_10r_3empers
+WHERE obs_value IS NOT NULL;

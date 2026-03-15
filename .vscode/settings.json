@@ -1,0 +1,54 @@
+{
+    //"python.defaultInterpreterPath": ".venv/bin/python",
+    "terminal.integrated.env.linux": {
+        "PATH": "${workspaceFolder}/.venv/bin:${workspaceFolder}/.bin:${env:PATH}",
+        "UV_TOOL_BIN_DIR": "${workspaceFolder}/.bin"
+    },
+    "terminal.integrated.env.osx": {
+        "PATH": "${workspaceFolder}/.venv/bin:${workspaceFolder}/.bin:${env:PATH}",
+        "UV_TOOL_BIN_DIR": "${workspaceFolder}/.bin"
+    },
+    "terminal.integrated.env.windows": {
+        "Path": "${workspaceFolder}\\.venv\\Scripts;${workspaceFolder}\\.bin;${env:Path}",
+        "UV_TOOL_BIN_DIR": "${workspaceFolder}\\.bin"
+    },
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/src"
+    ],
+    "python.analysis.exclude": [
+        "**/__pycache__/**",
+        "**/*.pytest_cache/**",
+        "**/*.ruff_cache/**",
+        "**/*.uv-cache/**",
+        "**/*.venv/**",
+        "**/*.egg-info/**"
+    ],
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "ruff.interpreter": [
+        "${workspaceFolder}/.venv/bin/python"
+    ],
+    "ruff.importStrategy": "fromEnvironment",
+    // Exclude common Python-related files and folders from the file explorer
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true,
+        "**/.uv-cache": true,
+        "**/.venv": true,
+        "**/*.egg-info": true,
+    },
+}
