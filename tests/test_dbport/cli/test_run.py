@@ -1,4 +1,4 @@
-"""Tests for dbp run command."""
+"""Tests for dbp run command (full workflow: sync, execute, publish)."""
 
 from __future__ import annotations
 
@@ -26,31 +26,79 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
+run_hook = "sql/main.sql"
+'''
+
+_MODEL_LOCK_NO_HOOK = '''
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+'''
+
+_MULTI_MODEL_LOCK = '''
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+run_hook = "sql/main.sql"
+
+[models."c.d"]
+agency = "c"
+dataset_id = "d"
+model_root = "models/d"
+duckdb_path = "models/d/data/d.duckdb"
+run_hook = "sql/run.sql"
+'''
+
+_MODEL_LOCK_WITH_VERSIONS = '''
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+run_hook = "sql/main.sql"
+
+[[models."a.b".versions]]
+version = "2026-03-14"
+completed = true
+
+[[models."a.b".versions]]
+version = "2026-03-15"
+completed = true
 '''
 
 
-def _mock_dbport():
+def _mock_dbport(run_hook="sql/main.sql"):
     mock_port = MagicMock()
     mock_port.__enter__ = MagicMock(return_value=mock_port)
     mock_port.__exit__ = MagicMock(return_value=False)
+    mock_port._lock = MagicMock()
+    mock_port._lock.read_run_hook.return_value = run_hook
     return mock_port
 
 
 class TestRunCommand:
-    def test_run_no_target_fails(self, tmp_path: Path):
+    def test_run_no_hook_fails(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
-        lock.write_text('[models."a.b"]\nagency = "a"\ndataset_id = "b"\n')
-        result = runner.invoke(app, [
-            "--lockfile", str(lock),
-            "run",
-        ])
+        _create_lock(lock, _MODEL_LOCK_NO_HOOK)
+        mp = _mock_dbport(run_hook=None)
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run",
+            ])
         assert result.exit_code != 0
-        assert "No target specified" in result.output
+        assert "No run_hook configured" in result.output
 
     def test_run_help(self):
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "sql" in result.output.lower()
+        assert "workflow" in result.output.lower()
 
     def test_run_success(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -61,11 +109,43 @@ class TestRunCommand:
             result = runner.invoke(app, [
                 "--lockfile", str(lock),
                 "--project", str(tmp_path),
-                "run", "sql/main.sql",
+                "run",
             ])
         assert result.exit_code == 0
         assert "Executed" in result.output
         mp.execute.assert_called_once_with("sql/main.sql")
+
+    def test_run_with_model_positional_arg(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mp = _mock_dbport(run_hook="sql/run.sql")
+
+        with patch(_PATCH_TARGET, return_value=mp) as mock_cls:
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "c.d",
+            ])
+        assert result.exit_code == 0
+        # Verify DBPort was called with the correct model
+        call_kwargs = mock_cls.call_args[1]
+        assert call_kwargs["agency"] == "c"
+        assert call_kwargs["dataset_id"] == "d"
+
+    def test_run_with_version_publishes(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--version", "2026-03-15",
+            ])
+        assert result.exit_code == 0
+        mp.execute.assert_called_once_with("sql/main.sql")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_with_timing(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -76,7 +156,7 @@ class TestRunCommand:
             result = runner.invoke(app, [
                 "--lockfile", str(lock),
                 "--project", str(tmp_path),
-                "run", "sql/main.sql", "--timing",
+                "run", "--timing",
             ])
         assert result.exit_code == 0
         assert "Duration" in result.output
@@ -91,12 +171,13 @@ class TestRunCommand:
                 "--json",
                 "--lockfile", str(lock),
                 "--project", str(tmp_path),
-                "run", "sql/main.sql",
+                "run",
             ])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["ok"] is True
-        assert data["data"]["target"] == "sql/main.sql"
+        assert data["data"]["run_hook"] == "sql/main.sql"
+        assert data["data"]["model"] == "a.b"
         assert "elapsed_seconds" in data["data"]
 
     def test_run_no_model_fails(self, tmp_path: Path):
@@ -104,7 +185,82 @@ class TestRunCommand:
         lock.write_text("# empty\n")
         result = runner.invoke(app, [
             "--lockfile", str(lock),
-            "run", "sql/main.sql",
+            "run",
         ])
         assert result.exit_code != 0
         assert "No models found" in result.output
+
+    def test_run_dry_run_mode(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--version", "2026-03-15", "--dry-run",
+            ])
+        assert result.exit_code == 0
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="dry")
+
+    def test_run_refresh_mode(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--version", "2026-03-15", "--refresh",
+            ])
+        assert result.exit_code == 0
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
+
+    def test_run_refresh_without_version_uses_latest(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--refresh",
+            ])
+        assert result.exit_code == 0
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
+
+    def test_run_json_output_with_version(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--version", "2026-03-15",
+            ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["version"] == "2026-03-15"
+
+    def test_run_model_key_in_json_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mp = _mock_dbport(run_hook="sql/run.sql")
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "c.d",
+            ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["model"] == "c.d"

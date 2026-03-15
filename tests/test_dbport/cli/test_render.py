@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
+
+from rich.console import Console
 
 from dbport.cli.render import (
     get_console,
     get_stdout,
+    print_error,
+    print_info,
     print_json,
     print_panel,
+    print_success,
     print_table,
+    print_warning,
     set_no_color,
 )
 
@@ -56,3 +63,58 @@ class TestRenderHelpers:
     def test_print_panel_no_crash(self, capsys):
         # Should not raise
         print_panel("Title", "Some content here")
+
+    def test_print_success_outputs(self):
+        buf = StringIO()
+        console = Console(file=buf, no_color=True)
+        import dbport.cli.render as _mod
+
+        old = _mod._stdout
+        _mod._stdout = console
+        try:
+            print_success("it worked")
+        finally:
+            _mod._stdout = old
+        assert "OK" in buf.getvalue()
+        assert "it worked" in buf.getvalue()
+
+    def test_print_error_outputs(self):
+        buf = StringIO()
+        console = Console(file=buf, no_color=True)
+        import dbport.cli.render as _mod
+
+        old = _mod._console
+        _mod._console = console
+        try:
+            print_error("bad thing")
+        finally:
+            _mod._console = old
+        assert "Error:" in buf.getvalue()
+        assert "bad thing" in buf.getvalue()
+
+    def test_print_warning_outputs(self):
+        buf = StringIO()
+        console = Console(file=buf, no_color=True)
+        import dbport.cli.render as _mod
+
+        old = _mod._console
+        _mod._console = console
+        try:
+            print_warning("careful")
+        finally:
+            _mod._console = old
+        assert "Warning:" in buf.getvalue()
+        assert "careful" in buf.getvalue()
+
+    def test_print_info_outputs(self):
+        buf = StringIO()
+        console = Console(file=buf, no_color=True)
+        import dbport.cli.render as _mod
+
+        old = _mod._stdout
+        _mod._stdout = console
+        try:
+            print_info("some info")
+        finally:
+            _mod._stdout = old
+        assert "some info" in buf.getvalue()

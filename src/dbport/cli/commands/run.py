@@ -1,4 +1,4 @@
-"""dbp run — execute SQL transforms."""
+"""dbp run — run the complete model workflow: sync, execute, publish."""
 
 from __future__ import annotations
 
@@ -7,46 +7,98 @@ from typing import Optional
 
 import typer
 
-from ..context import resolve_model_paths
+from ..context import (
+    read_lock_versions,
+    resolve_model_key,
+    resolve_model_paths_from_data,
+)
 from ..errors import cli_error_handler
-from ..render import print_info, print_json, print_success
+from ..render import cli_tree_progress, print_info, print_json, print_success
 
 
 def run_cmd(
     ctx: typer.Context,
-    target: Optional[str] = typer.Argument(None, help="Path to .sql file to execute."),
+    model: Optional[str] = typer.Argument(None, help="Model key (agency.dataset_id)."),
+    version: Optional[str] = typer.Option(None, "--version", help="Version to publish after execution."),
     timing: bool = typer.Option(False, "--timing", help="Print execution duration."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not publish."),
+    refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
 ) -> None:
-    """Run the model workflow (SQL files)."""
+    """Run the complete model workflow: sync, execute, publish."""
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
 
     with cli_error_handler("run", json_output=cli_ctx.json_output):
-        if not target:
-            raise RuntimeError("No target specified. Usage: dbp run <path/to/file.sql>")
-
         from ...adapters.primary.client import DBPort
+        from ...infrastructure.progress import progress_callback
 
-        paths = resolve_model_paths(cli_ctx)
+        model_key, model_data = resolve_model_key(cli_ctx, model)
+        paths = resolve_model_paths_from_data(cli_ctx, model_data)
 
         t0 = time.monotonic()
 
-        with DBPort(
-            agency=paths.agency,
-            dataset_id=paths.dataset_id,
-            lock_path=paths.lock_path,
-            duckdb_path=paths.duckdb_path,
-            model_root=paths.model_root,
-        ) as port:
-            port.execute(target)
+        with cli_tree_progress(
+            enabled=not cli_ctx.json_output and not cli_ctx.quiet,
+            title=f"Running {model_key}",
+        ) as model_ctx:
+            with model_ctx(model_key):
+                with DBPort(
+                    agency=paths.agency,
+                    dataset_id=paths.dataset_id,
+                    lock_path=paths.lock_path,
+                    duckdb_path=paths.duckdb_path,
+                    model_root=paths.model_root,
+                ) as port:
+                    # Read run_hook from lock
+                    run_hook = port._lock.read_run_hook()
+                    if not run_hook:
+                        raise RuntimeError(
+                            "No run_hook configured for this model. "
+                            "Set it with: dbp config run-hook <path>"
+                        )
+
+                    # Execute the model
+                    cb = progress_callback.get(None)
+                    if cb:
+                        cb.started(f"Executing {run_hook}")
+                    port.execute(run_hook)
+                    if cb:
+                        cb.finished(f"Executed {run_hook}")
+
+                    # Publish if version provided
+                    pub_version = version
+                    if pub_version is None and (refresh or dry_run):
+                        # Use latest completed version from lock
+                        lock_versions = read_lock_versions(
+                            cli_ctx.lockfile_path, model_key
+                        )
+                        completed = [v for v in lock_versions if v.get("completed")]
+                        if completed:
+                            pub_version = completed[-1]["version"]
+
+                    if pub_version:
+                        mode = None
+                        if dry_run:
+                            mode = "dry"
+                        elif refresh:
+                            mode = "refresh"
+                        port.publish(version=pub_version, mode=mode)
 
         elapsed = time.monotonic() - t0
 
         if cli_ctx.json_output:
-            data = {"target": target, "elapsed_seconds": round(elapsed, 3)}
+            data: dict = {
+                "model": model_key,
+                "run_hook": run_hook,
+                "elapsed_seconds": round(elapsed, 3),
+            }
+            if pub_version:
+                data["version"] = pub_version
             print_json("run", data)
         else:
-            print_success(f"Executed {target}")
+            print_success(f"Executed model {model_key} via {run_hook}")
+            if pub_version:
+                print_info(f"  Published version: {pub_version}")
             if timing:
                 print_info(f"  Duration: {elapsed:.2f}s")

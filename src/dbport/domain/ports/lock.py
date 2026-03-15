@@ -50,3 +50,11 @@ class ILockStore(Protocol):
     def append_version(self, record: VersionRecord) -> None:
         """Append a new version record (or update existing by version string)."""
         ...
+
+    def read_run_hook(self) -> str | None:
+        """Return the configured run hook path, or None if not set."""
+        ...
+
+    def write_run_hook(self, hook: str) -> None:
+        """Persist the run hook path for this model."""
+        ...

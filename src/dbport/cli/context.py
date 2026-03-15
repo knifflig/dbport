@@ -197,6 +197,11 @@ def resolve_model_paths(ctx: CliContext) -> ModelPaths:
         )
 
     model_data = _resolve_model_data(ctx, models)
+    return resolve_model_paths_from_data(ctx, model_data)
+
+
+def resolve_model_paths_from_data(ctx: CliContext, model_data: dict) -> ModelPaths:
+    """Build :class:`ModelPaths` from already-resolved *model_data*."""
     repo_root = ctx.project_path
 
     # model_root is relative to the repo root
@@ -220,3 +225,53 @@ def resolve_model_paths(ctx: CliContext) -> ModelPaths:
         duckdb_path=str(duckdb_path),
         model_root=str(model_root),
     )
+
+
+def resolve_model_key(ctx: CliContext, model_arg: str | None = None) -> tuple[str, dict]:
+    """Determine the model key and data from an explicit arg or default resolution.
+
+    Returns ``(model_key, model_data)`` tuple.
+    """
+    models = read_lock_models(ctx.lockfile_path)
+    if not models:
+        raise RuntimeError(
+            f"No models found in {ctx.lockfile_path}. "
+            "Run 'dbp init' to create a project first."
+        )
+
+    # 1. Explicit model key passed as positional arg
+    if model_arg and model_arg in models:
+        return model_arg, models[model_arg]
+
+    # 2. --model flag (explicit model directory)
+    if ctx.model_dir is not None:
+        result = _find_model(models, ctx.model_dir)
+        if result is None:
+            raise RuntimeError(
+                f"No model with model_root='{ctx.model_dir}' in {ctx.lockfile_path}. "
+                f"Available: {[d.get('model_root', '.') for d in models.values()]}"
+            )
+        return result
+
+    # 3. CWD match
+    cwd_root = _cwd_model_root(ctx.project_path)
+    result = _find_model(models, cwd_root)
+    if result is not None:
+        return result
+
+    # 4. default_model from lock file
+    default_key = read_default_model(ctx.lockfile_path)
+    if default_key and default_key in models:
+        return default_key, models[default_key]
+
+    # 5. Fallback: first model
+    key = next(iter(models))
+    return key, models[key]
+
+
+def read_lock_versions(lockfile_path: Path, model_key: str) -> list[dict]:
+    """Read the versions list for a specific model from the lock file."""
+    models = read_lock_models(lockfile_path)
+    if model_key not in models:
+        return []
+    return models[model_key].get("versions", [])

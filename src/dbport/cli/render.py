@@ -225,3 +225,297 @@ def cli_progress(*, enabled: bool = True) -> Generator[None, None, None]:
             yield
     finally:
         progress_callback.reset(token)
+
+
+# -- Tree progress helpers ---------------------------------------------------
+
+import threading
+import time as _time
+from typing import Callable
+
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.table import Table as RichTable
+from rich.tree import Tree
+
+
+def _render_bar(fraction: float, width: int = 20) -> str:
+    """Render a text-based progress bar using Rich markup."""
+    filled = int(fraction * width)
+    return f"[green]{'━' * filled}[/][dim]{'━' * (width - filled)}[/]"
+
+
+class _LiveSpinnerLabel:
+    """Renderable: animated spinner + description + live elapsed time.
+
+    Recomputes elapsed time on every Rich render cycle so the counter
+    ticks up alongside the animated spinner.
+    """
+
+    def __init__(self, text: str, style: str = "", start: float | None = None) -> None:
+        self._text = text
+        self._style = style
+        self._spinner = Spinner("dots")
+        self._start = start if start is not None else _time.monotonic()
+
+    def __rich_console__(self, console, options):
+        grid = RichTable.grid(padding=(0, 1))
+        elapsed = _fmt_elapsed(_time.monotonic() - self._start)
+        grid.add_row(
+            self._spinner,
+            Text(self._text, style=self._style),
+            Text(elapsed, style="dim"),
+        )
+        yield grid
+
+
+class _LiveProgressLabel:
+    """Renderable: spinner + description + progress bar + row counts + live elapsed + ETA.
+
+    Used for determinate progress steps (streaming Arrow publish) where
+    row counts and a progress bar are shown alongside an animated spinner.
+    """
+
+    def __init__(
+        self,
+        text: str,
+        *,
+        bar: str | None = None,
+        completed: int = 0,
+        total: int | None = None,
+        start: float | None = None,
+        eta: str = "",
+    ) -> None:
+        self._text = text
+        self._bar = bar
+        self._completed = completed
+        self._total = total
+        self._spinner = Spinner("dots")
+        self._start = start if start is not None else _time.monotonic()
+        self._eta = eta
+
+    def __rich_console__(self, console, options):
+        from rich.markup import render as render_markup
+
+        elapsed = _fmt_elapsed(_time.monotonic() - self._start)
+        if self._total and self._bar:
+            label = render_markup(
+                f"{self._text}  {self._bar} "
+                f"{self._completed:,} / {self._total:,} rows"
+                f"  [dim]{elapsed}{self._eta}[/]"
+            )
+        else:
+            label = render_markup(
+                f"{self._text}  "
+                f"[dim]{self._completed:,} rows  {elapsed}[/]"
+            )
+        grid = RichTable.grid(padding=(0, 1))
+        grid.add_row(self._spinner, label)
+        yield grid
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    """Format elapsed seconds as H:MM:SS or M:SS."""
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+class ModelNode:
+    """Per-model progress callback that renders steps as children of a Rich Tree branch.
+
+    Thread-safe: all tree mutations are guarded by *lock* and flushed via *live*.
+    """
+
+    def __init__(
+        self,
+        branch: Tree,
+        root_tree: Tree,
+        live: Live,
+        lock: threading.Lock,
+        model_key: str,
+    ) -> None:
+        self._branch = branch
+        self._root_tree = root_tree
+        self._live = live
+        self._lock = lock
+        self._model_key = model_key
+        self._current_node: Tree | None = None
+        self._current_desc: str = ""
+        self._step_start: float = 0.0
+        self._model_start: float = _time.monotonic()
+        self._model_failed = False
+        self._total: int | None = None
+        self._completed: int = 0
+
+    # -- ProgressCallback protocol -------------------------------------------
+
+    def started(self, description: str, total: int | None = None) -> None:
+        with self._lock:
+            # Auto-finish any previous step
+            if self._current_node is not None:
+                self._finish_current_node()
+            self._current_desc = description
+            self._step_start = _time.monotonic()
+            self._total = total
+            self._completed = 0
+            label = _LiveSpinnerLabel(description, start=self._step_start)
+            self._current_node = self._branch.add(label)
+            self._live.update(self._root_tree)
+
+    def update(self, advance: int) -> None:
+        with self._lock:
+            if self._current_node is None:
+                return
+            self._completed += advance
+            elapsed = _time.monotonic() - self._step_start
+            if self._total and self._total > 0:
+                pct = self._completed / self._total
+                bar = _render_bar(pct)
+                eta = ""
+                if pct > 0.01:
+                    remaining = elapsed / pct * (1 - pct)
+                    eta = f"  ETA {_fmt_elapsed(remaining)}"
+                self._current_node.label = _LiveProgressLabel(
+                    self._current_desc,
+                    bar=bar,
+                    completed=self._completed,
+                    total=self._total,
+                    start=self._step_start,
+                    eta=eta,
+                )
+            else:
+                self._current_node.label = _LiveProgressLabel(
+                    self._current_desc,
+                    completed=self._completed,
+                    start=self._step_start,
+                )
+            self._live.update(self._root_tree)
+
+    def log(self, message: str) -> None:
+        with self._lock:
+            self._branch.add(f"[dim]{message}[/dim]")
+            self._live.update(self._root_tree)
+
+    def finished(self, message: str | None = None) -> None:
+        with self._lock:
+            if self._current_node is not None:
+                self._finish_current_node(message)
+                self._live.update(self._root_tree)
+
+    def failed(self, message: str | None = None) -> None:
+        with self._lock:
+            if self._current_node is not None:
+                elapsed = _time.monotonic() - self._step_start
+                desc = message or self._current_desc
+                self._current_node.label = (
+                    f"[red bold]✗[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
+                )
+                self._current_node = None
+                self._total = None
+                self._completed = 0
+                self._model_failed = True
+                self._live.update(self._root_tree)
+
+    # -- Model-level finish (called by cli_tree_progress) --------------------
+
+    def finish_model(self, error: Exception | None = None) -> None:
+        with self._lock:
+            # Auto-finish any dangling step
+            if self._current_node is not None:
+                self._finish_current_node()
+            elapsed = _time.monotonic() - self._model_start
+            if error is not None:
+                self._branch.add(
+                    f"[red bold]✗[/] Failed: {error}"
+                )
+                self._branch.label = (
+                    f"[red bold]✗[/] [bold]{self._model_key}[/]"
+                    f"  [dim]{_fmt_elapsed(elapsed)}[/]"
+                )
+            elif self._model_failed:
+                self._branch.label = (
+                    f"[red bold]✗[/] [bold]{self._model_key}[/]"
+                    f"  [dim]{_fmt_elapsed(elapsed)}[/]"
+                )
+            else:
+                self._branch.label = (
+                    f"[green bold]✓[/] [bold]{self._model_key}[/]"
+                    f"  [dim]{_fmt_elapsed(elapsed)}[/]"
+                )
+            self._live.update(self._root_tree)
+
+    # -- Internal ------------------------------------------------------------
+
+    def _finish_current_node(self, message: str | None = None) -> None:
+        """Mark the current step as done (must be called under lock)."""
+        elapsed = _time.monotonic() - self._step_start
+        desc = message or self._current_desc
+        self._current_node.label = (  # type: ignore[union-attr]
+            f"[green bold]✓[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
+        )
+        self._current_node = None
+        self._total = None
+        self._completed = 0
+
+
+@contextmanager
+def _model_progress_context(node: ModelNode):
+    """Set progress_callback to *node* for the current thread."""
+    from ..infrastructure.progress import progress_callback
+
+    token = progress_callback.set(node)
+    try:
+        yield node
+    finally:
+        progress_callback.reset(token)
+
+
+@contextmanager
+def cli_tree_progress(
+    *,
+    enabled: bool = True,
+    title: str = "Initializing",
+) -> Generator[Callable[[str], contextmanager], None, None]:
+    """Render a Rich tree with per-model progress branches.
+
+    Yields a *model_context* factory: call ``model_context(model_key)`` to get
+    a context manager that sets ``progress_callback`` to a :class:`ModelNode`.
+
+    Usage::
+
+        with cli_tree_progress(enabled=True) as model_ctx:
+            with model_ctx("test.table1"):
+                with DBPort(...):
+                    pass  # progress events go to the model branch
+    """
+    if not enabled:
+        @contextmanager
+        def _noop_ctx(model_key: str):
+            yield None
+        yield _noop_ctx
+        return
+
+    tree = Tree(f"[bold]{title}[/]")
+    lock = threading.Lock()
+
+    with Live(tree, console=_console, refresh_per_second=8, transient=False) as live:
+        @contextmanager
+        def model_context(model_key: str):
+            with lock:
+                branch = tree.add(_LiveSpinnerLabel(model_key, style="bold blue"))
+                live.update(tree)
+            node = ModelNode(branch, tree, live, lock, model_key)
+            with _model_progress_context(node):
+                error: Exception | None = None
+                try:
+                    yield node
+                except Exception as exc:
+                    error = exc
+                    raise
+                finally:
+                    node.finish_model(error)
+
+        yield model_context

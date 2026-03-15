@@ -13,9 +13,12 @@ from dbport.cli.context import (
     _find_model,
     _find_repo_root,
     read_default_model,
+    read_lock_versions,
     resolve_context,
     resolve_dataset,
+    resolve_model_key,
     resolve_model_paths,
+    resolve_model_paths_from_data,
     write_default_model,
 )
 
@@ -332,3 +335,138 @@ class TestResolveDataset:
         ctx = CliContext(project_path=tmp_path, lockfile_path=tmp_path / "nope.lock")
         with pytest.raises(RuntimeError, match="No models found"):
             resolve_dataset(ctx)
+
+
+class TestResolveModelKey:
+    def test_explicit_model_key(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
+            '\n[models."b.y"]\nagency = "b"\ndataset_id = "y"\nmodel_root = "m/y"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        key, data = resolve_model_key(ctx, "b.y")
+        assert key == "b.y"
+        assert data["agency"] == "b"
+
+    def test_falls_back_to_default_resolution(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            'default_model = "b.y"\n'
+            '\n[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+            '\n[models."b.y"]\nagency = "b"\ndataset_id = "y"\nmodel_root = "m/y"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        key, data = resolve_model_key(ctx)
+        assert key == "b.y"
+
+    def test_unknown_model_arg_falls_through(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        # "nonexistent" not in models, falls through to default resolution
+        key, data = resolve_model_key(ctx, "nonexistent")
+        assert key == "a.x"
+
+    def test_resolves_via_model_dir_flag(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+            '\n[models."b.y"]\nagency = "b"\ndataset_id = "y"\nmodel_root = "m/y"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="m/y")
+        key, data = resolve_model_key(ctx)
+        assert key == "b.y"
+
+    def test_model_dir_flag_not_found_raises(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="nonexistent")
+        with pytest.raises(RuntimeError, match="No model with model_root"):
+            resolve_model_key(ctx)
+
+    def test_resolves_via_cwd(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+            '\n[models."b.y"]\nagency = "b"\ndataset_id = "y"\nmodel_root = "m/y"\n'
+        )
+        (tmp_path / "m" / "y").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path / "m" / "y")
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        key, data = resolve_model_key(ctx)
+        assert key == "b.y"
+
+    def test_fallback_to_first_model(self, tmp_path: Path, monkeypatch):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
+        )
+        monkeypatch.chdir(tmp_path)  # no CWD match, no default_model
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        key, data = resolve_model_key(ctx)
+        assert key == "a.x"
+
+    def test_raises_when_no_models(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text("# empty\n")
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
+        with pytest.raises(RuntimeError, match="No models found"):
+            resolve_model_key(ctx)
+
+
+class TestResolveModelPathsFromData:
+    def test_builds_paths_from_model_data(self, tmp_path: Path):
+        ctx = CliContext(project_path=tmp_path, lockfile_path=tmp_path / "dbport.lock")
+        model_data = {
+            "agency": "test",
+            "dataset_id": "tbl",
+            "model_root": "examples/m",
+            "duckdb_path": "examples/m/data/tbl.duckdb",
+        }
+        paths = resolve_model_paths_from_data(ctx, model_data)
+        assert paths.agency == "test"
+        assert paths.dataset_id == "tbl"
+        assert paths.model_root == str((tmp_path / "examples/m").resolve())
+        assert paths.duckdb_path == str((tmp_path / "examples/m/data/tbl.duckdb").resolve())
+
+    def test_defaults_duckdb_path(self, tmp_path: Path):
+        ctx = CliContext(project_path=tmp_path, lockfile_path=tmp_path / "dbport.lock")
+        model_data = {"agency": "a", "dataset_id": "b", "model_root": "sub"}
+        paths = resolve_model_paths_from_data(ctx, model_data)
+        assert paths.duckdb_path == str((tmp_path / "sub" / "data" / "b.duckdb").resolve())
+
+
+class TestReadLockVersions:
+    def test_returns_versions_list(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
+            '\n[[models."a.x".versions]]\nversion = "2026-03-15"\ncompleted = true\n'
+            '\n[[models."a.x".versions]]\nversion = "2026-03-14"\ncompleted = true\n'
+        )
+        versions = read_lock_versions(lock, "a.x")
+        assert len(versions) == 2
+        assert versions[0]["version"] == "2026-03-15"
+
+    def test_returns_empty_for_missing_model(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text('[models."a.x"]\nagency = "a"\n')
+        assert read_lock_versions(lock, "b.y") == []
+
+    def test_returns_empty_for_no_versions(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
+        assert read_lock_versions(lock, "a.x") == []
+
+    def test_returns_empty_for_missing_file(self, tmp_path: Path):
+        assert read_lock_versions(tmp_path / "nope.lock", "a.x") == []

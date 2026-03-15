@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
 from dbport.cli.main import app
 
 runner = CliRunner()
+
+_PATCH_TARGET = "dbport.adapters.primary.client.DBPort"
 
 
 def _setup_repo(tmp_path: Path) -> Path:
@@ -257,3 +260,189 @@ class TestInitCommand:
         ])
         assert result.exit_code == 0
         assert "Created model" in result.output
+
+
+def _create_lock(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+_EXISTING_LOCK = '''\
+[models."test.table1"]
+agency = "test"
+dataset_id = "table1"
+model_root = "examples/minimal"
+duckdb_path = "examples/minimal/data/table1.duckdb"
+run_hook = "sql/main.sql"
+'''
+
+_TWO_MODELS_LOCK = '''\
+[models."test.table1"]
+agency = "test"
+dataset_id = "table1"
+model_root = "examples/minimal"
+duckdb_path = "examples/minimal/data/table1.duckdb"
+
+[models."test.table2"]
+agency = "test"
+dataset_id = "table2"
+model_root = "examples/other"
+duckdb_path = "examples/other/data/table2.duckdb"
+'''
+
+
+def _mock_dbport():
+    mock_port = MagicMock()
+    mock_port.__enter__ = MagicMock(return_value=mock_port)
+    mock_port.__exit__ = MagicMock(return_value=False)
+    return mock_port
+
+
+class TestInitSyncExistingModel:
+    """Tests for `dbp init <model_key>` syncing an existing model."""
+
+    def test_init_with_existing_model_key_syncs(self, tmp_path: Path):
+        """dbp init test.table1 should sync, not scaffold, when model exists."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--project", str(repo),
+                "init", "test.table1",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "Synced" in result.output
+        assert "Created model" not in result.output
+
+    def test_init_with_agency_dataset_syncs_existing(self, tmp_path: Path):
+        """dbp init --agency test --dataset table1 should sync when model exists."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--project", str(repo),
+                "init", "--agency", "test", "--dataset", "table1",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "Synced" in result.output
+        assert "Created model" not in result.output
+
+    def test_init_with_unknown_name_scaffolds(self, tmp_path: Path):
+        """dbp init brand_new should scaffold when name not in lock."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "brand_new",
+            "--path", str(repo / "brand_new"),
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Created model" in result.output
+
+    def test_init_with_unknown_agency_dataset_scaffolds(self, tmp_path: Path):
+        """dbp init --agency new --dataset thing should scaffold."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "--agency", "new", "--dataset", "thing",
+            "--path", str(repo / "new_thing"),
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Created model" in result.output
+
+    def test_init_no_args_syncs_all(self, tmp_path: Path):
+        """dbp init with no args should sync all models."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        (repo / "examples" / "other").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--project", str(repo),
+                "init",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "Synced 2/2" in result.output
+
+    def test_init_no_args_empty_lock_fails(self, tmp_path: Path):
+        """dbp init with no args and no models should error."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", "# empty lock\n")
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init",
+        ])
+        assert result.exit_code != 0
+        assert "No models found" in result.output
+
+    def test_init_no_args_sync_failure_counted(self, tmp_path: Path):
+        """Sync failure for one model should not crash the whole sync."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        (repo / "examples" / "other").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+        call_count = 0
+
+        def _side_effect(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("sync failed")
+            return mp
+
+        with patch(_PATCH_TARGET, side_effect=_side_effect):
+            result = runner.invoke(app, [
+                "--project", str(repo),
+                "init",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "Synced 1/2" in result.output
+
+    def test_init_no_args_json_output(self, tmp_path: Path):
+        """dbp init with --json syncing all models."""
+        import json
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _TWO_MODELS_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        (repo / "examples" / "other").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--project", str(repo),
+                "init",
+            ])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["total"] == 2
+
+    def test_init_single_model_json_output(self, tmp_path: Path):
+        """JSON output for single model sync."""
+        import json
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _EXISTING_LOCK)
+        (repo / "examples" / "minimal").mkdir(parents=True, exist_ok=True)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--project", str(repo),
+                "init", "test.table1",
+            ])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert "test.table1" in data["data"]["synced"]

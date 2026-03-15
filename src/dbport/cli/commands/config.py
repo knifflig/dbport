@@ -7,6 +7,7 @@ in ``dbport.lock``.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -59,6 +60,61 @@ def default_cmd(
                 print_json("config default", {"default_model": model_key})
             else:
                 print_success(f"Default model set to: {model_key}")
+
+
+@config_app.command(name="run-hook")
+def run_hook_cmd(
+    ctx: typer.Context,
+    hook_path: Optional[str] = typer.Argument(None, help="Path to run hook file (e.g. sql/main.sql or run.py)."),
+) -> None:
+    """Show or set the run hook for the resolved model."""
+    from ..context import read_lock_models, resolve_model_paths
+    from ..main import get_cli_ctx
+
+    cli_ctx = get_cli_ctx(ctx)
+
+    with cli_error_handler("config run-hook", json_output=cli_ctx.json_output):
+        if hook_path is None:
+            # Show current run_hook
+            paths = resolve_model_paths(cli_ctx)
+            from ...adapters.secondary.lock.toml import TomlLockAdapter
+
+            model_key = f"{paths.agency}.{paths.dataset_id}"
+            raw_root = str(Path(paths.model_root).relative_to(cli_ctx.project_path)) if Path(paths.model_root).is_absolute() else paths.model_root
+            raw_db = str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path)) if Path(paths.duckdb_path).is_absolute() else paths.duckdb_path
+            adapter = TomlLockAdapter(
+                cli_ctx.lockfile_path,
+                model_key=model_key,
+                model_root=raw_root,
+                duckdb_path=raw_db,
+            )
+            current = adapter.read_run_hook()
+            if cli_ctx.json_output:
+                print_json("config run-hook", {"run_hook": current, "model": model_key})
+            elif current:
+                print_info(f"Run hook for {model_key}: {current}")
+            else:
+                print_info(f"No run hook set for {model_key}.")
+        else:
+            # Set run_hook
+            paths = resolve_model_paths(cli_ctx)
+            from ...adapters.secondary.lock.toml import TomlLockAdapter
+
+            model_key = f"{paths.agency}.{paths.dataset_id}"
+            raw_root = str(Path(paths.model_root).relative_to(cli_ctx.project_path)) if Path(paths.model_root).is_absolute() else paths.model_root
+            raw_db = str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path)) if Path(paths.duckdb_path).is_absolute() else paths.duckdb_path
+            adapter = TomlLockAdapter(
+                cli_ctx.lockfile_path,
+                model_key=model_key,
+                model_root=raw_root,
+                duckdb_path=raw_db,
+            )
+            adapter.write_run_hook(hook_path)
+
+            if cli_ctx.json_output:
+                print_json("config run-hook", {"run_hook": hook_path, "model": model_key})
+            else:
+                print_success(f"Run hook set to: {hook_path}")
 
 
 @config_app.command(name="info")

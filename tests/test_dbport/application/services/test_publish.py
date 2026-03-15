@@ -93,6 +93,9 @@ class _FakeCompute:
     def to_arrow_batches(self, sql, batch_size=10_000):
         return self._table.to_reader()
 
+    def ensure_extensions(self):
+        pass
+
     def close(self):
         pass
 
