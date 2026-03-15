@@ -1,13 +1,16 @@
 """WarehouseCreds — credential resolution via pydantic-settings.
 
-Credentials are resolved in order:
+Credentials are resolved in order (highest priority first):
 1. Explicit kwargs passed to DBPort(...)
-2. Environment variables (ICEBERG_*, S3_*, AWS_*)
+2. .env file (project-local)
+3. Environment variables (ICEBERG_*, S3_*, AWS_*)
 
 No secrets are written to disk (dbport.lock is credential-free).
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -59,3 +62,17 @@ class WarehouseCreds(BaseSettings):
         validation_alias=AliasChoices("AWS_DEFAULT_REGION", "aws_default_region"),
         description="S3 region",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        **kwargs: Any,
+    ) -> tuple:
+        """Override source priority: init > .env file > shell env vars."""
+        return (
+            kwargs["init_settings"],
+            kwargs["dotenv_settings"],
+            kwargs["env_settings"],
+            kwargs["file_secret_settings"],
+        )

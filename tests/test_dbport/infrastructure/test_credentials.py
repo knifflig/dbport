@@ -107,3 +107,50 @@ class TestWarehouseCreds:
         monkeypatch.delenv("ICEBERG_WAREHOUSE", raising=False)
         with pytest.raises((ValidationError, Exception)):
             WarehouseCreds()
+
+    def test_dotenv_overrides_env_var(self, monkeypatch, tmp_path):
+        """A .env file should take priority over shell env vars."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ICEBERG_REST_URI", "https://from-shell.example.com")
+        monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "shell-token")
+        monkeypatch.setenv("ICEBERG_WAREHOUSE", "shell_wh")
+
+        dotenv = tmp_path / ".env"
+        dotenv.write_text(
+            "ICEBERG_REST_URI=https://from-dotenv.example.com\n"
+            "ICEBERG_CATALOG_TOKEN=dotenv-token\n"
+            "ICEBERG_WAREHOUSE=dotenv_wh\n"
+        )
+
+        creds = WarehouseCreds()
+        assert creds.catalog_uri == "https://from-dotenv.example.com"
+        assert creds.catalog_token == "dotenv-token"
+        assert creds.warehouse == "dotenv_wh"
+
+    def test_explicit_overrides_dotenv(self, monkeypatch, tmp_path):
+        """Constructor kwargs should take priority over .env file."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("ICEBERG_REST_URI", raising=False)
+        monkeypatch.delenv("ICEBERG_CATALOG_TOKEN", raising=False)
+        monkeypatch.delenv("ICEBERG_WAREHOUSE", raising=False)
+
+        dotenv = tmp_path / ".env"
+        dotenv.write_text(
+            "ICEBERG_REST_URI=https://from-dotenv.example.com\n"
+            "ICEBERG_CATALOG_TOKEN=dotenv-token\n"
+            "ICEBERG_WAREHOUSE=dotenv_wh\n"
+        )
+
+        creds = WarehouseCreds(catalog_uri="https://explicit.example.com")
+        assert creds.catalog_uri == "https://explicit.example.com"
+        assert creds.catalog_token == "dotenv-token"  # from .env
+
+    def test_env_var_fallback_when_no_dotenv(self, monkeypatch, tmp_path):
+        """Shell env vars are used when no .env file is present."""
+        monkeypatch.chdir(tmp_path)  # no .env here
+        monkeypatch.setenv("ICEBERG_REST_URI", "https://from-shell.example.com")
+        monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "shell-token")
+        monkeypatch.setenv("ICEBERG_WAREHOUSE", "shell_wh")
+
+        creds = WarehouseCreds()
+        assert creds.catalog_uri == "https://from-shell.example.com"
