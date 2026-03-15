@@ -253,9 +253,9 @@ Command-by-command reference
 
 dbp init
 
-Create a new DBPort model scaffold and register it in the repo-root lock file.
+Initialize or sync models.
 
-This is the entrypoint for new users and new models. It creates a directory scaffold, writes starter SQL templates, registers the model in dbport.lock, and sets the new model as the default.
+This command has two modes: it either **syncs existing models** from the lock file or **scaffolds a new model** and registers it. The mode is determined automatically based on whether the given name or agency/dataset combination matches an existing model in `dbport.lock`.
 
 Interface
 
@@ -263,7 +263,7 @@ dbp init [NAME]
 
 Arguments
 
-NAME              Project/model name (default: dbport_project)
+NAME              Model key (agency.dataset_id) to sync, or new project name to scaffold
 
 Flags
 
@@ -273,7 +273,28 @@ Flags
 --path PATH       Target directory (default: ./<NAME>)
 --force           Overwrite existing files
 
-What it creates
+Behavior: sync vs scaffold
+
+The command resolves what to do based on the arguments:
+
+	•	No arguments — syncs all models in the lock file, running them in parallel
+	•	Model key that exists in lock (e.g. `test.table1`) — syncs that specific model
+	•	`--agency` + `--dataset` matching an existing model — syncs that model
+	•	Name or agency/dataset not in lock — scaffolds a new model
+
+Sync mode
+	•	Creates a DBPort instance for each model, triggering the init-time sync (schema detection, local state reconciliation)
+	•	Multiple models run in parallel using a thread pool (up to 4 concurrent workers)
+	•	Progress is displayed as a Rich tree where each model is a parent node and sync steps are children (see Progress Display below)
+
+Scaffold mode (new models)
+	•	Creates a directory scaffold with starter SQL templates
+	•	Registers the model in the repo-root dbport.lock under [models."agency.dataset_id"]
+	•	Sets the newly initialized model as the default (every init updates the default)
+	•	model_root and duckdb_path are stored as paths relative to the repo root
+	•	Does NOT connect to the warehouse (offline operation)
+
+What scaffold creates
 
 <target>/
   sql/
@@ -282,16 +303,13 @@ What it creates
   data/                   DuckDB data directory
   run.py                  Only for python/hybrid templates
 
-Behavior
-	•	Registers the model in the repo-root dbport.lock under [models."agency.dataset_id"]
-	•	Sets the newly initialized model as the default (every init updates the default)
-	•	model_root and duckdb_path are stored as paths relative to the repo root
-	•	Does NOT connect to the warehouse (offline operation)
-
 Example usage
 
-dbp init regional_trends --template hybrid --dataset emp__regional_trends --agency wifor
-dbp init --agency wifor --dataset emp_test --path examples/emp_test
+dbp init                                    # sync all models in lock file
+dbp init test.table1                        # sync a specific existing model
+dbp init --agency test --dataset table1     # sync by agency + dataset
+dbp init regional_trends --template hybrid --dataset emp__regional_trends --agency wifor  # scaffold new
+dbp init --agency wifor --dataset emp_test --path examples/emp_test                       # scaffold new
 
 ⸻
 
@@ -749,6 +767,7 @@ src/
         schema.py          dbp schema
         load.py            dbp load
         run.py             dbp run
+        execute.py         dbp execute
         publish.py         dbp publish
         config.py          dbp config (default, info)
         validate.py        dbp validate (planned)
@@ -822,7 +841,13 @@ Shared Typer Option definitions reused across commands.
 
 src/dbport/cli/render.py
 
-Rich tables, panels, summaries, and JSON serialization helpers. Module-level console respects --no-color.
+Rich output helpers:
+	•	Tables, panels, summaries, and JSON serialization helpers
+	•	Module-level console respects --no-color
+	•	`RichProgressAdapter` — flat spinner/progress bar for single-task progress (used by `dbp run`, `dbp execute`, etc.)
+	•	`ModelNode` — per-model tree progress callback with animated spinners for indeterminate tasks and text-based progress bars (row counts, ETA) for determinate tasks like streaming Arrow publish
+	•	`cli_progress()` — context manager wiring Rich progress to the `progress_callback` contextvar
+	•	`cli_tree_progress()` — context manager rendering a Rich tree with per-model branches; yields a `model_context` factory for thread-safe per-model progress
 
 src/dbport/cli/errors.py
 
@@ -849,6 +874,23 @@ Default output uses Rich for:
 	•	status summaries
 	•	warnings
 	•	success/failure states
+
+Progress display
+
+Commands that perform long-running operations (init, load, publish) show real-time progress using Rich:
+
+Single-task commands (load, run, execute) use a flat spinner/progress bar:
+	•	Indeterminate tasks show an animated spinner with a description
+	•	Determinate tasks (e.g. streaming Arrow publish) show a progress bar with row counts, elapsed time, and ETA
+
+Multi-model commands (init with no args) use a Rich tree layout:
+	•	Each model is a parent node with an animated spinner while in progress, then ✓ or ✗ when done
+	•	Sync steps appear as child nodes under each model
+	•	Indeterminate steps show animated spinners (e.g. schema detection, loading)
+	•	Determinate steps show text-based progress bars: `━━━━━━━━━━ 500,000 / 1,485,615 rows  ETA 0:02:45`
+	•	Multiple models run in parallel; the tree updates thread-safely from concurrent workers
+
+Even single-model init (`dbp init test.table1`) uses the tree layout for consistency.
 
 Machine output
 
