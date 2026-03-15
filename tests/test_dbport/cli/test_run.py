@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -35,6 +35,39 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
+'''
+
+_MULTI_MODEL_LOCK = '''
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+run_hook = "sql/main.sql"
+
+[models."c.d"]
+agency = "c"
+dataset_id = "d"
+model_root = "models/d"
+duckdb_path = "models/d/data/d.duckdb"
+run_hook = "sql/run.sql"
+'''
+
+_MODEL_LOCK_WITH_VERSIONS = '''
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+run_hook = "sql/main.sql"
+
+[[models."a.b".versions]]
+version = "2026-03-14"
+completed = true
+
+[[models."a.b".versions]]
+version = "2026-03-15"
+completed = true
 '''
 
 
@@ -82,6 +115,23 @@ class TestRunCommand:
         assert "Executed" in result.output
         mp.execute.assert_called_once_with("sql/main.sql")
 
+    def test_run_with_model_positional_arg(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mp = _mock_dbport(run_hook="sql/run.sql")
+
+        with patch(_PATCH_TARGET, return_value=mp) as mock_cls:
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "c.d",
+            ])
+        assert result.exit_code == 0
+        # Verify DBPort was called with the correct model
+        call_kwargs = mock_cls.call_args[1]
+        assert call_kwargs["agency"] == "c"
+        assert call_kwargs["dataset_id"] == "d"
+
     def test_run_with_version_publishes(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
@@ -127,6 +177,7 @@ class TestRunCommand:
         data = json.loads(result.output)
         assert data["ok"] is True
         assert data["data"]["run_hook"] == "sql/main.sql"
+        assert data["data"]["model"] == "a.b"
         assert "elapsed_seconds" in data["data"]
 
     def test_run_no_model_fails(self, tmp_path: Path):
@@ -166,3 +217,33 @@ class TestRunCommand:
             ])
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
+
+    def test_run_refresh_without_version_uses_latest(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--refresh",
+            ])
+        assert result.exit_code == 0
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
+
+    def test_run_model_key_in_json_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mp = _mock_dbport(run_hook="sql/run.sql")
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "c.d",
+            ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["model"] == "c.d"

@@ -37,17 +37,31 @@ class SyncService:
         self._sync_inputs()
 
     def _sync_output_table(self, table_address: str) -> None:
-        """Create or recreate the output table from lock schema."""
+        """Create or recreate the output table from lock schema.
+
+        Skips DDL execution when the table already exists to preserve data
+        from a previous ``dbp run``.
+        """
         schema = self._lock.read_schema()
         if schema is None:
+            return
+
+        # Split into namespace and table name
+        if "." in table_address:
+            ns, name = table_address.split(".", 1)
+        else:
+            ns, name = "main", table_address
+
+        # Skip if table already exists — avoids wiping data from a prior run
+        if self._compute.relation_exists(ns, name):
+            logger.debug("Output table already exists, skipping DDL: %s", table_address)
             return
 
         cb = progress_callback.get(None)
         if cb:
             cb.started(f"Creating output table {table_address}")
 
-        ns = table_address.split(".", 1)[0] if "." in table_address else None
-        if ns:
+        if ns != "main":
             self._compute.execute(f"CREATE SCHEMA IF NOT EXISTS {ns}")
         self._compute.execute(schema.ddl.statement)
         logger.debug("Output table synced from lock schema: %s", table_address)

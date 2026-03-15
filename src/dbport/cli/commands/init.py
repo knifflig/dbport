@@ -7,7 +7,7 @@ from typing import Optional
 
 import typer
 
-from ..context import read_lock_models
+from ..context import read_lock_models, resolve_model_paths_from_data
 from ..errors import cli_error_handler
 from ..render import (
     cli_progress,
@@ -112,38 +112,17 @@ def _resolve_model_key(
 # Sync
 # ---------------------------------------------------------------------------
 
-def _resolve_model_paths_from_data(cli_ctx, model_data: dict) -> tuple[str, str, str, str]:
-    """Resolve (agency, dataset_id, model_root, duckdb_path) from lock data."""
-    _agency = model_data.get("agency", "default")
-    _dataset_id = model_data.get("dataset_id", "unknown")
-    raw_root = model_data.get("model_root", ".")
-    model_root = str((cli_ctx.project_path / raw_root).resolve())
-
-    raw_db = model_data.get("duckdb_path", "")
-    if raw_db:
-        db_path = Path(raw_db)
-        if not db_path.is_absolute():
-            db_path = cli_ctx.project_path / db_path
-    else:
-        db_path = Path(model_root) / "data" / f"{_dataset_id}.duckdb"
-    duckdb_path = str(db_path.resolve())
-
-    return _agency, _dataset_id, model_root, duckdb_path
-
-
 def _do_sync(cli_ctx, model_key: str, model_data: dict) -> None:
     """Create a DBPort instance for the model, triggering sync in __init__."""
     from ...adapters.primary.client import DBPort
 
-    _agency, _dataset_id, model_root, duckdb_path = _resolve_model_paths_from_data(
-        cli_ctx, model_data
-    )
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
     with DBPort(
-        agency=_agency,
-        dataset_id=_dataset_id,
-        lock_path=str(cli_ctx.lockfile_path),
-        duckdb_path=duckdb_path,
-        model_root=model_root,
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
     ):
         pass  # sync happens in __init__
 

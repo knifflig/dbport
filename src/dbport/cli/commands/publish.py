@@ -6,14 +6,19 @@ from typing import Optional
 
 import typer
 
-from ..context import resolve_model_paths
+from ..context import (
+    read_lock_versions,
+    resolve_model_key,
+    resolve_model_paths_from_data,
+)
 from ..errors import cli_error_handler
-from ..render import cli_progress, print_info, print_json, print_success
+from ..render import cli_tree_progress, print_info, print_json, print_success
 
 
 def publish_cmd(
     ctx: typer.Context,
-    version: str = typer.Option(..., "--version", help="Version identifier for this publish."),
+    model: Optional[str] = typer.Argument(None, help="Model key (agency.dataset_id)."),
+    version: Optional[str] = typer.Option(None, "--version", help="Version identifier for this publish."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not write data."),
     refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
     message: Optional[str] = typer.Option(None, "--message", "-m", help="Publish note for history."),
@@ -28,7 +33,20 @@ def publish_cmd(
     with cli_error_handler("publish", json_output=cli_ctx.json_output):
         from ...adapters.primary.client import DBPort
 
-        paths = resolve_model_paths(cli_ctx)
+        model_key, model_data = resolve_model_key(cli_ctx, model)
+        paths = resolve_model_paths_from_data(cli_ctx, model_data)
+
+        # Resolve version: explicit > latest completed from lock
+        pub_version = version
+        if pub_version is None:
+            lock_versions = read_lock_versions(cli_ctx.lockfile_path, model_key)
+            completed = [v for v in lock_versions if v.get("completed")]
+            if not completed:
+                raise RuntimeError(
+                    "No completed versions found in lock file. "
+                    "Specify --version explicitly."
+                )
+            pub_version = completed[-1]["version"]
 
         # Determine mode
         mode: str | None = None
@@ -37,27 +55,31 @@ def publish_cmd(
         elif refresh:
             mode = "refresh"
 
-        with DBPort(
-            agency=paths.agency,
-            dataset_id=paths.dataset_id,
-            lock_path=paths.lock_path,
-            duckdb_path=paths.duckdb_path,
-            model_root=paths.model_root,
-        ) as port:
-            with cli_progress(enabled=not cli_ctx.json_output and not cli_ctx.quiet):
-                port.publish(version=version, mode=mode)
+        with cli_tree_progress(
+            enabled=not cli_ctx.json_output and not cli_ctx.quiet,
+            title=f"Publishing {model_key}",
+        ) as model_ctx:
+            with model_ctx(model_key):
+                with DBPort(
+                    agency=paths.agency,
+                    dataset_id=paths.dataset_id,
+                    lock_path=paths.lock_path,
+                    duckdb_path=paths.duckdb_path,
+                    model_root=paths.model_root,
+                ) as port:
+                    port.publish(version=pub_version, mode=mode)
 
         if cli_ctx.json_output:
             print_json("publish", {
-                "version": version,
+                "version": pub_version,
                 "mode": mode,
-                "model": f"{paths.agency}.{paths.dataset_id}",
+                "model": model_key,
             })
         else:
             if mode == "dry":
-                print_success(f"Dry run completed for version {version}")
+                print_success(f"Dry run completed for version {pub_version}")
             else:
-                print_success(f"Published version {version}")
-            print_info(f"  Model: {paths.agency}.{paths.dataset_id}")
+                print_success(f"Published version {pub_version}")
+            print_info(f"  Model: {model_key}")
             if message:
                 print_info(f"  Note:  {message}")
