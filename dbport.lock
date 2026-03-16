@@ -1,4 +1,5 @@
 default_model = "test.cli_table1"
+models_folder = "examples"
 
 [models."test.table1"]
 agency = "test"
