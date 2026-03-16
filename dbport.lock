@@ -55,10 +55,10 @@ completed = true
 
 [[models."test.table1".versions]]
 version = "2026-03-14"
-published_at = 2026-03-14T12:12:48Z
-iceberg_snapshot_id = 8487503688100859175
-iceberg_snapshot_timestamp = 2026-03-14T12:12:47.609000Z
-rows = 1485615
+published_at = 2026-03-16T18:19:53Z
+iceberg_snapshot_id = 6632630125880679044
+iceberg_snapshot_timestamp = 2026-03-16T18:19:52.431000Z
+rows = 500555
 completed = true
 
 [models."test.cli_table1"]
@@ -91,9 +91,9 @@ codelist_id = "value"
 
 [[models."test.cli_table1".inputs]]
 table_address = "test.table1"
-last_snapshot_id = 8351008129908343306
-last_snapshot_timestamp_ms = 1773501203957
-rows_loaded = 1485615
+last_snapshot_id = 6632630125880679044
+rows_loaded = 500555
+version = "2026-03-14"
 
 [[models."test.cli_table1".inputs]]
 table_address = "estat.nama_10r_3empers"
@@ -103,8 +103,8 @@ rows_loaded = 1485951
 
 [[models."test.cli_table1".versions]]
 version = "2026-03-15"
-published_at = 2026-03-15T12:45:54Z
-iceberg_snapshot_id = 5459699385693949521
-iceberg_snapshot_timestamp = 2026-03-15T12:45:53.300000Z
+published_at = 2026-03-16T18:22:11Z
+iceberg_snapshot_id = 1845605643923007334
+iceberg_snapshot_timestamp = 2026-03-16T18:22:10.507000Z
 rows = 1485615
 completed = true
