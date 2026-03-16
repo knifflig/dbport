@@ -774,6 +774,60 @@ class TestInspectInput:
         mock_table.scan.assert_not_called()
 
 
+    def test_inspect_input_no_snapshot_falls_back_to_current(self):
+        """When resolve_input_snapshot returns no snap_id, fallback to current_snapshot (line 366)."""
+        adapter = IcebergCatalogAdapter(_make_creds())
+        mock_catalog = MagicMock()
+        mock_table = self._make_table(metadata_json=None)
+        mock_table.current_snapshot.return_value = MagicMock(snapshot_id=42, timestamp_ms=777)
+        mock_table.scan.return_value.to_arrow_batch_reader.return_value = [
+            pa.record_batch({"id": [1, 2, 3]})
+        ]
+        mock_catalog.load_table.return_value = mock_table
+        adapter._catalog = mock_catalog
+
+        record = adapter.inspect_input(InputDeclaration(table_address="wifor.foo"))
+
+        assert record.last_snapshot_id == 42
+        assert record.last_snapshot_timestamp_ms == 777
+        assert record.rows_loaded == 3
+
+    def test_inspect_input_row_count_with_filters(self):
+        """When filters are applied, _inspect_input_row_count scans with row_filter (line 337)."""
+        import json
+
+        metadata_json = json.dumps(
+            {
+                "last_updated_data_at": "2026-03-14",
+                "versions": [
+                    {"version": "2026-03-14", "iceberg_snapshot_id": 99},
+                ],
+            }
+        )
+        adapter = IcebergCatalogAdapter(_make_creds())
+        mock_catalog = MagicMock()
+        mock_table = self._make_table(metadata_json=metadata_json)
+        mock_table.snapshot_by_id.return_value = MagicMock(
+            timestamp_ms=123456,
+            summary={"total-records": "1000"},
+        )
+        # With filters, estimate returns None → falls through to scan
+        mock_batch = pa.record_batch({"id": [1, 2, 3, 4]})
+        mock_table.scan.return_value.to_arrow_batch_reader.return_value = [mock_batch]
+        mock_catalog.load_table.return_value = mock_table
+        adapter._catalog = mock_catalog
+
+        record = adapter.inspect_input(
+            InputDeclaration(table_address="wifor.foo", filters={"geo": "DE"})
+        )
+
+        assert record.rows_loaded == 4
+        # Verify scan was called with row_filter
+        mock_table.scan.assert_called_once()
+        call_kwargs = mock_table.scan.call_args[1]
+        assert "row_filter" in call_kwargs
+
+
 class TestCatalogConnectionFailures:
     def test_table_exists_returns_false_on_exception(self):
         """table_exists() swallows exceptions and returns False."""
@@ -1525,3 +1579,296 @@ class TestProgressCallbackIntegration:
 
         cb.started.assert_called_once()
         cb.finished.assert_called_once_with()
+
+
+class TestSnapshotTimestampFromTable:
+    """Tests for _snapshot_timestamp_from_table (lines 282-315)."""
+
+    def test_none_snapshot_id_returns_none(self):
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(MagicMock(), None)
+        assert result is None
+
+    def test_snapshot_by_id_found(self):
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.timestamp_ms = 1710000000000
+        mock_table.snapshot_by_id.return_value = mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
+        assert result == 1710000000000
+
+    def test_snapshot_by_id_raises_falls_back_to_current(self):
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.side_effect = Exception("not found")
+        mock_snap = MagicMock()
+        mock_snap.snapshot_id = 123
+        mock_snap.timestamp_ms = 1710000000000
+        mock_table.current_snapshot.return_value = mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
+        assert result == 1710000000000
+
+    def test_snapshot_by_id_returns_none_falls_back_to_current(self):
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.return_value = None
+        mock_snap = MagicMock()
+        mock_snap.snapshot_id = 456
+        mock_snap.timestamp_ms = 1710100000000
+        mock_table.current_snapshot.return_value = mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 456)
+        assert result == 1710100000000
+
+    def test_current_snapshot_id_mismatch_returns_none(self):
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.return_value = None
+        mock_snap = MagicMock()
+        mock_snap.snapshot_id = 999
+        mock_table.current_snapshot.return_value = mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 456)
+        assert result is None
+
+    def test_current_snapshot_raises_returns_none(self):
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.return_value = None
+        mock_table.current_snapshot.side_effect = Exception("broken")
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
+        assert result is None
+
+    def test_no_snapshot_by_id_attr_uses_current(self):
+        mock_table = type("FakeTable", (), {})()
+        mock_snap = MagicMock()
+        mock_snap.snapshot_id = 42
+        mock_snap.timestamp_ms = 9999
+        mock_table.current_snapshot = lambda: mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 42)
+        assert result == 9999
+
+    def test_timestamp_ms_not_int_returns_none(self):
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.timestamp_ms = "not_a_number"
+        mock_table.snapshot_by_id.return_value = mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
+        assert result is None
+
+    def test_timestamp_ms_none_returns_none(self):
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.timestamp_ms = None
+        mock_table.snapshot_by_id.return_value = mock_snap
+        result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
+        assert result is None
+
+
+class TestBuildRowFilter:
+    """Tests for _build_row_filter (lines 263-280)."""
+
+    def test_none_filters_returns_none(self):
+        result = IcebergCatalogAdapter._build_row_filter(None)
+        assert result is None
+
+    def test_empty_filters_returns_none(self):
+        result = IcebergCatalogAdapter._build_row_filter({})
+        assert result is None
+
+    def test_single_filter_returns_equal_to(self):
+        result = IcebergCatalogAdapter._build_row_filter({"wstatus": "EMP"})
+        assert result is not None
+
+    def test_multiple_filters_returns_and_expression(self):
+        result = IcebergCatalogAdapter._build_row_filter({"wstatus": "EMP", "geo": "DE"})
+        assert result is not None
+
+
+class TestSnapshotSummary:
+    """Tests for _snapshot_summary (lines 539-562)."""
+
+    def test_callable_summary(self):
+        snapshot = MagicMock()
+        snapshot.summary.return_value = {"total-records": "100"}
+        result = IcebergCatalogAdapter._snapshot_summary(snapshot)
+        assert result == {"total-records": "100"}
+
+    def test_callable_summary_raises(self):
+        snapshot = MagicMock()
+        snapshot.summary.side_effect = Exception("broken")
+        result = IcebergCatalogAdapter._snapshot_summary(snapshot)
+        assert result == {}
+
+    def test_dict_summary_attr(self):
+        snapshot = type("Snap", (), {"summary": {"total-records": "50"}})()
+        result = IcebergCatalogAdapter._snapshot_summary(snapshot)
+        assert result == {"total-records": "50"}
+
+    def test_summary_with_tuple_items(self):
+        """When iterating a Mapping yields tuples (key, value)."""
+
+        class TupleMapping:
+            def __iter__(self):
+                return iter([("total-records", "200")])
+
+            def __getitem__(self, key):
+                return {"total-records": "200"}[key]
+
+        from collections.abc import Mapping
+
+        TupleMapping.register = Mapping.register  # type: ignore
+        Mapping.register(TupleMapping)
+
+        snapshot = type("Snap", (), {"summary": TupleMapping()})()
+        result = IcebergCatalogAdapter._snapshot_summary(snapshot)
+        assert result == {"total-records": "200"}
+
+    def test_summary_iteration_raises(self):
+        class BrokenMapping(dict):
+            def __iter__(self):
+                raise RuntimeError("boom")
+
+        snapshot = type("Snap", (), {"summary": BrokenMapping()})()
+        result = IcebergCatalogAdapter._snapshot_summary(snapshot)
+        assert result == {}
+
+    def test_no_summary_attr(self):
+        snapshot = type("Snap", (), {})()
+        result = IcebergCatalogAdapter._snapshot_summary(snapshot)
+        assert result == {}
+
+
+class TestEstimateIngestTotalRows:
+    """Tests for _estimate_ingest_total_rows (lines 564-609)."""
+
+    def _make_adapter(self):
+        return IcebergCatalogAdapter(_make_creds())
+
+    def test_returns_none_with_filter(self):
+        adapter = self._make_adapter()
+        result = adapter._estimate_ingest_total_rows(MagicMock(), snapshot_id=1, has_filter=True)
+        assert result is None
+
+    def test_uses_snapshot_by_id(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.summary = {"total-records": "1000"}
+        mock_table.snapshot_by_id.return_value = mock_snap
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
+        assert result == 1000
+
+    def test_snapshot_by_id_raises_falls_back_to_current(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.side_effect = Exception("not found")
+        mock_snap = MagicMock()
+        mock_snap.summary = {"total-records": "500"}
+        mock_table.current_snapshot.return_value = mock_snap
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
+        assert result == 500
+
+    def test_no_snapshot_returns_none(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.return_value = None
+        mock_table.current_snapshot.return_value = None
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
+        assert result is None
+
+    def test_no_snapshot_id_uses_current(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.summary = {"added-records": "300"}
+        mock_table.current_snapshot.return_value = mock_snap
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=None, has_filter=False)
+        assert result == 300
+
+    def test_no_rows_in_summary_returns_none(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.summary = {"other-key": "irrelevant"}
+        mock_table.snapshot_by_id.return_value = mock_snap
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=1, has_filter=False)
+        assert result is None
+
+    def test_invalid_row_count_returns_none(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_snap = MagicMock()
+        mock_snap.summary = {"total-records": "not_a_number"}
+        mock_table.snapshot_by_id.return_value = mock_snap
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=1, has_filter=False)
+        assert result is None
+
+    def test_current_snapshot_raises_returns_none(self):
+        adapter = self._make_adapter()
+        mock_table = MagicMock()
+        mock_table.snapshot_by_id.return_value = None
+        mock_table.current_snapshot.side_effect = Exception("broken")
+        result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
+        assert result is None
+
+
+class TestWriteViaDuckdb:
+    """Tests for _write_via_duckdb (lines 714-759)."""
+
+    def _make_adapter(self):
+        adapter = IcebergCatalogAdapter(_make_creds())
+        adapter._warehouse_attached = True
+        return adapter
+
+    def test_overwrite_drops_then_creates(self):
+        adapter = self._make_adapter()
+        mock_compute = MagicMock()
+        adapter._write_via_duckdb("test.t1", mock_compute, overwrite=True)
+        calls = [c.args[0] for c in mock_compute.execute.call_args_list]
+        assert any("DROP TABLE" in c for c in calls)
+        assert any("CREATE TABLE" in c for c in calls)
+
+    def test_overwrite_create_fails_after_drop_logs_error(self):
+        adapter = self._make_adapter()
+        mock_compute = MagicMock()
+        call_count = [0]
+
+        def side_effect(sql, *args, **kwargs):
+            call_count[0] += 1
+            if "CREATE TABLE" in sql:
+                raise RuntimeError("create failed")
+
+        mock_compute.execute.side_effect = side_effect
+        with pytest.raises(RuntimeError, match="create failed"):
+            adapter._write_via_duckdb("test.t1", mock_compute, overwrite=True)
+
+    def test_non_overwrite_insert(self):
+        adapter = self._make_adapter()
+        mock_compute = MagicMock()
+        adapter._write_via_duckdb("test.t1", mock_compute, overwrite=False)
+        calls = [c.args[0] for c in mock_compute.execute.call_args_list]
+        assert any("INSERT INTO" in c for c in calls)
+
+    def test_overwrite_drop_fails_table_not_exists(self):
+        """When DROP TABLE fails (table doesn't exist), CREATE TABLE still runs."""
+        adapter = self._make_adapter()
+        mock_compute = MagicMock()
+        call_log = []
+
+        def side_effect(sql, *args, **kwargs):
+            call_log.append(sql)
+            if "DROP TABLE" in sql:
+                raise Exception("Table not found")
+
+        mock_compute.execute.side_effect = side_effect
+        adapter._write_via_duckdb("test.t1", mock_compute, overwrite=True)
+        assert any("CREATE TABLE" in c for c in call_log)
+        assert not any("DROP TABLE" in c and "CREATE TABLE" in c for c in call_log)
+
+    def test_non_overwrite_insert_fails_falls_back_to_create(self):
+        adapter = self._make_adapter()
+        mock_compute = MagicMock()
+        call_count = [0]
+
+        def side_effect(sql, *args, **kwargs):
+            if "INSERT INTO" in sql:
+                raise RuntimeError("table not found")
+
+        mock_compute.execute.side_effect = side_effect
+        # _is_duckdb_write_unsupported returns False for generic errors
+        adapter._is_duckdb_write_unsupported = MagicMock(return_value=False)
+        adapter._write_via_duckdb("test.t1", mock_compute, overwrite=False)

@@ -259,3 +259,68 @@ class TestDuckDBComputeAdapterClose:
         ad = DuckDBComputeAdapter(tmp_path / "dbport.duckdb")
         ad.close()
         ad.close()  # second close must not raise
+
+
+class TestDownloadExtension:
+    def test_download_extension_creates_file(self, tmp_path, monkeypatch):
+        import gzip
+        import urllib.request
+        from unittest.mock import MagicMock
+
+        import duckdb as real_duckdb
+
+        monkeypatch.setattr(real_duckdb, "__version__", "1.0.0")
+        fake_data = b"fake_extension_binary"
+        compressed = gzip.compress(fake_data)
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = compressed
+        monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=60: mock_resp)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+        DuckDBComputeAdapter._download_extension("testext")
+
+        ext_file = (
+            tmp_path / ".duckdb" / "extensions" / "v1.0.0" / "linux_amd64" / "testext.duckdb_extension"
+        )
+        assert ext_file.exists()
+        assert ext_file.read_bytes() == fake_data
+
+    def test_download_extension_skips_if_exists(self, tmp_path, monkeypatch):
+        import duckdb as real_duckdb
+
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        monkeypatch.setattr(real_duckdb, "__version__", "1.0.0")
+        ext_dir = tmp_path / ".duckdb" / "extensions" / "v1.0.0" / "linux_amd64"
+        ext_dir.mkdir(parents=True)
+        dest = ext_dir / "testext.duckdb_extension"
+        dest.write_bytes(b"existing")
+
+        DuckDBComputeAdapter._download_extension("testext")
+
+        assert dest.read_bytes() == b"existing"  # unchanged
+
+
+class TestEnsureExtensionsLoadHappyPath:
+    def test_load_succeeds_without_install(self, tmp_path: Path, monkeypatch):
+        """When LOAD succeeds on the first try, the continue branch (line 60) is hit."""
+        from unittest.mock import MagicMock
+
+        ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        mock_con = MagicMock()
+        call_log: list[str] = []
+
+        def tracking_execute(sql, *args, **kwargs):
+            call_log.append(sql)
+            # All LOADs succeed immediately
+            return None
+
+        mock_con.execute = tracking_execute
+        ad._con = mock_con
+        monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
+
+        ad.ensure_extensions()
+
+        # Only LOAD calls should appear (no INSTALL, no SET, no download)
+        assert all(c.startswith("LOAD") for c in call_log)
+        assert len(call_log) == 3  # one LOAD per required extension
+        ad._con = None

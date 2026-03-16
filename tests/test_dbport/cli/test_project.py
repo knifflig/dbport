@@ -343,3 +343,137 @@ version = "2026-03-02"
         assert data["data"]["total"] == 2
         assert all(item["target"] == "sql/main.sql" for item in data["data"]["results"])
         assert all(item["mode"] == "dry" for item in data["data"]["results"])
+
+    def test_project_no_models_fails(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text("# empty\n")
+        result = runner.invoke(
+            app,
+            ["--lockfile", str(lock), "project", "sync"],
+        )
+        assert result.exit_code != 0
+        assert "No models found" in result.output
+
+    def test_project_cycle_detection(self):
+        """Cyclic dependencies in model inputs should raise RuntimeError."""
+        models = {
+            "a.b": {"inputs": [{"table_address": "c.d"}]},
+            "c.d": {"inputs": [{"table_address": "a.b"}]},
+        }
+        import pytest
+
+        with pytest.raises(RuntimeError, match="Cyclic"):
+            project_commands._project_batches(models)
+
+    def test_project_sync_failure_propagates(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+
+        mp = _mock_port()
+        mp.__enter__.side_effect = RuntimeError("sync failed")
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "project", "sync",
+                ],
+            )
+        assert result.exit_code != 0
+
+    def test_project_sync_failure_json(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+
+        mp = _mock_port()
+        mp.__enter__.side_effect = RuntimeError("sync failed")
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(
+                app,
+                [
+                    "--json",
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "project", "sync",
+                ],
+            )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert data["data"]["failed"]
+
+    def test_project_publish_human_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mock_port = _mock_port()
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "project", "publish",
+                    "--version", "2026-03-15",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Published 2 model(s)" in result.output
+
+    def test_project_publish_dry_run_human_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mock_port = _mock_port()
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "project", "publish",
+                    "--dry-run",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Dry run completed" in result.output
+
+    def test_project_publish_with_message(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mock_port = _mock_port()
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "project", "publish",
+                    "--version", "2026-03-15",
+                    "--message", "quarterly update",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "quarterly update" in result.output
+
+    def test_project_run_human_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MULTI_MODEL_LOCK)
+        mock_port = _mock_port()
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "project", "run",
+                    "--target", "sql/main.sql",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Ran 2 model(s)" in result.output

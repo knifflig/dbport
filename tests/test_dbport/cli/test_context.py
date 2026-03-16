@@ -503,3 +503,35 @@ class TestReadLockVersions:
 
     def test_returns_empty_for_missing_file(self, tmp_path: Path):
         assert read_lock_versions(tmp_path / "nope.lock", "a.x") == []
+
+
+class TestReadLockVersionConfig:
+    """Cover read_lock_version_config returning None for missing model (line 290)."""
+
+    def test_returns_none_for_missing_model(self, tmp_path: Path):
+        from dbport.cli.context import read_lock_version_config
+
+        lock = tmp_path / "dbport.lock"
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
+        assert read_lock_version_config(lock, "nonexistent.model") is None
+
+    def test_returns_none_when_no_version_key(self, tmp_path: Path):
+        from dbport.cli.context import read_lock_version_config
+
+        lock = tmp_path / "dbport.lock"
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
+        assert read_lock_version_config(lock, "a.x") is None
+
+    def test_returns_version_when_set(self, tmp_path: Path):
+        from dbport.cli.context import read_lock_version_config
+
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nversion = "2026-03-15"\n'
+        )
+        assert read_lock_version_config(lock, "a.x") == "2026-03-15"
+
+    def test_returns_none_for_missing_file(self, tmp_path: Path):
+        from dbport.cli.context import read_lock_version_config
+
+        assert read_lock_version_config(tmp_path / "nope.lock", "a.x") is None

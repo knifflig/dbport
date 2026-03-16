@@ -717,3 +717,36 @@ class TestDBPortUpdateLastFetched:
         cb.started.assert_called_once_with("Updating warehouse timestamp")
         cb.finished.assert_called_once()
         client._compute.close()
+
+
+class TestDBPortLoadInputs:
+    """Cover _load_inputs exception handling (client.py lines 440-441)."""
+
+    def test_load_inputs_exception_swallowed(self, tmp_path: Path):
+        """_load_inputs swallows exceptions and logs debug message."""
+        from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
+        from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+        from dbport.domain.entities.dataset import Dataset
+
+        client = DBPort.__new__(DBPort)
+        client._compute = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        client._lock = TomlLockAdapter(
+            tmp_path / "dbport.lock",
+            model_key="wifor.emp",
+            model_root=".",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+        )
+        client._catalog = MagicMock()
+        client._dataset = Dataset(
+            agency="wifor",
+            dataset_id="emp",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+            lock_path=str(tmp_path / "dbport.lock"),
+            model_root=str(tmp_path),
+        )
+
+        with patch("dbport.application.services.sync.SyncService") as mock_cls:
+            mock_cls.return_value.sync_inputs.side_effect = RuntimeError("sync failed")
+            client._load_inputs()  # should not raise
+
+        client._compute.close()

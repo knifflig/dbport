@@ -6,6 +6,7 @@ import json
 import tomllib
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from dbport.cli.main import app
@@ -918,3 +919,132 @@ class TestConfigVersion:
         data = json.loads(result.output)
         assert data["ok"] is True
         assert data["data"]["version"] == "2026-03-16"
+
+    def test_version_show_json_output(self, tmp_path: Path):
+        """Cover JSON output for version show (line 376)."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        # First set
+        runner.invoke(
+            app,
+            [
+                "--project",
+                str(repo),
+                "config",
+                "model",
+                "a.x",
+                "version",
+                "2026-03-16",
+            ],
+        )
+        # Then show in JSON mode
+        result = runner.invoke(
+            app,
+            [
+                "--json",
+                "--project",
+                str(repo),
+                "config",
+                "model",
+                "a.x",
+                "version",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["version"] == "2026-03-16"
+        assert data["data"]["model"] == "a.x"
+
+
+class TestGetSelectedModelKeyParentTraversal:
+    """Cover _get_selected_model_key parent context traversal (lines 203-205)."""
+
+    def test_missing_model_key_raises(self, tmp_path: Path):
+        """When no config_model_key in any context, BadParameter is raised."""
+        import click
+        import typer
+
+        from dbport.cli.commands.config import _get_selected_model_key
+
+        cmd = click.Command("test")
+        ctx = click.Context(cmd)
+        ctx.obj = {}
+        with pytest.raises(typer.BadParameter, match="Missing model key"):
+            _get_selected_model_key(ctx)
+
+    def test_parent_traversal_finds_key(self, tmp_path: Path):
+        """_get_selected_model_key walks up to parent to find config_model_key."""
+        import click
+
+        from dbport.cli.commands.config import _get_selected_model_key
+
+        cmd = click.Command("test")
+        parent_ctx = click.Context(cmd)
+        parent_ctx.obj = {"config_model_key": "found.model"}
+
+        child_ctx = click.Context(cmd, parent=parent_ctx)
+        child_ctx.obj = {}
+
+        result = _get_selected_model_key(child_ctx)
+        assert result == "found.model"
+
+
+class TestInputShowFilterText:
+    """Cover filter_text formatting in _handle_inputs_show (line 417)."""
+
+    def test_input_show_with_filters_human(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(
+            repo,
+            (
+                'default_model = "a.x"\n\n'
+                '[models."a.x"]\n'
+                'agency = "a"\n'
+                'dataset_id = "x"\n'
+                'model_root = "."\n'
+                'duckdb_path = "data/x.duckdb"\n\n'
+                '[[models."a.x".inputs]]\n'
+                'table_address = "ns.tbl"\n'
+                'rows_loaded = 100\n\n'
+                '[models."a.x".inputs.filters]\n'
+                'wstatus = "EMP"\n'
+            ),
+        )
+        result = runner.invoke(
+            app,
+            [
+                "--project",
+                str(repo),
+                "config",
+                "model",
+                "a.x",
+                "input",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "wstatus=EMP" in result.output
+
+
+class TestParseInputFiltersEmptyKey:
+    """Cover empty key filter error (line 508)."""
+
+    def test_empty_key_filter_raises(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(
+            app,
+            [
+                "--project",
+                str(repo),
+                "config",
+                "model",
+                "a.x",
+                "input",
+                "ns.tbl1",
+                "--filter",
+                "=value",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Key must not be empty" in result.output
