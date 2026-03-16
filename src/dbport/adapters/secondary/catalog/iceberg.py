@@ -143,7 +143,11 @@ class IcebergCatalogAdapter:
 
         creds = self._creds
 
-        # S3 path-style configuration for Supabase
+        # S3 region — always set (DuckDB iceberg extension needs it for SigV4)
+        if creds.s3_region:
+            compute.execute(f"SET s3_region='{_sql_escape(creds.s3_region)}'")
+
+        # S3 path-style configuration for Supabase / custom endpoints
         if creds.s3_endpoint:
             s3_endpoint = creds.s3_endpoint.replace("https://", "").replace("http://", "")
             compute.execute("SET s3_url_style='path'")
@@ -152,8 +156,7 @@ class IcebergCatalogAdapter:
                 compute.execute(f"SET s3_access_key_id='{_sql_escape(creds.s3_access_key)}'")
             if creds.s3_secret_key:
                 compute.execute(f"SET s3_secret_access_key='{_sql_escape(creds.s3_secret_key)}'")
-            if creds.s3_region:
-                compute.execute(f"SET s3_region='{_sql_escape(creds.s3_region)}'")
+
 
 
         # REST catalog secret
@@ -468,20 +471,59 @@ class IcebergCatalogAdapter:
             return True
         return False
 
+    _CHECKPOINT_RETRIES = 3
+
+    def _write_checkpoint_with_retry(
+        self, ns: str, name: str, properties: dict[str, str],
+    ) -> None:
+        """Write completion checkpoint properties with retry on transient failures."""
+        import time
+
+        for attempt in range(1, self._CHECKPOINT_RETRIES + 1):
+            try:
+                catalog = self._get_catalog()
+                iceberg_table = catalog.load_table((ns, name))
+                _write_table_properties(iceberg_table, properties)
+                return
+            except Exception as exc:
+                if attempt < self._CHECKPOINT_RETRIES:
+                    delay = 2 ** attempt
+                    logger.warning(
+                        "Checkpoint write attempt %d/%d failed: %s (retrying in %ds)",
+                        attempt, self._CHECKPOINT_RETRIES, exc, delay,
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        "Checkpoint write failed after %d attempts: %s",
+                        self._CHECKPOINT_RETRIES, exc,
+                    )
+
     def _write_via_duckdb(
         self, table_address: str, compute: Any, overwrite: bool,
     ) -> None:
         """Primary write path: DuckDB iceberg extension. Data never leaves DuckDB."""
         self._ensure_warehouse_attached(compute)
         if overwrite:
+            dropped = False
             try:
                 compute.execute(f"DROP TABLE dbport_warehouse.{table_address}")
+                dropped = True
             except Exception:
                 pass  # Table may not exist yet
-            compute.execute(
-                f"CREATE TABLE dbport_warehouse.{table_address} AS "
-                f"SELECT * FROM {table_address}"
-            )
+            try:
+                compute.execute(
+                    f"CREATE TABLE dbport_warehouse.{table_address} AS "
+                    f"SELECT * FROM {table_address}"
+                )
+            except Exception as exc:
+                if dropped:
+                    logger.error(
+                        "CREATE failed after DROP for %s — table was dropped "
+                        "but could not be recreated: %s",
+                        table_address, exc,
+                    )
+                raise
         else:
             try:
                 compute.execute(
@@ -639,14 +681,9 @@ class IcebergCatalogAdapter:
                 continue  # Retry: reload table, resume from checkpoint
 
             # Mark completed
-            try:
-                iceberg_table = catalog.load_table((ns, name))
-                _write_table_properties(iceberg_table, {
-                    completed_prop: "1",
-                    rows_prop: str(rows_total),
-                })
-            except Exception as exc:
-                logger.warning("Could not write completion checkpoint: %s", exc)
+            self._write_checkpoint_with_retry(
+                ns, name, {completed_prop: "1", rows_prop: str(rows_total)},
+            )
 
             if cb:
                 cb.finished(
@@ -770,15 +807,9 @@ class IcebergCatalogAdapter:
         # Mark completed (DuckDB path only; fallback marks its own)
         if self._duckdb_writes_supported is True:
             ns, name = self._parse_address(table_address)
-            try:
-                catalog = self._get_catalog()
-                iceberg_table = catalog.load_table((ns, name))
-                _write_table_properties(iceberg_table, {
-                    completed_prop: "1",
-                    rows_prop: str(row_count),
-                })
-            except Exception as exc:
-                logger.warning("Could not write completion checkpoint: %s", exc)
+            self._write_checkpoint_with_retry(
+                ns, name, {completed_prop: "1", rows_prop: str(row_count)},
+            )
 
         snap_id, snap_ts_ms = self.current_snapshot(table_address)
         snap_ts: datetime | None = None

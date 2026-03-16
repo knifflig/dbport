@@ -1,7 +1,4 @@
+-- Final: populate the output table from the staging view.
 INSERT INTO test.table1
-SELECT
-    geo,
-    CAST(substr(time_period, 1, 4) AS INTEGER) AS year,
-    obs_value                                  AS value
-FROM estat.nama_10r_3empers
-WHERE obs_value IS NOT NULL;
+SELECT geo, year, value
+FROM staging;

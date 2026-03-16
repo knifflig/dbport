@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from ..entities.codelist import ColumnCodelist
+    from ..entities.codelist import CodelistEntry, ColumnCodelist
     from ..entities.dataset import DatasetKey
     from ..entities.input import IngestRecord
     from ..entities.version import DatasetVersion
+    from .catalog import ICatalog
+    from .compute import ICompute
 
 
 @runtime_checkable
@@ -38,7 +40,7 @@ class IMetadataStore(Protocol):
     def generate_codelist_bytes(
         self,
         codelists: ColumnCodelist,
-        compute: object,
+        compute: ICompute,
         output_table: str,
     ) -> dict[str, bytes]:
         """Generate in-memory CSV bytes for each column. Returns {column_name: bytes}."""
@@ -49,8 +51,8 @@ class IMetadataStore(Protocol):
         table_address: str,
         metadata_bytes: bytes,
         codelist_bytes: dict[str, bytes],
-        codelist_entries: dict[str, object],
-        catalog: object,
+        codelist_entries: dict[str, CodelistEntry],
+        catalog: ICatalog,
     ) -> None:
         """Embed metadata and codelist payloads in Iceberg table properties."""
         ...

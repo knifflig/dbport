@@ -159,6 +159,188 @@ def run_hook_cmd(
                 print_success(f"Run hook set to: {normalized}")
 
 
+@config_app.command(name="version")
+def version_cmd(
+    ctx: typer.Context,
+    version: str | None = typer.Argument(None, help="Version string to set (e.g. 2026-03-16)."),
+) -> None:
+    """Show or set the default publish version for the resolved model."""
+    from ..context import resolve_model_paths
+    from ..main import get_cli_ctx
+
+    cli_ctx = get_cli_ctx(ctx)
+
+    with cli_error_handler("config version", json_output=cli_ctx.json_output):
+        paths = resolve_model_paths(cli_ctx)
+        from ...adapters.secondary.lock.toml import TomlLockAdapter
+
+        model_key = f"{paths.agency}.{paths.dataset_id}"
+        raw_root = str(Path(paths.model_root).relative_to(cli_ctx.project_path)) if Path(paths.model_root).is_absolute() else paths.model_root
+        raw_db = str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path)) if Path(paths.duckdb_path).is_absolute() else paths.duckdb_path
+        adapter = TomlLockAdapter(
+            cli_ctx.lockfile_path,
+            model_key=model_key,
+            model_root=raw_root,
+            duckdb_path=raw_db,
+        )
+
+        if version is None:
+            current = adapter.read_version()
+            if cli_ctx.json_output:
+                print_json("config version", {"version": current, "model": model_key})
+            elif current:
+                print_info(f"Version for {model_key}: {current}")
+            else:
+                print_info(f"No version set for {model_key}.")
+        else:
+            adapter.write_version(version)
+            if cli_ctx.json_output:
+                print_json("config version", {"version": version, "model": model_key})
+            else:
+                print_success(f"Version set to: {version}")
+
+
+def _make_lock_adapter(cli_ctx):
+    """Create a TomlLockAdapter for the resolved model."""
+    from ..context import resolve_model_paths
+    from ...adapters.secondary.lock.toml import TomlLockAdapter
+
+    paths = resolve_model_paths(cli_ctx)
+    model_key = f"{paths.agency}.{paths.dataset_id}"
+    raw_root = str(Path(paths.model_root).relative_to(cli_ctx.project_path)) if Path(paths.model_root).is_absolute() else paths.model_root
+    raw_db = str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path)) if Path(paths.duckdb_path).is_absolute() else paths.duckdb_path
+    adapter = TomlLockAdapter(
+        cli_ctx.lockfile_path,
+        model_key=model_key,
+        model_root=raw_root,
+        duckdb_path=raw_db,
+    )
+    return adapter, model_key
+
+
+@config_app.command(name="meta")
+def meta_cmd(
+    ctx: typer.Context,
+    column: str | None = typer.Argument(None, help="Column name to configure."),
+    codelist_id: str | None = typer.Option(None, "--id", help="Codelist identifier."),
+    codelist_type: str | None = typer.Option(None, "--type", help="Codelist type (e.g. categorical, hierarchical)."),
+    codelist_kind: str | None = typer.Option(None, "--kind", help="Codelist kind (e.g. reference, derived)."),
+    codelist_labels: str | None = typer.Option(None, "--labels", help="JSON labels (e.g. '{\"en\": \"Geography\"}')."),
+) -> None:
+    """Show or set codelist metadata for output columns."""
+    from ..main import get_cli_ctx
+
+    cli_ctx = get_cli_ctx(ctx)
+
+    with cli_error_handler("config meta", json_output=cli_ctx.json_output):
+        adapter, model_key = _make_lock_adapter(cli_ctx)
+
+        if column is None:
+            # Show all column metadata
+            entries = adapter.read_codelist_entries()
+            if cli_ctx.json_output:
+                data = {
+                    name: {
+                        "codelist_id": e.codelist_id,
+                        "codelist_type": e.codelist_type,
+                        "codelist_kind": e.codelist_kind,
+                        "codelist_labels": e.codelist_labels,
+                        "attach_table": e.attach_table,
+                    }
+                    for name, e in entries.items()
+                }
+                print_json("config meta", {"model": model_key, "columns": data})
+            elif entries:
+                rows = []
+                for name, e in entries.items():
+                    rows.append([
+                        name,
+                        e.codelist_id or "",
+                        e.codelist_type or "",
+                        e.codelist_kind or "",
+                        e.attach_table or "",
+                    ])
+                print_table(
+                    f"Column metadata — {model_key}",
+                    ["Column", "ID", "Type", "Kind", "Attach"],
+                    rows,
+                )
+            else:
+                print_info("No columns defined. Apply a schema first: dbp schema sql/create_output.sql")
+            return
+
+        # Set metadata for a specific column
+        from ...domain.entities.codelist import CodelistEntry
+
+        entries = adapter.read_codelist_entries()
+        existing = entries.get(column)
+        if existing is None:
+            existing = CodelistEntry(
+                column_name=column, column_pos=0, codelist_id=column,
+            )
+
+        overrides: dict = {}
+        if codelist_id is not None:
+            overrides["codelist_id"] = codelist_id
+        if codelist_type is not None:
+            overrides["codelist_type"] = codelist_type
+        if codelist_kind is not None:
+            overrides["codelist_kind"] = codelist_kind
+        if codelist_labels is not None:
+            import json
+            overrides["codelist_labels"] = json.loads(codelist_labels)
+
+        updated = existing.model_copy(update=overrides)
+        adapter.write_codelist_entry(updated)
+
+        if cli_ctx.json_output:
+            print_json("config meta", {
+                "column": column,
+                "model": model_key,
+                "codelist_id": updated.codelist_id,
+                "codelist_type": updated.codelist_type,
+                "codelist_kind": updated.codelist_kind,
+            })
+        else:
+            print_success(f"Updated metadata for column '{column}'")
+
+
+@config_app.command(name="attach")
+def attach_cmd(
+    ctx: typer.Context,
+    column: str = typer.Argument(help="Column name to attach codelist to."),
+    table: str = typer.Option(..., "--table", help="DuckDB table address to use as codelist source."),
+) -> None:
+    """Attach a DuckDB table as codelist source for a column."""
+    from ..main import get_cli_ctx
+
+    cli_ctx = get_cli_ctx(ctx)
+
+    with cli_error_handler("config attach", json_output=cli_ctx.json_output):
+        from ...domain.entities.codelist import CodelistEntry
+
+        adapter, model_key = _make_lock_adapter(cli_ctx)
+
+        entries = adapter.read_codelist_entries()
+        existing = entries.get(column)
+        if existing is None:
+            existing = CodelistEntry(
+                column_name=column, column_pos=0, codelist_id=column,
+            )
+
+        updated = existing.model_copy(update={"attach_table": table})
+        adapter.write_codelist_entry(updated)
+
+        if cli_ctx.json_output:
+            print_json("config attach", {
+                "column": column,
+                "table": table,
+                "model": model_key,
+            })
+        else:
+            print_success(f"Attached '{table}' as codelist for column '{column}'")
+
+
 @config_app.command(name="info")
 def info_cmd(
     ctx: typer.Context,

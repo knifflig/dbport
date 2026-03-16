@@ -798,6 +798,27 @@ class TestWriteVersionedEdgeCases:
         assert any("DROP TABLE" in s for s in sql_log)
         assert any("CREATE TABLE dbport_warehouse" in s for s in sql_log)
 
+    def test_overwrite_create_failure_after_drop_raises(self):
+        """In overwrite mode, if DROP succeeds but CREATE fails, error propagates."""
+        adapter = self._make_adapter()
+        compute = MagicMock()
+        sql_log = []
+
+        def execute_side_effect(sql, *args, **kwargs):
+            sql_log.append(sql)
+            if "CREATE TABLE dbport_warehouse" in sql:
+                raise RuntimeError("S3 auth failed")
+            result = MagicMock()
+            result.fetchone.return_value = (5,)
+            return result
+
+        compute.execute.side_effect = execute_side_effect
+        version = DatasetVersion(version="v1")
+        with pytest.raises(RuntimeError, match="S3 auth failed"):
+            adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
+        # DROP was executed before CREATE failed
+        assert any("DROP TABLE" in s for s in sql_log)
+
     def test_non_unsupported_duckdb_error_propagates(self):
         """DuckDB write error that is NOT unsupported raises immediately."""
         adapter = self._make_adapter()
