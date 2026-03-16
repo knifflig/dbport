@@ -196,7 +196,12 @@ class DBPort:
         """Declare the output table schema from a DDL string or .sql file path."""
         from ...application.services.schema import DefineSchemaService
 
-        svc = DefineSchemaService(self._compute, self._lock)
+        svc = DefineSchemaService(
+            self._compute,
+            self._lock,
+            catalog=self._catalog,
+            table_address=self._dataset.table_address,
+        )
         svc.execute(ddl_or_path, base_dir=self._dataset.model_root)
         self.columns._refresh()
 
