@@ -76,16 +76,11 @@ def _mock_dbport(run_hook="sql/main.sql"):
     mock_port.__enter__ = MagicMock(return_value=mock_port)
     mock_port.__exit__ = MagicMock(return_value=False)
     mock_port.run_hook = run_hook
-    if run_hook is None:
-        mock_port.run.side_effect = RuntimeError(
-            "No run_hook configured for this model. "
-            "Set it with: dbp config run-hook <path>"
-        )
     return mock_port
 
 
 class TestRunCommand:
-    def test_run_no_hook_fails(self, tmp_path: Path):
+    def test_run_no_hook_defaults_to_main_py(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_NO_HOOK)
         mp = _mock_dbport(run_hook=None)
@@ -96,8 +91,8 @@ class TestRunCommand:
                 "--project", str(tmp_path),
                 "run",
             ])
-        assert result.exit_code != 0
-        assert "No run_hook configured" in result.output
+        assert result.exit_code == 0
+        mp.run.assert_called_once_with(version=None, mode=None)
 
     def test_run_help(self):
         result = runner.invoke(app, ["run", "--help"])

@@ -46,10 +46,8 @@ class RunService:
         """
         hook = self._lock.read_run_hook()
         if not hook:
-            raise RuntimeError(
-                "No run_hook configured for this model. "
-                "Set it with: dbp config run-hook <path>"
-            )
+            hook = "main.py"
+            logger.info("No run_hook configured — defaulting to %s", hook)
 
         self._dispatch(port, hook)
 

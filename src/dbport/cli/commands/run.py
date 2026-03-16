@@ -50,7 +50,7 @@ def run_cmd(
                     model_root=paths.model_root,
                 ) as port:
                     # Read hook path for display / JSON output
-                    run_hook = port.run_hook
+                    run_hook = port.run_hook or "main.py"
 
                     # Resolve version for --dry-run / --refresh fallbacks
                     pub_version = version
@@ -70,10 +70,10 @@ def run_cmd(
 
                     cb = progress_callback.get(None)
                     if cb:
-                        cb.started(f"Executing {run_hook or 'run hook'}")
+                        cb.started(f"Executing {run_hook}")
                     port.run(version=pub_version, mode=mode)
                     if cb:
-                        cb.finished(f"Executed {run_hook or 'run hook'}")
+                        cb.finished(f"Executed {run_hook}")
 
         elapsed = time.monotonic() - t0
 
