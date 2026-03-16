@@ -13,12 +13,14 @@ from dbport.cli.context import (
     _find_repo_root,
     read_default_model,
     read_lock_versions,
+    read_models_folder,
     resolve_context,
     resolve_dataset,
     resolve_model_key,
     resolve_model_paths,
     resolve_model_paths_from_data,
     write_default_model,
+    write_models_folder,
 )
 
 
@@ -309,6 +311,38 @@ class TestDefaultModelReadWrite:
         write_default_model(lock, "a.x")
         doc = tomllib.loads(lock.read_text())
         assert doc["models"]["a.x"]["agency"] == "a"
+
+
+class TestModelsFolderReadWrite:
+    def test_read_returns_default_when_no_file(self, tmp_path: Path):
+        assert read_models_folder(tmp_path / "missing.lock") == "models"
+
+    def test_read_returns_default_when_no_key(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text('[models."a.x"]\nagency = "a"\n')
+        assert read_models_folder(lock) == "models"
+
+    def test_read_returns_value(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text('models_folder = "examples"\n')
+        assert read_models_folder(lock) == "examples"
+
+    def test_write_creates_key(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text("")
+        write_models_folder(lock, "custom")
+        assert read_models_folder(lock) == "custom"
+
+    def test_write_preserves_models(self, tmp_path: Path):
+        import tomllib
+        lock = tmp_path / "dbport.lock"
+        lock.write_text(
+            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
+        )
+        write_models_folder(lock, "examples")
+        doc = tomllib.loads(lock.read_text())
+        assert doc["models"]["a.x"]["agency"] == "a"
+        assert doc["models_folder"] == "examples"
 
 
 class TestResolveDataset:

@@ -151,10 +151,17 @@ class TomlLockAdapter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         lines: list[str] = []
 
-        # Top-level keys (e.g. default_model) before [models.*] sections
+        # Top-level keys (e.g. default_model, models_folder) before [models.*] sections
         default_model = doc.get("default_model")
         if default_model is not None:
             lines.append(f"default_model = {_toml_str(default_model)}")
+
+        models_folder = doc.get("models_folder")
+        if models_folder is not None:
+            lines.append(f"models_folder = {_toml_str(models_folder)}")
+
+        # Blank line after top-level keys
+        if default_model is not None or models_folder is not None:
             lines.append("")
 
         models = doc.get("models", {})

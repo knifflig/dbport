@@ -102,6 +102,24 @@ def write_default_model(lockfile_path: Path, model_key: str) -> None:
     adapter._save(doc)
 
 
+_DEFAULT_MODELS_FOLDER = "models"
+
+
+def read_models_folder(lockfile_path: Path) -> str:
+    """Read models_folder from dbport.lock, defaulting to 'models'."""
+    return _read_lock_doc(lockfile_path).get("models_folder") or _DEFAULT_MODELS_FOLDER
+
+
+def write_models_folder(lockfile_path: Path, folder: str) -> None:
+    """Set the models_folder key in dbport.lock."""
+    from ..adapters.secondary.lock.toml import TomlLockAdapter
+
+    adapter = TomlLockAdapter(lockfile_path)
+    doc = adapter._load()
+    doc["models_folder"] = folder
+    adapter._save(doc)
+
+
 def _cwd_model_root(project_path: Path) -> str:
     """Compute the model_root for CWD relative to the project root.
 

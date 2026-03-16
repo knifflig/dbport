@@ -191,21 +191,36 @@ def _scaffold_model(
     agency: str | None, path: str | None, force: bool,
 ) -> None:
     """Create a new model scaffold and register in the lock file."""
+    from ..context import read_models_folder
     from ...infrastructure.progress import progress_callback
 
     project_name = name
-    _dataset = dataset or project_name
-    _agency = agency or "default"
+
+    # Parse agency.dataset from dotted name (e.g. "test.brand_new")
+    if "." in name and not agency and not dataset:
+        _agency, _dataset = name.split(".", 1)
+    else:
+        _dataset = dataset or project_name
+        _agency = agency or "default"
 
     if template not in ("sql", "python", "hybrid"):
         print_error(f"Unknown template: {template}. Use sql, python, or hybrid.")
         raise typer.Exit(1)
 
-    # Determine target directory
+    # Determine target directory using models_folder
+    models_folder = read_models_folder(cli_ctx.lockfile_path)
+    repo_root = cli_ctx.project_path
+
     if path:
-        target = Path(path).resolve()
+        # --path is relative to models_folder (unless absolute)
+        p = Path(path)
+        if p.is_absolute():
+            target = p
+        else:
+            target = repo_root / models_folder / path
     else:
-        target = Path.cwd() / project_name
+        # Default: models_folder / agency / dataset
+        target = repo_root / models_folder / _agency / _dataset
 
     if target.exists() and not force:
         existing = list(target.iterdir()) if target.is_dir() else [target]
