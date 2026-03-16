@@ -14,19 +14,13 @@ This is the **only public export**. No other symbols from `dbport` should be use
 
 ## First Steps for a New Agent Session
 
-### 1. Run the setup script
+### 1. Install dependencies
 
 ```bash
-bash .claude/setup.sh
+uv sync
 ```
 
-This script:
-- Installs `uv` (universal Python/venv manager) if not present
-- Loads `.claude/.env` (credentials) into the environment
-- Verifies required credential env vars are present
-- Runs `uv sync` to install all Python dependencies into `.venv/`
-- Pre-downloads DuckDB extensions (`iceberg`, `avro`, `httpfs`) from HTTPS — required because the default HTTP download path may be blocked in this environment
-- Smoke-tests that `from dbport import DBPort` resolves to `src/dbport/`
+This installs all Python dependencies into `.venv/` via `uv` (universal Python/venv manager). DuckDB extensions (`iceberg`, `httpfs`) are installed automatically at runtime via HTTPS when first needed — no manual pre-download required.
 
 ### 2. Run tests
 
@@ -216,7 +210,7 @@ On `publish()`, `metadata.json` is built in-memory and embedded in Iceberg table
 
 ## Ingest and Publish Implementation
 
-The DuckDB `iceberg` extension is mandatory for **publish**. Pre-install it via `.claude/setup.sh`.
+The DuckDB `iceberg` extension is mandatory for **publish**. It is installed automatically via HTTPS when first needed (see `DuckDBComputeAdapter.ensure_extensions()`).
 
 **Ingest** (`port.load()`) — Arrow path (always):
 ```python
@@ -283,4 +277,4 @@ Tests use `_Fake*` doubles (not mocks) and `tmp_path` fixtures. Each adapter and
 - `docs/dbport.md` — product concept and positioning
 - `examples/minimal/main.py` — full Python client API example
 - `examples/minimal_cli/run.sh` — full CLI-driven workflow example
-- `.claude/setup.sh` — bootstrap script (run first in every new environment)
+- `.claude/.env` — credentials (git-ignored)

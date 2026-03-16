@@ -168,7 +168,7 @@ class TestDuckDBComputeAdapterCloseEdgeCases:
 
 class TestEnsureExtensionsFallback:
     def test_load_failure_triggers_install_then_load(self, tmp_path: Path, monkeypatch):
-        """When LOAD fails, ensure_extensions tries INSTALL + LOAD."""
+        """When LOAD fails, ensure_extensions tries DuckDB INSTALL via HTTPS."""
         from unittest.mock import MagicMock
 
         ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
@@ -177,32 +177,70 @@ class TestEnsureExtensionsFallback:
 
         def tracking_execute(sql, *args, **kwargs):
             call_log.append(sql)
-            if sql.startswith("LOAD") and sum(1 for c in call_log if c.startswith("LOAD")) == 1:
+            # First LOAD of each ext fails, INSTALL succeeds, second LOAD succeeds
+            if sql.startswith("LOAD") and sum(1 for c in call_log if c == sql) == 1:
                 raise Exception("extension not found")
 
         mock_con.execute = tracking_execute
-        # Bypass _get_con by injecting the mock connection
         ad._con = mock_con
         monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
 
         ad.ensure_extensions()
         assert any("INSTALL" in c for c in call_log)
-        ad._con = None  # prevent close from calling mock
+        # Verify HTTPS repository is set before INSTALL
+        assert any("custom_extension_repository" in c and "https://" in c for c in call_log)
+        ad._con = None
 
-    def test_install_and_load_both_fail_raises_runtime_error(self, tmp_path: Path, monkeypatch):
-        """When both LOAD and INSTALL+LOAD fail, RuntimeError is raised."""
+    def test_python_download_fallback(self, tmp_path: Path, monkeypatch):
+        """When DuckDB INSTALL also fails, falls back to Python urllib download."""
+        from unittest.mock import MagicMock, patch
+
+        ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        mock_con = MagicMock()
+        call_log: list[str] = []
+        download_calls: list[str] = []
+
+        def tracking_execute(sql, *args, **kwargs):
+            call_log.append(sql)
+            # First LOAD fails, INSTALL fails, second LOAD (after download) succeeds
+            if sql.startswith("LOAD"):
+                load_count = sum(1 for c in call_log if c == sql)
+                if load_count == 1:
+                    raise Exception("extension not found")
+            if sql.startswith("INSTALL"):
+                raise Exception("download blocked")
+
+        mock_con.execute = tracking_execute
+        ad._con = mock_con
+        monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
+
+        def mock_download(ext):
+            download_calls.append(ext)
+
+        monkeypatch.setattr(DuckDBComputeAdapter, "_download_extension", staticmethod(mock_download))
+
+        ad.ensure_extensions()
+        # All 3 extensions should trigger the download fallback
+        assert len(download_calls) == 3
+        ad._con = None
+
+    def test_all_strategies_fail_raises_runtime_error(self, tmp_path: Path, monkeypatch):
+        """When LOAD, INSTALL, and download all fail, RuntimeError is raised."""
         from unittest.mock import MagicMock
 
         ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
         mock_con = MagicMock()
 
         def always_fail(sql, *args, **kwargs):
-            if "iceberg" in sql.lower() or "httpfs" in sql.lower():
-                raise Exception("not available")
+            raise Exception("not available")
 
         mock_con.execute = always_fail
         ad._con = mock_con
         monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
+        monkeypatch.setattr(
+            DuckDBComputeAdapter, "_download_extension",
+            staticmethod(lambda ext: (_ for _ in ()).throw(Exception("download failed"))),
+        )
 
         with pytest.raises(RuntimeError, match="could not be loaded"):
             ad.ensure_extensions()

@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 _INIT_SCHEMAS = ("inputs", "staging", "outputs")
 
 # Extensions installed on every new DuckDB connection.
-_REQUIRED_EXTENSIONS = ("iceberg", "httpfs")
+# Order matters: avro is a transitive dependency of iceberg.
+_REQUIRED_EXTENSIONS = ("httpfs", "avro", "iceberg")
+
+_EXTENSIONS_REPO = "https://extensions.duckdb.org"
 
 
 class DuckDBComputeAdapter:
@@ -48,20 +51,53 @@ class DuckDBComputeAdapter:
         """Install and load required DuckDB extensions.
 
         Called explicitly when warehouse operations are needed (publish).
-        Uses LOAD first (fast if pre-installed), falls back to INSTALL + LOAD.
+        Strategy: LOAD (fast) → DuckDB INSTALL via HTTPS → Python download fallback.
         """
         con = self._get_con()
         for ext in _REQUIRED_EXTENSIONS:
             try:
                 con.execute(f"LOAD {ext}")
+                continue
             except Exception:
-                try:
-                    con.execute(f"INSTALL {ext}")
-                    con.execute(f"LOAD {ext}")
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Required DuckDB extension '{ext}' could not be loaded: {exc}"
-                    ) from exc
+                pass
+            # Try DuckDB INSTALL via HTTPS
+            try:
+                con.execute(
+                    f"SET custom_extension_repository = '{_EXTENSIONS_REPO}'"
+                )
+                con.execute(f"INSTALL {ext}")
+                con.execute(f"LOAD {ext}")
+                continue
+            except Exception:
+                pass
+            # Fallback: download via Python urllib and place in extension dir
+            try:
+                self._download_extension(ext)
+                con.execute(f"LOAD {ext}")
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Required DuckDB extension '{ext}' could not be loaded: {exc}"
+                ) from exc
+
+    @staticmethod
+    def _download_extension(ext: str) -> None:
+        """Download a DuckDB extension via Python urllib (HTTPS)."""
+        import gzip
+        import urllib.request
+
+        import duckdb
+
+        version = duckdb.__version__
+        platform = "linux_amd64"
+        url = f"{_EXTENSIONS_REPO}/v{version}/{platform}/{ext}.duckdb_extension.gz"
+        ext_dir = Path.home() / ".duckdb" / "extensions" / f"v{version}" / platform
+        ext_dir.mkdir(parents=True, exist_ok=True)
+        dest = ext_dir / f"{ext}.duckdb_extension"
+        if dest.exists():
+            return
+        logger.info("Downloading DuckDB extension %s from %s", ext, url)
+        resp = urllib.request.urlopen(url, timeout=60)  # noqa: S310
+        dest.write_bytes(gzip.decompress(resp.read()))
 
     # ------------------------------------------------------------------
     # ICompute
