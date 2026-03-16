@@ -97,3 +97,11 @@ class ICatalog(Protocol):
     ) -> None:
         """Merge key/value properties into the Iceberg table metadata."""
         ...
+
+    def update_column_docs(
+        self,
+        table_address: str,
+        column_docs: dict[str, str],
+    ) -> None:
+        """Write column doc strings to the Iceberg table schema."""
+        ...
