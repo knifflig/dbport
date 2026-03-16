@@ -229,7 +229,7 @@ def meta_cmd(
             return
 
         # Set metadata for a specific column
-        from ....domain.entities.codelist import CodelistEntry
+        from ...domain.entities.codelist import CodelistEntry
 
         entries = adapter.read_codelist_entries()
         existing = entries.get(column)
@@ -276,7 +276,7 @@ def attach_cmd(
     cli_ctx = get_cli_ctx(ctx)
 
     with cli_error_handler("config attach", json_output=cli_ctx.json_output):
-        from ....domain.entities.codelist import CodelistEntry
+        from ...domain.entities.codelist import CodelistEntry
 
         adapter, model_key = _make_lock_adapter(cli_ctx)
 
