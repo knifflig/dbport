@@ -143,7 +143,11 @@ class IcebergCatalogAdapter:
 
         creds = self._creds
 
-        # S3 path-style configuration for Supabase
+        # S3 region — always set (DuckDB iceberg extension needs it for SigV4)
+        if creds.s3_region:
+            compute.execute(f"SET s3_region='{_sql_escape(creds.s3_region)}'")
+
+        # S3 path-style configuration for Supabase / custom endpoints
         if creds.s3_endpoint:
             s3_endpoint = creds.s3_endpoint.replace("https://", "").replace("http://", "")
             compute.execute("SET s3_url_style='path'")
@@ -152,8 +156,7 @@ class IcebergCatalogAdapter:
                 compute.execute(f"SET s3_access_key_id='{_sql_escape(creds.s3_access_key)}'")
             if creds.s3_secret_key:
                 compute.execute(f"SET s3_secret_access_key='{_sql_escape(creds.s3_secret_key)}'")
-            if creds.s3_region:
-                compute.execute(f"SET s3_region='{_sql_escape(creds.s3_region)}'")
+
 
 
         # REST catalog secret
