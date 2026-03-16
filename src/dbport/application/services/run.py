@@ -69,10 +69,25 @@ class RunService:
             )
 
     def _exec_python(self, port: Any, hook: str) -> None:
-        """Execute a Python hook file with ``port`` available in scope."""
+        """Execute a Python hook file with ``port`` available in scope.
+
+        If the hook defines a top-level ``run(port)`` callable, it is invoked
+        automatically after module-level code executes.  ``__name__`` is set to
+        ``"__dbport_hook__"`` so that ``if __name__ == "__main__"`` guards are
+        skipped — allowing the same script to work both as a standalone program
+        and as a CLI run hook.
+        """
         path = Path(hook)
         if not path.is_absolute():
             path = Path(port._dataset.model_root) / path
         logger.info("Executing Python hook: %s", path)
         code = path.read_text(encoding="utf-8")
-        exec(compile(code, str(path), "exec"), {"port": port, "__file__": str(path)})  # noqa: S102
+        namespace: dict[str, Any] = {
+            "port": port,
+            "__file__": str(path),
+            "__name__": "__dbport_hook__",
+        }
+        exec(compile(code, str(path), "exec"), namespace)  # noqa: S102
+
+        if callable(namespace.get("run")):
+            namespace["run"](port)

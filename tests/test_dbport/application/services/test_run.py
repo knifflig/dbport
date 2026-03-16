@@ -130,6 +130,62 @@ class TestRunServicePythonHook:
         assert port.executed == ["built"]
 
 
+class TestRunServicePythonHookRunFunction:
+    """Tests for the ``def run(port)`` convention in Python hooks."""
+
+    def test_run_function_called_when_defined(self, tmp_path: Path):
+        hook = tmp_path / "main.py"
+        hook.write_text("def run(port):\n    port.execute('from_run')\n", encoding="utf-8")
+
+        svc = RunService(_FakeCompute(), _FakeLock(run_hook="main.py"))
+        port = _FakePort(str(tmp_path))
+        svc.execute(port)
+        assert port.executed == ["from_run"]
+
+    def test_main_guard_skipped_in_hook_context(self, tmp_path: Path):
+        hook = tmp_path / "main.py"
+        hook.write_text(
+            "def run(port):\n    port.execute('hook')\n\n"
+            "if __name__ == '__main__':\n    port.execute('standalone')\n",
+            encoding="utf-8",
+        )
+
+        svc = RunService(_FakeCompute(), _FakeLock(run_hook="main.py"))
+        port = _FakePort(str(tmp_path))
+        svc.execute(port)
+        assert port.executed == ["hook"]
+
+    def test_dunder_name_is_not_main(self, tmp_path: Path):
+        hook = tmp_path / "main.py"
+        hook.write_text(
+            "assert __name__ != '__main__'\nport.execute('ok')",
+            encoding="utf-8",
+        )
+
+        svc = RunService(_FakeCompute(), _FakeLock(run_hook="main.py"))
+        port = _FakePort(str(tmp_path))
+        svc.execute(port)
+        assert port.executed == ["ok"]
+
+    def test_non_callable_run_ignored(self, tmp_path: Path):
+        hook = tmp_path / "main.py"
+        hook.write_text("run = 42\nport.execute('module_level')\n", encoding="utf-8")
+
+        svc = RunService(_FakeCompute(), _FakeLock(run_hook="main.py"))
+        port = _FakePort(str(tmp_path))
+        svc.execute(port)
+        assert port.executed == ["module_level"]
+
+    def test_backward_compat_no_run_function(self, tmp_path: Path):
+        hook = tmp_path / "main.py"
+        hook.write_text("port.execute('legacy')\n", encoding="utf-8")
+
+        svc = RunService(_FakeCompute(), _FakeLock(run_hook="main.py"))
+        port = _FakePort(str(tmp_path))
+        svc.execute(port)
+        assert port.executed == ["legacy"]
+
+
 class TestRunServiceUnsupportedExtension:
     def test_raises_for_unknown_extension(self):
         svc = RunService(_FakeCompute(), _FakeLock(run_hook="model.dbt"))
