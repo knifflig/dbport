@@ -23,7 +23,7 @@ _SQL_TEMPLATE = """\
 
 CREATE OR REPLACE TABLE {agency}.{dataset} (
     -- id VARCHAR NOT NULL,
-    -- value DOUBLE,
+    -- value DOUBLE
 );
 """
 

@@ -97,8 +97,8 @@ src/dbport/                       # source (mapped to import name dbport via pyp
     logging.py                    # setup_logging() — rich or stdlib fallback
 
 examples/
-  minimal/main.py                 # Minimal load → transform → publish example
-  regional_trends/main.py         # Full WiFOR employment model (comprehensive reference)
+  minimal/main.py                 # Full Python client API example (filters, metadata, attach, publish modes)
+  minimal_cli/run.sh              # Full CLI-driven workflow (all commands and options)
 
 tests/test_dbport/                     # Mirrors src/dbport/ structure exactly
 ```
@@ -281,6 +281,6 @@ Tests use `_Fake*` doubles (not mocks) and `tmp_path` fixtures. Each adapter and
 
 - `docs/client.md` — user-facing usage guide (no internals)
 - `docs/dbport.md` — product concept and positioning
-- `examples/regional_trends/main.py` — comprehensive reference model
-- `examples/minimal/main.py` — minimal example
+- `examples/minimal/main.py` — full Python client API example
+- `examples/minimal_cli/run.sh` — full CLI-driven workflow example
 - `.claude/setup.sh` — bootstrap script (run first in every new environment)
