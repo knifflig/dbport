@@ -77,6 +77,10 @@ class TestPublishCommand:
         assert "--version" in result.output
         assert "--dry-run" in result.output
         assert "--refresh" in result.output
+        # Dead flags removed
+        assert "--message" not in result.output
+        assert "--yes" not in result.output
+        assert "--strict" not in result.output
 
     def test_publish_no_version_no_completed_fails(self, tmp_path: Path):
         """When no --version and no completed versions in lock, fail."""
@@ -192,21 +196,6 @@ class TestPublishCommand:
         call_kwargs = mock_cls.call_args[1]
         assert call_kwargs["agency"] == "c"
         assert call_kwargs["dataset_id"] == "d"
-
-    def test_publish_with_message(self, tmp_path: Path):
-        lock = tmp_path / "dbport.lock"
-        _create_lock(lock, _MODEL_LOCK)
-        mp = _mock_port()
-
-        with patch(_PATCH_TARGET, return_value=mp):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "publish", "--version", "2026-03-15",
-                "--message", "Quarterly update",
-            ])
-        assert result.exit_code == 0
-        assert "Quarterly update" in result.output
 
     def test_publish_json_output(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"

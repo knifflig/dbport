@@ -1,4 +1,4 @@
-"""Tests for dbp execute command (SQL transform execution)."""
+"""Tests for dbp exec command (transform execution)."""
 
 from __future__ import annotations
 
@@ -36,23 +36,81 @@ def _mock_dbport():
     return mock_port
 
 
-class TestExecuteCommand:
-    def test_execute_no_target_fails(self, tmp_path: Path):
+class TestExecCommand:
+    def test_exec_no_target_fails(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.b"]\nagency = "a"\ndataset_id = "b"\n')
         result = runner.invoke(app, [
             "--lockfile", str(lock),
-            "execute",
+            "exec",
         ])
         assert result.exit_code != 0
         assert "No target specified" in result.output
 
-    def test_execute_help(self):
-        result = runner.invoke(app, ["execute", "--help"])
+    def test_exec_help(self):
+        result = runner.invoke(app, ["exec", "--help"])
         assert result.exit_code == 0
-        assert "sql" in result.output.lower()
+        assert "Execute" in result.output
 
-    def test_execute_success(self, tmp_path: Path):
+    def test_exec_success(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "exec", "sql/main.sql",
+            ])
+        assert result.exit_code == 0
+        assert "Executed" in result.output
+        mp.execute.assert_called_once_with("sql/main.sql")
+
+    def test_exec_with_timing(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "exec", "sql/main.sql", "--timing",
+            ])
+        assert result.exit_code == 0
+        assert "Duration" in result.output
+
+    def test_exec_json_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--json",
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "exec", "sql/main.sql",
+            ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["target"] == "sql/main.sql"
+        assert "elapsed_seconds" in data["data"]
+
+    def test_exec_no_model_fails(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text("# empty\n")
+        result = runner.invoke(app, [
+            "--lockfile", str(lock),
+            "exec", "sql/main.sql",
+        ])
+        assert result.exit_code != 0
+        assert "No models found" in result.output
+
+    def test_execute_alias_works(self, tmp_path: Path):
+        """The hidden 'execute' alias should still work."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -65,46 +123,3 @@ class TestExecuteCommand:
             ])
         assert result.exit_code == 0
         assert "Executed" in result.output
-        mp.execute.assert_called_once_with("sql/main.sql")
-
-    def test_execute_with_timing(self, tmp_path: Path):
-        lock = tmp_path / "dbport.lock"
-        _create_lock(lock, _MODEL_LOCK)
-        mp = _mock_dbport()
-
-        with patch(_PATCH_TARGET, return_value=mp):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "execute", "sql/main.sql", "--timing",
-            ])
-        assert result.exit_code == 0
-        assert "Duration" in result.output
-
-    def test_execute_json_output(self, tmp_path: Path):
-        lock = tmp_path / "dbport.lock"
-        _create_lock(lock, _MODEL_LOCK)
-        mp = _mock_dbport()
-
-        with patch(_PATCH_TARGET, return_value=mp):
-            result = runner.invoke(app, [
-                "--json",
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "execute", "sql/main.sql",
-            ])
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert data["ok"] is True
-        assert data["data"]["target"] == "sql/main.sql"
-        assert "elapsed_seconds" in data["data"]
-
-    def test_execute_no_model_fails(self, tmp_path: Path):
-        lock = tmp_path / "dbport.lock"
-        lock.write_text("# empty\n")
-        result = runner.invoke(app, [
-            "--lockfile", str(lock),
-            "execute", "sql/main.sql",
-        ])
-        assert result.exit_code != 0
-        assert "No models found" in result.output

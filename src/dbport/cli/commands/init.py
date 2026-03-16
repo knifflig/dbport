@@ -1,4 +1,4 @@
-"""dbp init — create a new model scaffold or sync existing models."""
+"""dbp init — scaffold a new model."""
 
 from __future__ import annotations
 
@@ -6,11 +6,10 @@ from pathlib import Path
 
 import typer
 
-from ..context import read_lock_models, resolve_model_paths_from_data
+from ..context import read_lock_models
 from ..errors import cli_error_handler
 from ..render import (
     cli_progress,
-    cli_tree_progress,
     print_error,
     print_info,
     print_json,
@@ -29,7 +28,7 @@ CREATE OR REPLACE TABLE {agency}.{dataset} (
 
 _MAIN_SQL_TEMPLATE = """\
 -- Main transform for {dataset}
--- This file is executed by `dbp execute`.
+-- This file is executed by `dbp exec`.
 
 -- Example:
 -- INSERT INTO {agency}.{dataset}
@@ -57,38 +56,40 @@ if __name__ == "__main__":
 
 def init_cmd(
     ctx: typer.Context,
-    name: str | None = typer.Argument(None, help="Model key (agency.dataset) or new project name."),
+    name: str | None = typer.Argument(None, help="Model name (agency.dataset or project name)."),
     template: str = typer.Option("sql", "--template", help="Template type: sql, python, or hybrid."),
     dataset: str | None = typer.Option(None, "--dataset", help="Output dataset ID."),
     agency: str | None = typer.Option(None, "--agency", help="Agency identifier."),
     path: str | None = typer.Option(None, "--path", help="Target directory (default: ./<name>)."),
     force: bool = typer.Option(False, "--force", help="Overwrite existing files."),
 ) -> None:
-    """Initialize or sync models.
+    """Scaffold a new model and register it in the lock file.
 
-    Without arguments: syncs all models in the lock file.
-    With a model key (agency.dataset_id): syncs that specific model.
-    With a new name: scaffolds a new model and registers it in the lock file.
+    If the model already exists in the lock file, use 'dbp sync' instead.
     """
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
 
     with cli_error_handler("init", json_output=cli_ctx.json_output):
-        models = read_lock_models(cli_ctx.lockfile_path)
-
-        # Resolve what the user wants: sync existing or scaffold new
-        model_key = _resolve_model_key(name, agency, dataset)
-
         if name is None and not agency and not dataset and not path:
-            # No args at all → sync all models
-            _sync_all_models(cli_ctx, models)
-        elif model_key and model_key in models:
-            # Model exists in lock → sync it
-            _sync_single_model(cli_ctx, model_key, models[model_key])
-        else:
-            # Model not in lock → scaffold new
-            _scaffold_model(cli_ctx, name or "dbport_project", template, dataset, agency, path, force)
+            print_error(
+                "No model name specified. Usage: dbp init <name>\n"
+                "To sync existing models, use: dbp sync"
+            )
+            raise typer.Exit(1)
+
+        # Check if model already exists in lock file
+        models = read_lock_models(cli_ctx.lockfile_path)
+        model_key = _resolve_model_key(name, agency, dataset)
+        if model_key and model_key in models and not force:
+            print_error(
+                f"Model '{model_key}' already exists in {cli_ctx.lockfile_path}. "
+                "Use 'dbp sync' to update it, or --force to re-scaffold."
+            )
+            raise typer.Exit(1)
+
+        _scaffold_model(cli_ctx, name or "dbport_project", template, dataset, agency, path, force)
 
 
 def _resolve_model_key(
@@ -104,82 +105,6 @@ def _resolve_model_key(
     if name:
         return name
     return None
-
-
-# ---------------------------------------------------------------------------
-# Sync
-# ---------------------------------------------------------------------------
-
-def _do_sync(cli_ctx, model_key: str, model_data: dict) -> None:
-    """Create a DBPort instance for the model, triggering sync in __init__."""
-    from ...adapters.primary.client import DBPort
-
-    paths = resolve_model_paths_from_data(cli_ctx, model_data)
-    with DBPort(
-        agency=paths.agency,
-        dataset_id=paths.dataset_id,
-        lock_path=paths.lock_path,
-        duckdb_path=paths.duckdb_path,
-        model_root=paths.model_root,
-    ):
-        pass  # sync happens in __init__
-
-
-def _sync_single_model(cli_ctx, model_key: str, model_data: dict) -> None:
-    """Sync a single existing model with tree progress display."""
-    with cli_tree_progress(
-        enabled=not cli_ctx.json_output,
-        title="Initializing",
-    ) as model_ctx:
-        with model_ctx(model_key):
-            _do_sync(cli_ctx, model_key, model_data)
-
-    if cli_ctx.json_output:
-        print_json("init", {"synced": [model_key], "total": 1})
-    else:
-        print_success(f"Synced {model_key}")
-
-
-def _sync_all_models(cli_ctx, models: dict) -> None:
-    """Sync all models in the lock file, running in parallel with tree progress."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    if not models:
-        print_error(
-            f"No models found in {cli_ctx.lockfile_path}. "
-            "Run 'dbp init <name>' to create a model first."
-        )
-        raise typer.Exit(1)
-
-    synced: list[str] = []
-    failed: list[str] = []
-
-    with cli_tree_progress(
-        enabled=not cli_ctx.json_output,
-        title="Initializing models",
-    ) as model_ctx:
-        def _sync_worker(model_key: str, model_data: dict) -> str:
-            with model_ctx(model_key):
-                _do_sync(cli_ctx, model_key, model_data)
-            return model_key
-
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {
-                pool.submit(_sync_worker, key, data): key
-                for key, data in models.items()
-            }
-            for fut in as_completed(futures):
-                key = futures[fut]
-                try:
-                    fut.result()
-                    synced.append(key)
-                except Exception:
-                    failed.append(key)
-
-    if cli_ctx.json_output:
-        print_json("init", {"synced": synced, "total": len(models)})
-    else:
-        print_success(f"Synced {len(synced)}/{len(models)} model(s)")
 
 
 # ---------------------------------------------------------------------------

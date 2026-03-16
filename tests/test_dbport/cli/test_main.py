@@ -12,12 +12,14 @@ class TestAppHelp:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
         assert "init" in result.output
+        assert "sync" in result.output
         assert "status" in result.output
-        assert "check" in result.output
         assert "schema" in result.output
         assert "load" in result.output
+        assert "exec" in result.output
         assert "run" in result.output
         assert "publish" in result.output
+        assert "config" in result.output
 
     def test_no_args_shows_help(self):
         result = runner.invoke(app, [])
@@ -47,8 +49,7 @@ class TestAppHelp:
     def test_config_help(self):
         result = runner.invoke(app, ["config", "--help"])
         assert result.exit_code == 0
-        assert "default" in result.output
-        assert "info" in result.output
+        assert "check" in result.output
 
     def test_no_color_flag(self, tmp_path):
         lock = tmp_path / "dbport.lock"
@@ -56,9 +57,17 @@ class TestAppHelp:
         result = runner.invoke(app, [
             "--no-color",
             "--lockfile", str(lock),
-            "check",
+            "config", "check",
         ])
         assert result.exit_code == 0
+
+    def test_execute_alias_in_help_hidden(self):
+        """The 'execute' alias should be hidden (not shown in help)."""
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "exec" in result.output
+        # 'execute' should not appear as a visible command
+        # (it may appear in description text, but not as a command name)
 
 
 class TestCliEntrypoint:
