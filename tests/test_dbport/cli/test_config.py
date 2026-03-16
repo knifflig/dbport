@@ -196,6 +196,95 @@ _RICH_LOCK = (
 )
 
 
+class TestConfigFolder:
+    def test_show_default_folder(self, tmp_path: Path):
+        """Without any setting, models_folder defaults to 'models'."""
+        repo = _setup_repo(tmp_path)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "folder",
+        ])
+        assert result.exit_code == 0
+        assert "models" in result.output
+
+    def test_show_custom_folder(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, 'models_folder = "examples"\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "folder",
+        ])
+        assert result.exit_code == 0
+        assert "examples" in result.output
+
+    def test_set_folder(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "folder", "examples",
+        ])
+        assert result.exit_code == 0
+        assert "examples" in result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models_folder"] == "examples"
+
+    def test_set_folder_strips_slashes(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, "")
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "folder", "/examples/",
+        ])
+        assert result.exit_code == 0
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models_folder"] == "examples"
+
+    def test_show_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, 'models_folder = "src/models"\n')
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "folder",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["models_folder"] == "src/models"
+
+    def test_set_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, "")
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "folder", "custom",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["models_folder"] == "custom"
+
+    def test_set_preserves_models(self, tmp_path: Path):
+        """Setting models_folder must not lose any model data."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, (
+            'default_model = "a.x"\n\n'
+            '[models."a.x"]\n'
+            'agency = "a"\n'
+            'dataset_id = "x"\n'
+            'model_root = "."\n'
+            'duckdb_path = "data/x.duckdb"\n'
+        ))
+        runner.invoke(app, [
+            "--project", str(repo),
+            "config", "folder", "examples",
+        ])
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models_folder"] == "examples"
+        assert doc["default_model"] == "a.x"
+        assert doc["models"]["a.x"]["agency"] == "a"
+
+
 class TestConfigRunHook:
     _LOCK_WITH_HOOK = (
         'default_model = "a.x"\n\n'

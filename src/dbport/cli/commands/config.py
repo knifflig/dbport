@@ -61,6 +61,40 @@ def default_cmd(
                 print_success(f"Default model set to: {model_key}")
 
 
+@config_app.command(name="folder")
+def folder_cmd(
+    ctx: typer.Context,
+    folder: str | None = typer.Argument(None, help="Models folder relative to project root (e.g. 'models' or 'examples')."),
+) -> None:
+    """Show or set the default models folder for new models.
+
+    New models created with `dbp init` are scaffolded inside this folder.
+    Default: 'models'.
+    """
+    from ..context import read_models_folder, write_models_folder
+    from ..main import get_cli_ctx
+
+    cli_ctx = get_cli_ctx(ctx)
+
+    with cli_error_handler("config folder", json_output=cli_ctx.json_output):
+        if folder is None:
+            # Show current models folder
+            current = read_models_folder(cli_ctx.lockfile_path)
+            if cli_ctx.json_output:
+                print_json("config folder", {"models_folder": current})
+            else:
+                print_info(f"Models folder: {current}")
+        else:
+            # Normalize: strip leading/trailing slashes
+            folder = folder.strip("/")
+            write_models_folder(cli_ctx.lockfile_path, folder)
+
+            if cli_ctx.json_output:
+                print_json("config folder", {"models_folder": folder})
+            else:
+                print_success(f"Models folder set to: {folder}")
+
+
 @config_app.command(name="run-hook")
 def run_hook_cmd(
     ctx: typer.Context,

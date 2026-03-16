@@ -234,8 +234,8 @@ class TestInitCommand:
         # model_root should be the absolute path since it's outside repo
         assert str(outside) in model["model_root"]
 
-    def test_init_default_path_uses_name(self, tmp_path: Path, monkeypatch):
-        """Without --path, target should be CWD / <name>."""
+    def test_init_default_path_uses_models_folder(self, tmp_path: Path, monkeypatch):
+        """Without --path, target should be <repo>/models/<agency>/<dataset>."""
         repo = _setup_repo(tmp_path)
         monkeypatch.chdir(repo)
         result = runner.invoke(app, [
@@ -245,7 +245,7 @@ class TestInitCommand:
             "--dataset", "d",
         ])
         assert result.exit_code == 0
-        assert (repo / "my_model" / "sql" / "create_output.sql").exists()
+        assert (repo / "models" / "a" / "d" / "sql" / "create_output.sql").exists()
 
     def test_init_existing_empty_dir_succeeds(self, tmp_path: Path):
         """Empty existing dir should not block init (no files to conflict)."""
@@ -260,6 +260,75 @@ class TestInitCommand:
         ])
         assert result.exit_code == 0
         assert "Created model" in result.output
+
+    def test_init_dotted_name_parses_agency_dataset(self, tmp_path: Path):
+        """'dbp init test.brand_new' should parse agency=test, dataset=brand_new."""
+        repo = _setup_repo(tmp_path)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "test.brand_new",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Created model" in result.output
+        # Should be at models/test/brand_new
+        assert (repo / "models" / "test" / "brand_new" / "sql" / "create_output.sql").exists()
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        model = doc["models"]["test.brand_new"]
+        assert model["agency"] == "test"
+        assert model["dataset_id"] == "brand_new"
+
+    def test_init_dotted_name_with_path_override(self, tmp_path: Path):
+        """'dbp init test.brand_new --path brand_new' creates at models/brand_new."""
+        repo = _setup_repo(tmp_path)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "test.brand_new",
+            "--path", "brand_new",
+        ])
+        assert result.exit_code == 0, result.output
+        # Should be at models/brand_new (--path relative to models_folder)
+        assert (repo / "models" / "brand_new" / "sql" / "create_output.sql").exists()
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        model = doc["models"]["test.brand_new"]
+        assert model["model_root"] == "models/brand_new"
+
+    def test_init_custom_models_folder(self, tmp_path: Path):
+        """Models folder can be changed via config, and init respects it."""
+        repo = _setup_repo(tmp_path)
+        # Set models_folder to "examples"
+        lock = repo / "dbport.lock"
+        lock.write_text('models_folder = "examples"\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "test.my_model",
+        ])
+        assert result.exit_code == 0, result.output
+        assert (repo / "examples" / "test" / "my_model" / "sql" / "create_output.sql").exists()
+
+    def test_init_path_relative_to_models_folder(self, tmp_path: Path):
+        """--path is relative to models_folder, not CWD."""
+        repo = _setup_repo(tmp_path)
+        lock = repo / "dbport.lock"
+        lock.write_text('models_folder = "examples"\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "test.thing",
+            "--path", "custom_dir",
+        ])
+        assert result.exit_code == 0, result.output
+        assert (repo / "examples" / "custom_dir" / "sql" / "create_output.sql").exists()
+
+    def test_init_absolute_path_bypasses_models_folder(self, tmp_path: Path):
+        """Absolute --path should bypass models_folder entirely."""
+        repo = _setup_repo(tmp_path)
+        abs_target = tmp_path / "absolute_target"
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init", "test.thing",
+            "--path", str(abs_target),
+        ])
+        assert result.exit_code == 0, result.output
+        assert (abs_target / "sql" / "create_output.sql").exists()
 
 
 def _create_lock(path: Path, content: str) -> None:
