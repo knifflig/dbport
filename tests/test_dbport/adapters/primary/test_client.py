@@ -60,11 +60,10 @@ class TestDBPortInit:
                 lock_path=str(lock_path),
                 duckdb_path=str(tmp_path / "dbport.duckdb"),
             ) as client:
-                client.schema(
-                    "CREATE OR REPLACE TABLE inputs.emp (geo VARCHAR, year SMALLINT)"
-                )
+                client.schema("CREATE OR REPLACE TABLE inputs.emp (geo VARCHAR, year SMALLINT)")
         assert lock_path.exists()
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+
         lock = TomlLockAdapter(lock_path, model_key="wifor.emp", model_root=".", duckdb_path="")
         schema = lock.read_schema()
         assert schema is not None
@@ -97,8 +96,11 @@ class TestDBPortInit:
                 client_b.schema("CREATE OR REPLACE TABLE inputs.sector (nace VARCHAR)")
 
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+
         lock_a = TomlLockAdapter(lock_path, model_key="wifor.emp", model_root=".", duckdb_path="")
-        lock_b = TomlLockAdapter(lock_path, model_key="wifor.sector", model_root=".", duckdb_path="")
+        lock_b = TomlLockAdapter(
+            lock_path, model_key="wifor.sector", model_root=".", duckdb_path=""
+        )
 
         schema_a = lock_a.read_schema()
         schema_b = lock_b.read_schema()
@@ -109,6 +111,7 @@ class TestDBPortInit:
     def test_repo_root_discovery(self, tmp_path: Path):
         """When lock_path is not given, lock is placed at repo root (pyproject.toml location)."""
         from dbport.adapters.primary.client import _find_repo_root
+
         # The project has a pyproject.toml — discovery should find it
         repo_root = _find_repo_root(Path(__file__).parent)
         assert (repo_root / "pyproject.toml").exists()
@@ -173,9 +176,11 @@ class TestDBPortAutoLockPath:
         }
         # Patch _caller_dir to return tmp_path so auto-discovery uses tmp_path
         # and _find_repo_root to return tmp_path
-        with patch.dict(os.environ, creds), \
-             patch("dbport.adapters.primary.client._caller_dir", return_value=tmp_path), \
-             patch("dbport.adapters.primary.client._find_repo_root", return_value=tmp_path):
+        with (
+            patch.dict(os.environ, creds),
+            patch("dbport.adapters.primary.client._caller_dir", return_value=tmp_path),
+            patch("dbport.adapters.primary.client._find_repo_root", return_value=tmp_path),
+        ):
             client = DBPort(
                 agency="wifor",
                 dataset_id="emp",
@@ -194,8 +199,10 @@ class TestDBPortAutoDuckdbPath:
             "ICEBERG_CATALOG_TOKEN": "tok",
             "ICEBERG_WAREHOUSE": "wh",
         }
-        with patch.dict(os.environ, creds), \
-             patch("dbport.adapters.primary.client._caller_dir", return_value=tmp_path):
+        with (
+            patch.dict(os.environ, creds),
+            patch("dbport.adapters.primary.client._caller_dir", return_value=tmp_path),
+        ):
             client = DBPort(
                 agency="wifor",
                 dataset_id="mymodel",
@@ -346,11 +353,45 @@ class TestDBPortRunMethod:
                 lock_path=str(tmp_path / "dbport.lock"),
                 duckdb_path=str(tmp_path / "dbport.duckdb"),
             )
-            # No hook set initially
-            assert client.run_hook is None
+            # Falls back to the default model entrypoint
+            assert client.run_hook == "main.py"
             # Set a hook
             client._lock.write_run_hook("sql/main.sql")
             assert client.run_hook == "sql/main.sql"
+            client.close()
+
+    def test_configure_input_delegates_to_ingest_service(self, tmp_path: Path):
+        creds = {
+            "ICEBERG_REST_URI": "https://catalog.example.com",
+            "ICEBERG_CATALOG_TOKEN": "tok",
+            "ICEBERG_WAREHOUSE": "wh",
+        }
+        expected_record = MagicMock()
+
+        with patch.dict(os.environ, creds):
+            client = DBPort(
+                agency="wifor",
+                dataset_id="emp",
+                lock_path=str(tmp_path / "dbport.lock"),
+                duckdb_path=str(tmp_path / "dbport.duckdb"),
+            )
+            mock_svc = MagicMock()
+            mock_svc.configure.return_value = expected_record
+            with patch(
+                "dbport.application.services.ingest.IngestService",
+                return_value=mock_svc,
+            ):
+                result = client.configure_input(
+                    "wifor.source",
+                    filters={"geo": "DE"},
+                    version="2026-03-14",
+                )
+
+            assert result is expected_record
+            declaration = mock_svc.configure.call_args.args[0]
+            assert declaration.table_address == "wifor.source"
+            assert declaration.filters == {"geo": "DE"}
+            assert declaration.version == "2026-03-14"
             client.close()
 
 
@@ -367,10 +408,12 @@ class TestDBPortAutoSchema:
         if mock_catalog is None:
             mock_catalog = MagicMock()
             mock_catalog.table_exists.return_value = True
-            mock_catalog.load_arrow_schema.return_value = pa.schema([
-                pa.field("geo", pa.string()),
-                pa.field("year", pa.int16()),
-            ])
+            mock_catalog.load_arrow_schema.return_value = pa.schema(
+                [
+                    pa.field("geo", pa.string()),
+                    pa.field("year", pa.int16()),
+                ]
+            )
             mock_catalog.update_table_properties = MagicMock()
             mock_catalog.get_table_property.return_value = None
 
@@ -470,7 +513,7 @@ class TestDBPortAutoSchema:
 
 class TestDBPortSyncLocalState:
     def test_sync_exception_does_not_propagate(self, tmp_path: Path):
-        """_sync_local_state swallows exceptions."""
+        """_sync_output_state swallows exceptions."""
         from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
         from dbport.domain.entities.dataset import Dataset
@@ -493,8 +536,8 @@ class TestDBPortSyncLocalState:
         )
 
         with patch("dbport.application.services.sync.SyncService") as mock_cls:
-            mock_cls.return_value.execute.side_effect = RuntimeError("sync failed")
-            client._sync_local_state()  # should not raise
+            mock_cls.return_value.sync_output_table.side_effect = RuntimeError("sync failed")
+            client._sync_output_state()  # should not raise
 
         client._compute.close()
 

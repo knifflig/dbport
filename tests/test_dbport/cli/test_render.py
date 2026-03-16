@@ -8,6 +8,7 @@ from io import StringIO
 from rich.console import Console
 
 from dbport.cli.render import (
+    cli_tree_progress,
     get_console,
     get_stdout,
     print_error,
@@ -19,6 +20,7 @@ from dbport.cli.render import (
     print_warning,
     set_no_color,
 )
+from dbport.infrastructure.progress import progress_callback, progress_phase
 
 
 class TestRenderHelpers:
@@ -118,3 +120,48 @@ class TestRenderHelpers:
         finally:
             _mod._stdout = old
         assert "some info" in buf.getvalue()
+
+    def test_cli_tree_progress_shows_fixed_run_phases(self):
+        buf = StringIO()
+        console = Console(file=buf, no_color=True, force_terminal=False, width=120)
+        import dbport.cli.render as _mod
+
+        old = _mod._console
+        _mod._console = console
+        try:
+            with cli_tree_progress(enabled=True, title="Running models") as model_ctx:
+                with model_ctx("a.b"):
+                    with progress_phase("sync", title="Sync", icon="🔄"):
+                        cb = progress_callback.get()
+                        assert cb is not None
+                        cb.started("Detecting schema from warehouse")
+                        cb.finished("No existing warehouse table")
+
+                    with progress_phase("load", title="Load", icon="📥"):
+                        cb = progress_callback.get()
+                        assert cb is not None
+                        cb.log("Skipping ns.tbl (snapshot unchanged)")
+
+                    with progress_phase("exec", title="Exec", icon="⚙️"):
+                        cb = progress_callback.get()
+                        assert cb is not None
+                        cb.started("Executing main.py")
+                        cb.finished("Executed main.py")
+
+                    with progress_phase("publish", title="Publish", icon="🚀"):
+                        cb = progress_callback.get()
+                        assert cb is not None
+                        cb.started("Publishing a.b", total=10)
+                        cb.update(5)
+                        cb.finished("Published a.b")
+        finally:
+            _mod._console = old
+
+        output = buf.getvalue()
+        assert "🔄 Sync" in output
+        assert "📥 Load" in output
+        assert "⚙️ Exec" in output
+        assert "🚀 Publish" in output
+        assert "No existing warehouse table" in output
+        assert "Skipping ns.tbl (snapshot unchanged)" in output
+        assert "Published a.b" in output

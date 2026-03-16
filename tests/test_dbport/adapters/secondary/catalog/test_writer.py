@@ -85,10 +85,11 @@ class _FakePyicebergCatalog:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_commit_404_error():
     """Simulate the DuckDB iceberg 'transactions/commit' 404 error."""
     return Exception(
-        'TransactionContext Error: Failed to commit: Failed to commit '
+        "TransactionContext Error: Failed to commit: Failed to commit "
         'Iceberg transaction: {"message":"Route POST:/iceberg/v1/'
         'my-warehouse/transactions/commit not found","error":"Not Found",'
         '"statusCode":404}'
@@ -102,6 +103,7 @@ def _make_batch(num_rows: int) -> pa.RecordBatch:
 
 class _FakeRecordBatchReader:
     """Minimal Arrow RecordBatchReader stand-in."""
+
     def __init__(self, batches, schema=None):
         self._batches = list(batches)
         self.schema = schema or _SIMPLE_SCHEMA
@@ -168,22 +170,33 @@ class TestDuckDBWritePath:
         create_calls = [s for s in compute._sql_log if "CREATE TABLE dbport_warehouse" in s]
         assert len(create_calls) == 1
 
-    def test_overwrite_drops_then_creates(self):
+    def test_overwrite_uses_streaming_fallback(self):
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
-        compute = self._mock_compute(row_count=50)
+        compute = MagicMock()
+        sql_log: list[str] = []
+
+        def execute_side_effect(sql, *args, **kwargs):
+            sql_log.append(sql)
+            result = MagicMock()
+            result.fetchone.return_value = (50,)
+            return result
+
+        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+            if "LIMIT 0" in sql:
+                return _FakeRecordBatchReader([])
+            return _FakeRecordBatchReader([_make_batch(50)])
+
+        compute.execute.side_effect = execute_side_effect
+        compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         version = DatasetVersion(version="2026-03-13")
 
         result = adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
 
         assert result.rows == 50
-        drop_calls = [s for s in compute._sql_log if "DROP TABLE" in s]
-        create_calls = [s for s in compute._sql_log if "CREATE TABLE dbport_warehouse" in s]
-        assert len(drop_calls) == 1
-        assert len(create_calls) == 1
-        drop_idx = compute._sql_log.index(drop_calls[0])
-        create_idx = compute._sql_log.index(create_calls[0])
-        assert drop_idx < create_idx
+        assert not any("DROP TABLE" in s for s in sql_log)
+        assert not any("CREATE TABLE dbport_warehouse" in s for s in sql_log)
+        assert adapter._catalog._dropped is True
 
     def test_skips_when_already_completed(self):
         props = {
@@ -200,7 +213,8 @@ class TestDuckDBWritePath:
         assert result.rows == 42
         assert result.completed is True
         write_calls = [
-            s for s in compute._sql_log
+            s
+            for s in compute._sql_log
             if any(kw in s for kw in ("INSERT INTO", "CREATE TABLE", "DROP TABLE"))
         ]
         assert len(write_calls) == 0
@@ -264,8 +278,9 @@ class TestStreamingArrowFallback:
         def execute_side_effect(sql, *args, **kwargs):
             upper = sql.strip().upper()
             # DuckDB writes trigger the 404 error
-            if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or \
-               upper.startswith("CREATE TABLE DBPORT_WAREHOUSE"):
+            if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith(
+                "CREATE TABLE DBPORT_WAREHOUSE"
+            ):
                 raise _make_commit_404_error()
             if upper.startswith("DROP TABLE DBPORT_WAREHOUSE"):
                 raise _make_commit_404_error()
@@ -292,6 +307,7 @@ class TestStreamingArrowFallback:
 
         # Patch pa.Table.from_batches for the fallback
         import pyarrow as pa
+
         orig = pa.Table.from_batches
 
         result = adapter.write_versioned("wifor.emp", version, compute)
@@ -319,16 +335,14 @@ class TestStreamingArrowFallback:
         version2 = DatasetVersion(version="v2")
         # Count DuckDB write attempts
         duckdb_calls_before = [
-            c for c in compute.execute.call_args_list
-            if "dbport_warehouse" in str(c).upper()
+            c for c in compute.execute.call_args_list if "dbport_warehouse" in str(c).upper()
         ]
 
         adapter.write_versioned("wifor.emp", version2, compute)
 
         # No new DuckDB warehouse write attempts
         duckdb_calls_after = [
-            c for c in compute.execute.call_args_list
-            if "dbport_warehouse" in str(c).upper()
+            c for c in compute.execute.call_args_list if "dbport_warehouse" in str(c).upper()
         ]
         assert len(duckdb_calls_after) == len(duckdb_calls_before)
 
@@ -389,7 +403,10 @@ class TestStreamingArrowFallback:
 
         version = DatasetVersion(version="2026-03-14")
         result = adapter.write_versioned(
-            "wifor.emp", version, compute, overwrite=True,
+            "wifor.emp",
+            version,
+            compute,
+            overwrite=True,
         )
 
         assert result.rows == 30
@@ -475,9 +492,7 @@ class TestDuckDBWriteUnsupportedDetection:
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is True
 
     def test_detects_s3_403_forbidden_during_commit(self):
-        exc = Exception(
-            "Failed to commit Iceberg transaction: HTTP 403 Forbidden"
-        )
+        exc = Exception("Failed to commit Iceberg transaction: HTTP 403 Forbidden")
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is True
 
     def test_non_matching_errors_return_false(self):
@@ -515,6 +530,7 @@ class TestStreamingArrowCommitConflict:
 
     def test_commit_conflict_exhausts_max_retries(self):
         """5 consecutive commit conflicts -> RuntimeError."""
+
         class _ConflictTable:
             def __init__(self):
                 self._props = {}
@@ -543,6 +559,7 @@ class TestStreamingArrowCommitConflict:
             def commit_transaction(self):
                 try:
                     from pyiceberg.exceptions import CommitFailedException
+
                     raise CommitFailedException("branch main has changed")
                 except ImportError:
                     raise Exception("branch main has changed")
@@ -578,6 +595,7 @@ class TestStreamingArrowCommitConflict:
     def test_empty_batches_skipped(self):
         """Batches with num_rows == 0 don't trigger transactions."""
         import pyarrow as pa
+
         empty_batch = pa.record_batch({"x": pa.array([], type=pa.int64())}, schema=_SIMPLE_SCHEMA)
         real_batch = _make_batch(10)
 
@@ -602,6 +620,7 @@ class TestStreamingArrowCommitConflict:
 
     def test_non_conflict_commit_failure_propagates(self):
         """CommitFailedException without 'branch main' message raises immediately."""
+
         class _OtherFailTable:
             def __init__(self):
                 self._props = {}
@@ -630,6 +649,7 @@ class TestStreamingArrowCommitConflict:
             def commit_transaction(self):
                 try:
                     from pyiceberg.exceptions import CommitFailedException
+
                     raise CommitFailedException("permission denied")
                 except ImportError:
                     raise Exception("permission denied")
@@ -742,8 +762,9 @@ class TestWriteVersionedCheckpointRecovery:
 
         def execute_side_effect(sql, *args, **kwargs):
             upper = sql.strip().upper()
-            if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or \
-               upper.startswith("CREATE TABLE DBPORT_WAREHOUSE"):
+            if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith(
+                "CREATE TABLE DBPORT_WAREHOUSE"
+            ):
                 raise Exception(
                     "Failed to commit Iceberg transaction: the authorization mechanism "
                     "you have provided is not supported"
@@ -776,48 +797,51 @@ class TestWriteVersionedEdgeCases:
         adapter._catalog = _FakePyicebergCatalog(iceberg_table)
         return adapter
 
-    def test_overwrite_drop_exception_swallowed(self):
-        """In _write_via_duckdb overwrite mode, DROP TABLE exception is swallowed."""
+    def test_overwrite_skips_duckdb_drop_path(self):
+        """Overwrite writes bypass the DuckDB DROP/CREATE path."""
         adapter = self._make_adapter()
         compute = MagicMock()
         sql_log = []
 
         def execute_side_effect(sql, *args, **kwargs):
             sql_log.append(sql)
-            if "DROP TABLE" in sql:
-                raise Exception("table does not exist")
             result = MagicMock()
             result.fetchone.return_value = (5,)
             return result
 
+        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+            if "LIMIT 0" in sql:
+                return _FakeRecordBatchReader([])
+            return _FakeRecordBatchReader([_make_batch(5)])
+
         compute.execute.side_effect = execute_side_effect
+        compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         version = DatasetVersion(version="v1")
         result = adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
         assert result.completed is True
-        # DROP was attempted, CREATE succeeded
-        assert any("DROP TABLE" in s for s in sql_log)
-        assert any("CREATE TABLE dbport_warehouse" in s for s in sql_log)
+        assert not any("DROP TABLE" in s for s in sql_log)
+        assert not any("CREATE TABLE dbport_warehouse" in s for s in sql_log)
 
-    def test_overwrite_create_failure_after_drop_raises(self):
-        """In overwrite mode, if DROP succeeds but CREATE fails, error propagates."""
+    def test_overwrite_fallback_error_propagates(self):
+        """Overwrite mode still propagates fallback writer errors."""
         adapter = self._make_adapter()
         compute = MagicMock()
-        sql_log = []
 
         def execute_side_effect(sql, *args, **kwargs):
-            sql_log.append(sql)
-            if "CREATE TABLE dbport_warehouse" in sql:
-                raise RuntimeError("S3 auth failed")
             result = MagicMock()
             result.fetchone.return_value = (5,)
             return result
 
+        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+            if "LIMIT 0" in sql:
+                raise RuntimeError("S3 auth failed")
+            return _FakeRecordBatchReader([_make_batch(5)])
+
         compute.execute.side_effect = execute_side_effect
+        compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         version = DatasetVersion(version="v1")
         with pytest.raises(RuntimeError, match="S3 auth failed"):
             adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
-        # DROP was executed before CREATE failed
-        assert any("DROP TABLE" in s for s in sql_log)
 
     def test_non_unsupported_duckdb_error_propagates(self):
         """DuckDB write error that is NOT unsupported raises immediately."""
@@ -826,9 +850,9 @@ class TestWriteVersionedEdgeCases:
 
         def execute_side_effect(sql, *args, **kwargs):
             upper = sql.strip().upper()
-            if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith("CREATE TABLE DBPORT_WAREHOUSE"):
-                raise RuntimeError("disk full")
-            if "DROP TABLE" in upper:
+            if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith(
+                "CREATE TABLE DBPORT_WAREHOUSE"
+            ):
                 raise RuntimeError("disk full")
             result = MagicMock()
             result.fetchone.return_value = (10,)
@@ -837,7 +861,7 @@ class TestWriteVersionedEdgeCases:
         compute.execute.side_effect = execute_side_effect
         version = DatasetVersion(version="v1")
         with pytest.raises(RuntimeError, match="disk full"):
-            adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
+            adapter.write_versioned("wifor.emp", version, compute, overwrite=False)
 
     def test_snapshot_timestamp_converted_when_present(self):
         """write_versioned converts snap_ts_ms to datetime when not None."""

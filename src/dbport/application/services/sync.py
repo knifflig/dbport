@@ -36,6 +36,14 @@ class SyncService:
         self._sync_output_table(table_address)
         self._sync_inputs()
 
+    def sync_output_table(self, table_address: str) -> None:
+        """Sync only the output table definition into local DuckDB."""
+        self._sync_output_table(table_address)
+
+    def sync_inputs(self) -> None:
+        """Sync only configured inputs into local DuckDB."""
+        self._sync_inputs()
+
     def _sync_output_table(self, table_address: str) -> None:
         """Create or recreate the output table from lock schema.
 
@@ -89,6 +97,7 @@ class SyncService:
             except Exception as exc:
                 cb = progress_callback.get(None)
                 if cb:
+                    cb.log(f"Failed to sync {record.table_address}: {exc}")
                     cb.failed(f"Failed to sync {record.table_address}")
                 logger.warning(
                     "Failed to sync input %s: %s",

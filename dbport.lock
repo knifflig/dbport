@@ -55,10 +55,10 @@ completed = true
 
 [[models."test.table1".versions]]
 version = "2026-03-14"
-published_at = 2026-03-14T12:12:48Z
-iceberg_snapshot_id = 8487503688100859175
-iceberg_snapshot_timestamp = 2026-03-14T12:12:47.609000Z
-rows = 1485615
+published_at = 2026-03-16T17:47:20Z
+iceberg_snapshot_id = 8472677153308947283
+iceberg_snapshot_timestamp = 2026-03-16T17:47:19.716000Z
+rows = 500555
 completed = true
 
 [models."test.cli_table1"]
@@ -66,6 +66,7 @@ agency = "test"
 dataset_id = "cli_table1"
 model_root = "examples/minimal_cli"
 duckdb_path = "examples/minimal_cli/data/cli_table1.duckdb"
+run_hook = "sql/main.sql"
 
 [models."test.cli_table1".schema]
 ddl = "CREATE SCHEMA IF NOT EXISTS test;\n\nCREATE OR REPLACE TABLE test.cli_table1 (\n    geo    VARCHAR NOT NULL,\n    year   INTEGER NOT NULL,\n    value  DOUBLE\n);"
@@ -91,9 +92,9 @@ codelist_id = "value"
 
 [[models."test.cli_table1".inputs]]
 table_address = "test.table1"
-last_snapshot_id = 8351008129908343306
-last_snapshot_timestamp_ms = 1773501203957
-rows_loaded = 1485615
+last_snapshot_id = 8472677153308947283
+rows_loaded = 500555
+version = "2026-03-14"
 
 [[models."test.cli_table1".inputs]]
 table_address = "estat.nama_10r_3empers"
@@ -103,8 +104,8 @@ rows_loaded = 1485951
 
 [[models."test.cli_table1".versions]]
 version = "2026-03-15"
-published_at = 2026-03-15T12:45:54Z
-iceberg_snapshot_id = 5459699385693949521
-iceberg_snapshot_timestamp = 2026-03-15T12:45:53.300000Z
+published_at = 2026-03-16T17:49:20Z
+iceberg_snapshot_id = 7237874022855053417
+iceberg_snapshot_timestamp = 2026-03-16T17:49:20.150000Z
 rows = 1485615
 completed = true

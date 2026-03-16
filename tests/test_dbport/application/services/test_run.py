@@ -61,11 +61,14 @@ class _FakePort:
 
 
 class TestRunServiceNoHook:
-    def test_raises_when_no_hook_configured(self):
+    def test_defaults_to_main_py(self, tmp_path: Path):
+        hook_file = tmp_path / "main.py"
+        hook_file.write_text("port.execute('SELECT 1')", encoding="utf-8")
+
         svc = RunService(_FakeCompute(), _FakeLock(run_hook=None))
-        port = _FakePort("/tmp")
-        with pytest.raises(RuntimeError, match="No run_hook configured"):
-            svc.execute(port)
+        port = _FakePort(str(tmp_path))
+        svc.execute(port)
+        assert port.executed == ["SELECT 1"]
 
 
 class TestRunServiceSqlHook:

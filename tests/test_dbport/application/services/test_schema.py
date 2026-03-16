@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pyarrow as pa
 import pytest
 
+from dbport.adapters.secondary.catalog.drift import SchemaDriftError
 from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
 from dbport.adapters.secondary.lock.toml import TomlLockAdapter
 from dbport.application.services.schema import DefineSchemaService
@@ -124,3 +126,26 @@ class TestDefineSchemaServicePathTraversal:
         svc = DefineSchemaService(compute, lock)
         schema = svc.execute(str(sql_file), base_dir="/ignored")
         assert len(schema.columns) == 3
+
+
+class _FakeCatalog:
+    def __init__(self, schema: pa.Schema, exists: bool = True):
+        self._schema = schema
+        self._exists = exists
+
+    def table_exists(self, _table_address: str) -> bool:
+        return self._exists
+
+    def load_arrow_schema(self, _table_address: str) -> pa.Schema:
+        return self._schema
+
+
+class TestDefineSchemaServiceSchemaDrift:
+    def test_schema_drift_fails_early(self, compute, lock):
+        svc = DefineSchemaService(compute, lock).with_catalog(
+            _FakeCatalog(pa.schema([("id", pa.int64())])),
+            "inputs.emp",
+        )
+
+        with pytest.raises(SchemaDriftError, match="Schema drift detected"):
+            svc.execute(_DDL, base_dir="/tmp")

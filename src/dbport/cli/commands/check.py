@@ -1,4 +1,4 @@
-"""dbp check — verify project health."""
+"""dbp status check — verify project health."""
 
 from __future__ import annotations
 
@@ -19,23 +19,28 @@ def check_cmd(
 
     cli_ctx = get_cli_ctx(ctx)
 
-    with cli_error_handler("check", json_output=cli_ctx.json_output):
+    with cli_error_handler("status check", json_output=cli_ctx.json_output):
         checks: list[dict] = []
 
         # 1. Lockfile
         lock_ok = cli_ctx.lockfile_path.exists()
-        checks.append({
-            "name": "lockfile",
-            "status": "pass" if lock_ok else "fail",
-            "detail": str(cli_ctx.lockfile_path),
-        })
+        checks.append(
+            {
+                "name": "lockfile",
+                "status": "pass" if lock_ok else "fail",
+                "detail": str(cli_ctx.lockfile_path),
+            }
+        )
 
         # 2. Lockfile readable
         if lock_ok:
             try:
                 import tomllib
+
                 tomllib.loads(cli_ctx.lockfile_path.read_text(encoding="utf-8"))
-                checks.append({"name": "lockfile_readable", "status": "pass", "detail": "valid TOML"})
+                checks.append(
+                    {"name": "lockfile_readable", "status": "pass", "detail": "valid TOML"}
+                )
             except Exception as exc:
                 checks.append({"name": "lockfile_readable", "status": "fail", "detail": str(exc)})
 
@@ -43,17 +48,21 @@ def check_cmd(
         duckdb_ok = False
         try:
             import duckdb
+
             conn = duckdb.connect(":memory:")
             conn.execute("SELECT 1")
             conn.close()
             duckdb_ok = True
-            checks.append({"name": "duckdb", "status": "pass", "detail": f"duckdb {duckdb.__version__}"})
+            checks.append(
+                {"name": "duckdb", "status": "pass", "detail": f"duckdb {duckdb.__version__}"}
+            )
         except Exception as exc:
             checks.append({"name": "duckdb", "status": "fail", "detail": str(exc)})
 
         # 4. Credentials
         try:
             from ...infrastructure.credentials import WarehouseCreds
+
             creds = WarehouseCreds()
             missing = []
             if not creds.catalog_uri:
@@ -63,25 +72,34 @@ def check_cmd(
             if not creds.warehouse:
                 missing.append("ICEBERG_WAREHOUSE")
             if missing:
-                checks.append({
-                    "name": "credentials",
-                    "status": "warn",
-                    "detail": f"missing: {', '.join(missing)}",
-                })
+                checks.append(
+                    {
+                        "name": "credentials",
+                        "status": "warn",
+                        "detail": f"missing: {', '.join(missing)}",
+                    }
+                )
             else:
-                checks.append({"name": "credentials", "status": "pass", "detail": "all required vars set"})
+                checks.append(
+                    {"name": "credentials", "status": "pass", "detail": "all required vars set"}
+                )
         except Exception:
             # Pydantic validation error when env vars are missing
             import os
+
             missing = []
             for var in ("ICEBERG_REST_URI", "ICEBERG_CATALOG_TOKEN", "ICEBERG_WAREHOUSE"):
                 if not os.environ.get(var):
                     missing.append(var)
-            checks.append({
-                "name": "credentials",
-                "status": "warn",
-                "detail": f"missing env vars: {', '.join(missing)}" if missing else "validation failed",
-            })
+            checks.append(
+                {
+                    "name": "credentials",
+                    "status": "warn",
+                    "detail": f"missing env vars: {', '.join(missing)}"
+                    if missing
+                    else "validation failed",
+                }
+            )
 
         # 5. Python dependencies
         dep_issues = []
@@ -91,7 +109,13 @@ def check_cmd(
             except ImportError:
                 dep_issues.append(pkg)
         if dep_issues:
-            checks.append({"name": "dependencies", "status": "fail", "detail": f"missing: {', '.join(dep_issues)}"})
+            checks.append(
+                {
+                    "name": "dependencies",
+                    "status": "fail",
+                    "detail": f"missing: {', '.join(dep_issues)}",
+                }
+            )
         else:
             checks.append({"name": "dependencies", "status": "pass", "detail": "all present"})
 
@@ -101,7 +125,7 @@ def check_cmd(
         overall_ok = not has_fail and (not has_warn if strict else True)
 
         if cli_ctx.json_output:
-            print_json("check", {"checks": checks, "ok": overall_ok}, ok=overall_ok)
+            print_json("status check", {"checks": checks, "ok": overall_ok}, ok=overall_ok)
             if not overall_ok:
                 sys.exit(1)
             return

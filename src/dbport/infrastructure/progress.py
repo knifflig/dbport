@@ -7,6 +7,7 @@ CLI layer sets it; library users and tests leave it as None (no-op).
 from __future__ import annotations
 
 import contextvars
+from contextlib import contextmanager
 from typing import Protocol, runtime_checkable
 
 
@@ -38,3 +39,20 @@ class ProgressCallback(Protocol):
 progress_callback: contextvars.ContextVar[ProgressCallback | None] = contextvars.ContextVar(
     "progress_callback", default=None
 )
+
+
+@contextmanager
+def progress_phase(key: str, title: str, icon: str):
+    """Route nested progress events into a named phase when supported.
+
+    Tree-based CLI progress nodes can expose a ``phase(...)`` context manager.
+    Other callbacks ignore phases and continue as a flat progress stream.
+    """
+    callback = progress_callback.get(None)
+    phase_factory = getattr(callback, "phase", None)
+    if callable(phase_factory):
+        with phase_factory(key, title=title, icon=icon):
+            yield
+        return
+
+    yield

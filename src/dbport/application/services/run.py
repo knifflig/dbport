@@ -12,6 +12,54 @@ from ...domain.ports.lock import ILockStore
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_EXTENSIONS = {".sql", ".py"}
+DEFAULT_RUN_HOOK = "main.py"
+
+
+def resolve_run_hook(lock: ILockStore) -> str:
+    """Return the configured run hook or the default model entrypoint."""
+    return lock.read_run_hook() or DEFAULT_RUN_HOOK
+
+
+def execute_hook(port: Any, hook: str) -> None:
+    """Execute a hook file against the active DBPort instance."""
+    ext = Path(hook).suffix.lower()
+
+    if ext == ".sql":
+        port.execute(hook)
+        return
+    if ext == ".py":
+        _exec_python_hook(port, hook)
+        return
+
+    raise ValueError(
+        f"Unsupported run hook extension '{ext}'. "
+        f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+    )
+
+
+def _exec_python_hook(port: Any, hook: str) -> None:
+    """Execute a Python hook file with ``port`` available in scope.
+
+    If the hook defines a top-level ``run(port)`` callable, invoke it after
+    module execution. ``__name__`` is set to ``"__dbport_hook__"`` so that
+    standalone ``if __name__ == "__main__"`` blocks are skipped during CLI
+    execution while still working when the file is run directly.
+    """
+    path = Path(hook)
+    if not path.is_absolute():
+        path = Path(port._dataset.model_root) / path
+    logger.info("Executing Python hook: %s", path)
+    code = path.read_text(encoding="utf-8")
+    namespace: dict[str, Any] = {
+        "port": port,
+        "__file__": str(path),
+        "__name__": "__dbport_hook__",
+    }
+    exec(compile(code, str(path), "exec"), namespace)  # noqa: S102
+
+    hook_runner = namespace.get("run")
+    if callable(hook_runner):
+        hook_runner(port)
 
 
 class RunService:
@@ -44,12 +92,7 @@ class RunService:
             version: If provided, ``port.publish()`` is called after the hook.
             mode: Publish mode forwarded to ``port.publish()``.
         """
-        hook = self._lock.read_run_hook()
-        if not hook:
-            raise RuntimeError(
-                "No run_hook configured for this model. "
-                "Set it with: dbp config run-hook <path>"
-            )
+        hook = resolve_run_hook(self._lock)
 
         self._dispatch(port, hook)
 
@@ -58,23 +101,4 @@ class RunService:
 
     def _dispatch(self, port: Any, hook: str) -> None:
         """Route hook execution by file extension."""
-        ext = Path(hook).suffix.lower()
-
-        if ext == ".sql":
-            port.execute(hook)
-        elif ext == ".py":
-            self._exec_python(port, hook)
-        else:
-            raise ValueError(
-                f"Unsupported run hook extension '{ext}'. "
-                f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
-            )
-
-    def _exec_python(self, port: Any, hook: str) -> None:
-        """Execute a Python hook file with ``port`` available in scope."""
-        path = Path(hook)
-        if not path.is_absolute():
-            path = Path(port._dataset.model_root) / path
-        logger.info("Executing Python hook: %s", path)
-        code = path.read_text(encoding="utf-8")
-        exec(compile(code, str(path), "exec"), {"port": port, "__file__": str(path)})  # noqa: S102
+        execute_hook(port, hook)

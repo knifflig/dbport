@@ -1,4 +1,4 @@
-"""dbp status — show resolved project and runtime state."""
+"""dbp status — show resolved project state and related diagnostics."""
 
 from __future__ import annotations
 
@@ -8,12 +8,24 @@ from ..context import read_lock_models
 from ..errors import cli_error_handler
 from ..render import print_info, print_json, print_table, print_warning
 
+status_app = typer.Typer(
+    name="status",
+    help="Show resolved project and runtime state.",
+    no_args_is_help=False,
+)
 
+
+@status_app.callback(invoke_without_command=True)
 def status_cmd(
     ctx: typer.Context,
-    show_history: bool = typer.Option(False, "--show-history", help="Show version publish history."),
+    show_history: bool = typer.Option(
+        False, "--show-history", help="Show version publish history."
+    ),
 ) -> None:
     """Show resolved project and runtime state."""
+    if ctx.invoked_subcommand is not None:
+        return
+
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
@@ -34,12 +46,8 @@ def status_cmd(
                     "dataset_id": m.get("dataset_id"),
                     "model_root": m.get("model_root"),
                     "schema_defined": bool(m.get("schema", {}).get("ddl")),
-                    "inputs": [
-                        inp.get("table_address") for inp in m.get("inputs", [])
-                    ],
-                    "versions": [
-                        v.get("version") for v in m.get("versions", [])
-                    ],
+                    "inputs": [inp.get("table_address") for inp in m.get("inputs", [])],
+                    "versions": [v.get("version") for v in m.get("versions", [])],
                 }
                 data["models"][key] = model_data
             print_json("status", data)
@@ -89,7 +97,9 @@ def status_cmd(
             versions = m.get("versions", [])
             if versions:
                 latest = versions[-1]
-                print_info(f"  Published:  {len(versions)} version(s), latest: {latest.get('version', '?')}")
+                print_info(
+                    f"  Published:  {len(versions)} version(s), latest: {latest.get('version', '?')}"
+                )
             else:
                 print_info("  Published:  [dim]none[/]")
 
@@ -98,14 +108,21 @@ def status_cmd(
                 print_info("")
                 rows = []
                 for v in versions:
-                    rows.append([
-                        v.get("version", "?"),
-                        str(v.get("published_at", "?")),
-                        str(v.get("rows", "?")),
-                        "yes" if v.get("completed") else "no",
-                    ])
+                    rows.append(
+                        [
+                            v.get("version", "?"),
+                            str(v.get("published_at", "?")),
+                            str(v.get("rows", "?")),
+                            "yes" if v.get("completed") else "no",
+                        ]
+                    )
                 print_table(
                     f"Version History — {key}",
                     ["Version", "Published At", "Rows", "Completed"],
                     rows,
                 )
+
+
+from .check import check_cmd  # noqa: E402
+
+status_app.command("check")(check_cmd)

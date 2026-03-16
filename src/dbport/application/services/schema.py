@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ...domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 from ...domain.ports.compute import ICompute
 from ...domain.ports.lock import ILockStore
+
+if TYPE_CHECKING:
+    from ...domain.ports.catalog import ICatalog
+
+logger = logging.getLogger(__name__)
 
 
 class DefineSchemaService:
@@ -24,6 +31,16 @@ class DefineSchemaService:
     def __init__(self, compute: ICompute, lock: ILockStore) -> None:
         self._compute = compute
         self._lock = lock
+        self._catalog: ICatalog | None = None
+        self._table_address: str | None = None
+
+    def with_catalog(
+        self, catalog: ICatalog | None, table_address: str | None
+    ) -> "DefineSchemaService":
+        """Attach optional warehouse context for early schema drift checks."""
+        self._catalog = catalog
+        self._table_address = table_address
+        return self
 
     def execute(self, ddl_or_path: str, base_dir: str) -> DatasetSchema:
         """Apply and persist the schema. Returns the parsed DatasetSchema."""
@@ -55,6 +72,9 @@ class DefineSchemaService:
         self._compute.execute(ddl)
         table_address = m.group(1)
 
+        if self._catalog is not None and self._table_address is not None:
+            self._check_warehouse_drift(table_address)
+
         parts = table_address.split(".", 1)
         if len(parts) == 2:
             schema_name, table_name = parts
@@ -71,10 +91,29 @@ class DefineSchemaService:
         ).fetchall()
 
         columns = tuple(
-            ColumnDef(name=str(row[0]), pos=i, sql_type=str(row[1]))
-            for i, row in enumerate(rows)
+            ColumnDef(name=str(row[0]), pos=i, sql_type=str(row[1])) for i, row in enumerate(rows)
         )
 
         schema = DatasetSchema(ddl=SqlDdl(statement=ddl), columns=columns, source="local")
         self._lock.write_schema(schema)
         return schema
+
+    def _check_warehouse_drift(self, ddl_table_address: str) -> None:
+        """Compare the local DuckDB schema against the warehouse; raise on drift."""
+        from ...adapters.secondary.catalog.drift import SchemaDriftError, check_schema_drift
+
+        assert self._catalog is not None  # noqa: S101
+        assert self._table_address is not None  # noqa: S101
+
+        try:
+            if not self._catalog.table_exists(self._table_address):
+                return
+
+            warehouse_arrow = self._catalog.load_arrow_schema(self._table_address)
+            reader = self._compute.to_arrow_batches(f"SELECT * FROM {ddl_table_address} LIMIT 0")
+            local_arrow = getattr(reader, "schema_arrow", None) or reader.schema
+            check_schema_drift(local_arrow, warehouse_arrow)
+        except SchemaDriftError:
+            raise
+        except Exception as exc:
+            logger.warning("Schema drift check skipped: %s", exc)

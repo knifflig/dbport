@@ -47,12 +47,14 @@ def configure_cli_logging(*, verbose: bool, quiet: bool) -> None:
 
 # -- JSON output -------------------------------------------------------------
 
+
 def print_json(command: str, data: Any, *, ok: bool = True) -> None:
     payload = {"ok": ok, "command": command, "data": data}
     sys.stdout.write(json.dumps(payload, indent=2, default=str) + "\n")
 
 
 # -- Human-readable output ---------------------------------------------------
+
 
 def print_success(msg: str) -> None:
     _stdout.print(f"[green bold]OK[/] {msg}")
@@ -175,9 +177,7 @@ class RichProgressAdapter:
             return
         if message:
             self._progress.update(self._task_id, description=message)
-        self._progress.update(
-            self._task_id, total=1, completed=1, failed=True
-        )
+        self._progress.update(self._task_id, total=1, completed=1, failed=True)
         self._task_id = None
 
     def finished(self, message: str | None = None) -> None:
@@ -305,10 +305,7 @@ class _LiveProgressLabel:
                 f"  [dim]{elapsed}{self._eta}[/]"
             )
         else:
-            label = render_markup(
-                f"{self._text}  "
-                f"[dim]{self._completed:,} rows  {elapsed}[/]"
-            )
+            label = render_markup(f"{self._text}  [dim]{self._completed:,} rows  {elapsed}[/]")
         grid = RichTable.grid(padding=(0, 1))
         grid.add_row(self._spinner, label)
         yield grid
@@ -323,38 +320,31 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
-class ModelNode:
-    """Per-model progress callback that renders steps as children of a Rich Tree branch.
-
-    Thread-safe: all tree mutations are guarded by *lock* and flushed via *live*.
-    """
+class _TreeProgressNode:
+    """Shared tree progress behavior for model and phase branches."""
 
     def __init__(
         self,
+        *,
         branch: Tree,
         root_tree: Tree,
         live: Live,
         lock: threading.Lock,
-        model_key: str,
+        on_fail: Callable[[], None] | None = None,
     ) -> None:
         self._branch = branch
         self._root_tree = root_tree
         self._live = live
         self._lock = lock
-        self._model_key = model_key
+        self._on_fail = on_fail
         self._current_node: Tree | None = None
         self._current_desc: str = ""
         self._step_start: float = 0.0
-        self._model_start: float = _time.monotonic()
-        self._model_failed = False
         self._total: int | None = None
         self._completed: int = 0
 
-    # -- ProgressCallback protocol -------------------------------------------
-
     def started(self, description: str, total: int | None = None) -> None:
         with self._lock:
-            # Auto-finish any previous step
             if self._current_node is not None:
                 self._finish_current_node()
             self._current_desc = description
@@ -410,14 +400,59 @@ class ModelNode:
             if self._current_node is not None:
                 elapsed = _time.monotonic() - self._step_start
                 desc = message or self._current_desc
-                self._current_node.label = (
-                    f"[red bold]✗[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
-                )
+                self._current_node.label = f"[red bold]✗[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
                 self._current_node = None
-                self._total = None
-                self._completed = 0
-                self._model_failed = True
-                self._live.update(self._root_tree)
+            self._total = None
+            self._completed = 0
+            if self._on_fail is not None:
+                self._on_fail()
+            self._live.update(self._root_tree)
+
+    def _finish_current_node(self, message: str | None = None) -> None:
+        elapsed = _time.monotonic() - self._step_start
+        desc = message or self._current_desc
+        self._current_node.label = f"[green bold]✓[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"  # type: ignore[union-attr]
+        self._current_node = None
+        self._total = None
+        self._completed = 0
+
+
+class ModelNode(_TreeProgressNode):
+    """Per-model progress callback that renders steps as children of a Rich Tree branch.
+
+    Thread-safe: all tree mutations are guarded by *lock* and flushed via *live*.
+    """
+
+    def __init__(
+        self,
+        branch: Tree,
+        root_tree: Tree,
+        live: Live,
+        lock: threading.Lock,
+        model_key: str,
+    ) -> None:
+        super().__init__(
+            branch=branch, root_tree=root_tree, live=live, lock=lock, on_fail=self._mark_failed
+        )
+        self._model_key = model_key
+        self._model_start: float = _time.monotonic()
+        self._model_failed = False
+        self._phases: dict[str, _PhaseNode] = {}
+        self._phase_order: list[str] = []
+
+    @contextmanager
+    def phase(self, key: str, *, title: str, icon: str):
+        phase = self._ensure_phase(key, title=title, icon=icon)
+        with _model_progress_context(phase):
+            error: Exception | None = None
+            phase.start()
+            try:
+                yield phase
+            except Exception as exc:
+                error = exc
+                raise
+            finally:
+                phase.finish(error)
 
     # -- Model-level finish (called by cli_tree_progress) --------------------
 
@@ -426,39 +461,117 @@ class ModelNode:
             # Auto-finish any dangling step
             if self._current_node is not None:
                 self._finish_current_node()
+            for key in self._phase_order:
+                self._phases[key].finalize()
             elapsed = _time.monotonic() - self._model_start
             if error is not None:
-                self._branch.add(
-                    f"[red bold]✗[/] Failed: {error}"
-                )
+                self._branch.add(f"[red bold]✗[/] Failed: {error}")
                 self._branch.label = (
-                    f"[red bold]✗[/] [bold]{self._model_key}[/]"
-                    f"  [dim]{_fmt_elapsed(elapsed)}[/]"
+                    f"[red bold]✗[/] [bold]{self._model_key}[/]  [dim]{_fmt_elapsed(elapsed)}[/]"
                 )
             elif self._model_failed:
                 self._branch.label = (
-                    f"[red bold]✗[/] [bold]{self._model_key}[/]"
-                    f"  [dim]{_fmt_elapsed(elapsed)}[/]"
+                    f"[red bold]✗[/] [bold]{self._model_key}[/]  [dim]{_fmt_elapsed(elapsed)}[/]"
                 )
             else:
                 self._branch.label = (
-                    f"[green bold]✓[/] [bold]{self._model_key}[/]"
-                    f"  [dim]{_fmt_elapsed(elapsed)}[/]"
+                    f"[green bold]✓[/] [bold]{self._model_key}[/]  [dim]{_fmt_elapsed(elapsed)}[/]"
                 )
             self._live.update(self._root_tree)
 
-    # -- Internal ------------------------------------------------------------
+    def _mark_failed(self) -> None:
+        self._model_failed = True
+
+    def _ensure_phase(self, key: str, *, title: str, icon: str) -> "_PhaseNode":
+        with self._lock:
+            if key in self._phases:
+                return self._phases[key]
+
+            phase_branch = self._branch.add(f"[dim]○[/] {icon} {title}")
+            phase = _PhaseNode(
+                branch=phase_branch,
+                root_tree=self._root_tree,
+                live=self._live,
+                lock=self._lock,
+                title=title,
+                icon=icon,
+                parent=self,
+            )
+            self._phases[key] = phase
+            self._phase_order.append(key)
+            self._live.update(self._root_tree)
+            return phase
+
+
+class _PhaseNode(_TreeProgressNode):
+    """Nested progress callback for one fixed phase under a model branch."""
+
+    def __init__(
+        self,
+        *,
+        branch: Tree,
+        root_tree: Tree,
+        live: Live,
+        lock: threading.Lock,
+        title: str,
+        icon: str,
+        parent: ModelNode,
+    ) -> None:
+        super().__init__(
+            branch=branch,
+            root_tree=root_tree,
+            live=live,
+            lock=lock,
+            on_fail=parent._mark_failed,
+        )
+        self._title = title
+        self._icon = icon
+        self._parent = parent
+        self._phase_start: float | None = None
+        self._failed = False
+        self._finalized = False
+
+    def start(self) -> None:
+        with self._lock:
+            if self._phase_start is None:
+                self._phase_start = _time.monotonic()
+            self._branch.label = _LiveSpinnerLabel(
+                f"{self._icon} {self._title}", start=self._phase_start
+            )
+            self._live.update(self._root_tree)
+
+    def failed(self, message: str | None = None) -> None:
+        self._failed = True
+        super().failed(message)
+
+    def finish(self, error: Exception | None = None) -> None:
+        with self._lock:
+            if self._finalized:
+                return
+            if self._current_node is not None:
+                self._finish_current_node()
+            if self._phase_start is None:
+                self._phase_start = _time.monotonic()
+            elapsed = _time.monotonic() - self._phase_start
+            if error is not None or self._failed:
+                self._branch.label = (
+                    f"[red bold]✗[/] {self._icon} {self._title}  [dim]{_fmt_elapsed(elapsed)}[/]"
+                )
+                self._parent._model_failed = True
+            else:
+                self._branch.label = (
+                    f"[green bold]✓[/] {self._icon} {self._title}  [dim]{_fmt_elapsed(elapsed)}[/]"
+                )
+            self._finalized = True
+            self._live.update(self._root_tree)
+
+    def finalize(self) -> None:
+        if self._finalized:
+            return
+        self.finish(None)
 
     def _finish_current_node(self, message: str | None = None) -> None:
-        """Mark the current step as done (must be called under lock)."""
-        elapsed = _time.monotonic() - self._step_start
-        desc = message or self._current_desc
-        self._current_node.label = (  # type: ignore[union-attr]
-            f"[green bold]✓[/] {desc}  [dim]{_fmt_elapsed(elapsed)}[/]"
-        )
-        self._current_node = None
-        self._total = None
-        self._completed = 0
+        super()._finish_current_node(message)
 
 
 @contextmanager
@@ -492,16 +605,19 @@ def cli_tree_progress(
                     pass  # progress events go to the model branch
     """
     if not enabled:
+
         @contextmanager
         def _noop_ctx(model_key: str):
             yield None
+
         yield _noop_ctx
         return
 
     tree = Tree(f"[bold]{title}[/]")
     lock = threading.Lock()
 
-    with Live(tree, console=_console, refresh_per_second=8, transient=False) as live:
+    with Live(tree, console=_console, refresh_per_second=8, transient=True) as live:
+
         @contextmanager
         def model_context(model_key: str):
             with lock:
@@ -519,3 +635,5 @@ def cli_tree_progress(
                     node.finish_model(error)
 
         yield model_context
+
+    _console.print(tree)

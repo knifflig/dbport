@@ -1,4 +1,4 @@
-"""dbp execute — execute SQL transforms or script files."""
+"""dbp exec — execute SQL transforms or Python model hooks."""
 
 from __future__ import annotations
 
@@ -11,21 +11,22 @@ from ..errors import cli_error_handler
 from ..render import cli_progress, print_info, print_json, print_success
 
 
-def execute_cmd(
+def exec_cmd(
     ctx: typer.Context,
-    target: str | None = typer.Argument(None, help="Path to .sql file to execute."),
+    target: str | None = typer.Argument(None, help="Path to a .sql or .py file to execute."),
     timing: bool = typer.Option(False, "--timing", help="Print execution duration."),
 ) -> None:
-    """Execute SQL transforms in DuckDB."""
+    """Execute SQL transforms or Python model hooks."""
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
 
-    with cli_error_handler("execute", json_output=cli_ctx.json_output):
+    with cli_error_handler("exec", json_output=cli_ctx.json_output):
         if not target:
-            raise RuntimeError("No target specified. Usage: dbp execute <path/to/file.sql>")
+            raise RuntimeError("No target specified. Usage: dbp exec <path/to/file.sql|py>")
 
         from ...adapters.primary.client import DBPort
+        from ...application.services.run import execute_hook
         from ...infrastructure.progress import progress_callback
 
         paths = resolve_model_paths(cli_ctx)
@@ -43,7 +44,7 @@ def execute_cmd(
                 cb = progress_callback.get(None)
                 if cb:
                     cb.started(f"Executing {target}")
-                port.execute(target)
+                execute_hook(port, target)
                 if cb:
                     cb.finished(f"Executed {target}")
 
@@ -51,7 +52,7 @@ def execute_cmd(
 
         if cli_ctx.json_output:
             data = {"target": target, "elapsed_seconds": round(elapsed, 3)}
-            print_json("execute", data)
+            print_json("exec", data)
         else:
             print_success(f"Executed {target}")
             if timing:

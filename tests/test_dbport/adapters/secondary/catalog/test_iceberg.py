@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 from unittest.mock import MagicMock
 
+import pyarrow as pa
 import pytest
 
 from dbport.adapters.secondary.catalog.iceberg import (
@@ -13,6 +14,7 @@ from dbport.adapters.secondary.catalog.iceberg import (
     _write_column_docs,
     _write_table_properties,
 )
+from dbport.domain.entities.input import InputDeclaration
 from dbport.infrastructure.credentials import WarehouseCreds
 
 
@@ -42,12 +44,14 @@ class TestSqlEscape:
 
 class TestCredentialsEscapedInSql:
     def test_s3_credentials_with_quotes_do_not_break_sql(self):
-        adapter = IcebergCatalogAdapter(_make_creds(
-            s3_endpoint="https://s3.example.com",
-            s3_access_key="key'with'quotes",
-            s3_secret_key="secret'key",
-            s3_region="eu-west-1",
-        ))
+        adapter = IcebergCatalogAdapter(
+            _make_creds(
+                s3_endpoint="https://s3.example.com",
+                s3_access_key="key'with'quotes",
+                s3_secret_key="secret'key",
+                s3_region="eu-west-1",
+            )
+        )
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
 
@@ -120,11 +124,13 @@ class TestIcebergCatalogAdapterInit:
             "pyiceberg.catalog.load_catalog",
             fake_load_catalog,
         )
-        adapter = IcebergCatalogAdapter(_make_creds(
-            s3_endpoint="https://s3.example.com",
-            s3_access_key="key",
-            s3_secret_key="secret",
-        ))
+        adapter = IcebergCatalogAdapter(
+            _make_creds(
+                s3_endpoint="https://s3.example.com",
+                s3_access_key="key",
+                s3_secret_key="secret",
+            )
+        )
         adapter._get_catalog()
 
         assert captured.get("py-io-impl") == "pyiceberg.io.fsspec.FsspecFileIO"
@@ -164,12 +170,14 @@ class TestEnsureWarehouseAttached:
         compute.ensure_extensions.assert_called_once()
 
     def test_configures_s3_path_style(self):
-        adapter = IcebergCatalogAdapter(_make_creds(
-            s3_endpoint="https://host.example.com/storage/v1/s3",
-            s3_access_key="key",
-            s3_secret_key="secret",
-            s3_region="eu-west-1",
-        ))
+        adapter = IcebergCatalogAdapter(
+            _make_creds(
+                s3_endpoint="https://host.example.com/storage/v1/s3",
+                s3_access_key="key",
+                s3_secret_key="secret",
+                s3_region="eu-west-1",
+            )
+        )
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
 
@@ -233,6 +241,7 @@ class TestIngestIntoCompute:
 
     def _make_adapter_with_mock_catalog(self):
         import pyarrow as pa
+
         arrow_schema = pa.schema([pa.field("id", pa.int32())])
         arrow_table = pa.table({"id": [1, 2, 3]})
         reader = pa.RecordBatchReader.from_batches(arrow_schema, arrow_table.to_batches())
@@ -281,9 +290,7 @@ class TestIngestIntoCompute:
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (42,)
 
-        result = adapter.ingest_into_compute(
-            InputDeclaration(table_address="estat.foo"), compute
-        )
+        result = adapter.ingest_into_compute(InputDeclaration(table_address="estat.foo"), compute)
         assert result == 42
 
     def test_does_not_use_duckdb_warehouse(self):
@@ -404,9 +411,7 @@ class TestIngestViaArrow:
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (7,)
 
-        result = adapter._ingest_via_arrow(
-            InputDeclaration(table_address="estat.bar"), compute
-        )
+        result = adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         assert result == 7
 
     def test_snapshot_id_passed_to_scan(self, monkeypatch):
@@ -445,36 +450,42 @@ class TestIngestViaArrow:
 class TestIsTransientS3Error:
     """_is_transient_s3_error classifies S3/network errors for retry decisions."""
 
-    @pytest.mark.parametrize("msg", [
-        "An error occurred (InvalidKey) when calling GetObject",
-        "OSError: [Errno 5] An error occurred (InvalidKey)",
-        "NoSuchKey: the specified key does not exist",
-        "InvalidAccessKeyId: the key is invalid",
-        "RequestTimeout: your socket connection timed out",
-        "SlowDown: please reduce your request rate",
-        "ServiceUnavailable: service is unavailable",
-        "InternalError: we encountered an internal error",
-        "Connection reset by peer",
-        "Connection aborted",
-        "Broken pipe",
-        "IOError: failed to read file",
-        "OSError: network unreachable",
-        "HTTP 500 Internal Server Error",
-        "HTTP 502 Bad Gateway",
-        "HTTP 503 Service Unavailable",
-        "HTTP 429 Too Many Requests",
-    ])
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "An error occurred (InvalidKey) when calling GetObject",
+            "OSError: [Errno 5] An error occurred (InvalidKey)",
+            "NoSuchKey: the specified key does not exist",
+            "InvalidAccessKeyId: the key is invalid",
+            "RequestTimeout: your socket connection timed out",
+            "SlowDown: please reduce your request rate",
+            "ServiceUnavailable: service is unavailable",
+            "InternalError: we encountered an internal error",
+            "Connection reset by peer",
+            "Connection aborted",
+            "Broken pipe",
+            "IOError: failed to read file",
+            "OSError: network unreachable",
+            "HTTP 500 Internal Server Error",
+            "HTTP 502 Bad Gateway",
+            "HTTP 503 Service Unavailable",
+            "HTTP 429 Too Many Requests",
+        ],
+    )
     def test_transient_errors_detected(self, msg):
         exc = Exception(msg)
         assert IcebergCatalogAdapter._is_transient_s3_error(exc) is True
 
-    @pytest.mark.parametrize("msg", [
-        "Table not found in catalog",
-        "Invalid table address",
-        "Schema mismatch: expected int got string",
-        "disk full",
-        "Permission denied",
-    ])
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "Table not found in catalog",
+            "Invalid table address",
+            "Schema mismatch: expected int got string",
+            "disk full",
+            "Permission denied",
+        ],
+    )
     def test_non_transient_errors_not_matched(self, msg):
         exc = Exception(msg)
         assert IcebergCatalogAdapter._is_transient_s3_error(exc) is False
@@ -503,9 +514,7 @@ class TestIngestRetry:
                         "the GetObject operation: Invalid key: "
                         "data/last_updated=2026-02-10T22%3A00%3A00/file.parquet"
                     )
-                return pa.RecordBatchReader.from_batches(
-                    arrow_schema, arrow_table.to_batches()
-                )
+                return pa.RecordBatchReader.from_batches(arrow_schema, arrow_table.to_batches())
 
             mock_scan.to_arrow_batch_reader = to_reader
             return mock_scan
@@ -529,9 +538,7 @@ class TestIngestRetry:
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (3,)
 
-        result = adapter._ingest_via_arrow(
-            InputDeclaration(table_address="estat.bar"), compute
-        )
+        result = adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         assert result == 3
         assert call_count[0] == 3  # 2 failures + 1 success
 
@@ -543,9 +550,7 @@ class TestIngestRetry:
         compute.execute.return_value.fetchone.return_value = (3,)
 
         with pytest.raises(OSError, match="InvalidKey"):
-            adapter._ingest_via_arrow(
-                InputDeclaration(table_address="estat.bar"), compute
-            )
+            adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         assert call_count[0] == 3  # tried 3 times (max retries)
 
     def test_non_transient_error_not_retried(self):
@@ -572,9 +577,7 @@ class TestIngestRetry:
         compute = MagicMock()
 
         with pytest.raises(RuntimeError, match="disk full"):
-            adapter._ingest_via_arrow(
-                InputDeclaration(table_address="estat.bar"), compute
-            )
+            adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         # Should have been called only once — no retry
         mock_scan.to_arrow_batch_reader.assert_called_once()
 
@@ -591,6 +594,7 @@ class TestResolveInputSnapshot:
         adapter._catalog = mock_catalog
         # Stub get_table_property to read from our mock
         import json
+
         meta = json.loads(metadata_json)
 
         def _get_prop(table_address, key):
@@ -601,10 +605,13 @@ class TestResolveInputSnapshot:
 
     def _meta_json(self, latest: str, versions: list) -> str:
         import json
-        return json.dumps({
-            "last_updated_data_at": latest,
-            "versions": versions,
-        })
+
+        return json.dumps(
+            {
+                "last_updated_data_at": latest,
+                "versions": versions,
+            }
+        )
 
     def test_returns_none_none_for_table_without_dbport_metadata(self):
         adapter = IcebergCatalogAdapter(_make_creds())
@@ -660,6 +667,111 @@ class TestResolveInputSnapshot:
         adapter.get_table_property = lambda addr, key: "not valid json{"
         result = adapter.resolve_input_snapshot("wifor.foo", None)
         assert result == (None, None)
+
+
+class TestInspectInput:
+    def _make_table(self, *, metadata_json: str | None = None):
+        mock_table = MagicMock()
+        mock_table.properties = {}
+        if metadata_json is not None:
+            mock_table.properties["dbport.metadata_json"] = metadata_json
+        return mock_table
+
+    def test_inspect_input_resolves_latest_version_snapshot_and_rows(self):
+        import json
+
+        metadata_json = json.dumps(
+            {
+                "last_updated_data_at": "2026-03-14",
+                "versions": [
+                    {"version": "2026-03-14", "iceberg_snapshot_id": 99},
+                ],
+            }
+        )
+        adapter = IcebergCatalogAdapter(_make_creds())
+        mock_catalog = MagicMock()
+        mock_table = self._make_table(metadata_json=metadata_json)
+        mock_table.snapshot_by_id.return_value = MagicMock(timestamp_ms=123456)
+        mock_table.scan.return_value.to_arrow_batch_reader.return_value = [
+            pa.record_batch({"id": [1, 2, 3, 4, 5, 6, 7]})
+        ]
+        mock_catalog.load_table.return_value = mock_table
+        adapter._catalog = mock_catalog
+
+        record = adapter.inspect_input(InputDeclaration(table_address="wifor.foo"))
+
+        assert record.version == "2026-03-14"
+        assert record.last_snapshot_id == 99
+        assert record.last_snapshot_timestamp_ms == 123456
+        assert record.rows_loaded == 7
+
+    def test_inspect_input_rejects_explicit_version_without_dbport_metadata(self):
+        adapter = IcebergCatalogAdapter(_make_creds())
+        mock_catalog = MagicMock()
+        mock_table = self._make_table(metadata_json=None)
+        mock_table.current_snapshot.return_value = MagicMock(snapshot_id=42, timestamp_ms=777)
+        mock_catalog.load_table.return_value = mock_table
+        adapter._catalog = mock_catalog
+        adapter.get_table_property = lambda addr, key: None
+
+        with pytest.raises(ValueError, match="cannot be resolved"):
+            adapter.inspect_input(InputDeclaration(table_address="wifor.foo", version="2026-03-15"))
+
+    def test_inspect_input_uses_snapshot_summary_without_filters(self):
+        import json
+
+        metadata_json = json.dumps(
+            {
+                "last_updated_data_at": "2026-03-14",
+                "versions": [
+                    {"version": "2026-03-14", "iceberg_snapshot_id": 99},
+                ],
+            }
+        )
+        adapter = IcebergCatalogAdapter(_make_creds())
+        mock_catalog = MagicMock()
+        mock_table = self._make_table(metadata_json=metadata_json)
+        mock_table.snapshot_by_id.return_value = MagicMock(
+            timestamp_ms=123456,
+            summary={"total-records": "1234"},
+        )
+        mock_catalog.load_table.return_value = mock_table
+        adapter._catalog = mock_catalog
+
+        record = adapter.inspect_input(InputDeclaration(table_address="wifor.foo"))
+
+        assert record.rows_loaded == 1234
+        mock_table.scan.assert_not_called()
+
+    def test_inspect_input_handles_pyiceberg_summary_iteration_shape(self):
+        import json
+
+        class _SummaryLike(dict):
+            def __iter__(self):
+                yield ("total-records", "1234")
+
+        metadata_json = json.dumps(
+            {
+                "last_updated_data_at": "2026-03-14",
+                "versions": [
+                    {"version": "2026-03-14", "iceberg_snapshot_id": 99},
+                ],
+            }
+        )
+        adapter = IcebergCatalogAdapter(_make_creds())
+        mock_catalog = MagicMock()
+        mock_table = self._make_table(metadata_json=metadata_json)
+        mock_table.snapshot_by_id.return_value = MagicMock(
+            timestamp_ms=123456,
+            summary=_SummaryLike(),
+        )
+        mock_catalog.load_table.return_value = mock_table
+        adapter._catalog = mock_catalog
+
+        record = adapter.inspect_input(InputDeclaration(table_address="wifor.foo"))
+
+        assert record.rows_loaded == 1234
+        mock_table.scan.assert_not_called()
 
 
 class TestCatalogConnectionFailures:
@@ -893,7 +1005,9 @@ class TestCurrentSnapshotMetadataFallbackException:
         # current_snapshot() raises
         mock_table.current_snapshot.side_effect = Exception("snap error")
         # metadata access also raises (property that throws)
-        type(mock_table).metadata = property(lambda self: (_ for _ in ()).throw(Exception("meta broken")))
+        type(mock_table).metadata = property(
+            lambda self: (_ for _ in ()).throw(Exception("meta broken"))
+        )
         mock_catalog.load_table.return_value = mock_table
         adapter._catalog = mock_catalog
         assert adapter.current_snapshot("wifor.foo") == (None, None)
@@ -925,6 +1039,7 @@ class TestStreamingArrowCommitFailedImportError:
         version = DatasetVersion(version="2026-03-09")
         mock_compute = MagicMock()
         import pyarrow as pa
+
         empty_reader = pa.RecordBatchReader.from_batches(
             pa.schema([pa.field("x", pa.int32())]),
             [],
@@ -950,7 +1065,7 @@ class TestProgressCallbackIntegration:
         from dbport.infrastructure.progress import progress_callback
 
         arrow_schema = pa.schema([pa.field("id", pa.int32())])
-        arrow_table = pa.table({"id": [1, 2, 3]})
+        arrow_table = pa.table({"id": pa.array([1, 2, 3], type=pa.int32())})
         reader = pa.RecordBatchReader.from_batches(arrow_schema, arrow_table.to_batches())
 
         mock_scan = MagicMock()
@@ -966,12 +1081,15 @@ class TestProgressCallbackIntegration:
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (3,)
 
+        def _consume_registered_reader(_view_name, arrow_object):
+            arrow_object.read_all()
+
+        compute.register_arrow.side_effect = _consume_registered_reader
+
         cb = MagicMock()
         token = progress_callback.set(cb)
         try:
-            adapter._ingest_via_arrow(
-                InputDeclaration(table_address="estat.bar"), compute
-            )
+            adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         finally:
             progress_callback.reset(token)
 
@@ -979,6 +1097,52 @@ class TestProgressCallbackIntegration:
         assert "estat.bar" in cb.started.call_args[0][0]
         cb.finished.assert_called_once()
         assert "3" in cb.finished.call_args[0][0]
+
+    def test_ingest_uses_snapshot_row_estimate_and_batch_updates(self):
+        """When snapshot summary exposes row totals, ingest shows determinate progress."""
+        import pyarrow as pa
+
+        from dbport.domain.entities.input import InputDeclaration
+        from dbport.infrastructure.progress import progress_callback
+
+        arrow_schema = pa.schema([pa.field("id", pa.int32())])
+        batches = [
+            pa.record_batch([pa.array([1, 2], type=pa.int32())], names=["id"]),
+            pa.record_batch([pa.array([3], type=pa.int32())], names=["id"]),
+        ]
+        reader = pa.RecordBatchReader.from_batches(arrow_schema, batches)
+
+        snapshot = MagicMock()
+        snapshot.summary = {"total-records": "3"}
+        mock_scan = MagicMock()
+        mock_scan.to_arrow_batch_reader.return_value = reader
+        mock_iceberg_table = MagicMock()
+        mock_iceberg_table.scan.return_value = mock_scan
+        mock_iceberg_table.current_snapshot.return_value = snapshot
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.return_value = mock_iceberg_table
+
+        adapter = IcebergCatalogAdapter(_make_creds())
+        adapter._catalog = mock_catalog
+
+        compute = MagicMock()
+        compute.execute.return_value.fetchone.return_value = (3,)
+
+        def _consume_registered_reader(_view_name, arrow_object):
+            arrow_object.read_all()
+
+        compute.register_arrow.side_effect = _consume_registered_reader
+
+        cb = MagicMock()
+        token = progress_callback.set(cb)
+        try:
+            adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
+        finally:
+            progress_callback.reset(token)
+
+        assert cb.started.call_args.kwargs["total"] == 3
+        cb.update.assert_any_call(2)
+        cb.update.assert_any_call(1)
 
     def test_ingest_retry_fires_failed_callback(self):
         """On transient error, the progress callback's failed() is called."""
@@ -993,13 +1157,13 @@ class TestProgressCallbackIntegration:
 
         def make_scan():
             mock_scan = MagicMock()
+
             def to_reader():
                 call_count[0] += 1
                 if call_count[0] <= 1:
                     raise OSError("InvalidKey: transient error")
-                return pa.RecordBatchReader.from_batches(
-                    arrow_schema, arrow_table.to_batches()
-                )
+                return pa.RecordBatchReader.from_batches(arrow_schema, arrow_table.to_batches())
+
             mock_scan.to_arrow_batch_reader = to_reader
             return mock_scan
 
@@ -1018,9 +1182,7 @@ class TestProgressCallbackIntegration:
         cb = MagicMock()
         token = progress_callback.set(cb)
         try:
-            adapter._ingest_via_arrow(
-                InputDeclaration(table_address="estat.bar"), compute
-            )
+            adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         finally:
             progress_callback.reset(token)
 
@@ -1051,9 +1213,7 @@ class TestProgressCallbackIntegration:
         token = progress_callback.set(cb)
         try:
             with pytest.raises(OSError):
-                adapter._ingest_via_arrow(
-                    InputDeclaration(table_address="estat.bar"), compute
-                )
+                adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         finally:
             progress_callback.reset(token)
 
@@ -1087,8 +1247,11 @@ class TestProgressCallbackIntegration:
         token = progress_callback.set(cb)
         try:
             adapter._write_via_streaming_arrow(
-                "wifor.emp", DatasetVersion(version="2026-03-15"),
-                mock_compute, overwrite=False, total_rows=10,
+                "wifor.emp",
+                DatasetVersion(version="2026-03-15"),
+                mock_compute,
+                overwrite=False,
+                total_rows=10,
             )
         finally:
             progress_callback.reset(token)
@@ -1202,13 +1365,13 @@ class TestProgressCallbackIntegration:
 
         def make_scan():
             mock_scan = MagicMock()
+
             def to_reader():
                 call_count[0] += 1
                 if call_count[0] <= 1:
                     raise OSError("InvalidKey: transient error")
-                return pa.RecordBatchReader.from_batches(
-                    arrow_schema, arrow_table.to_batches()
-                )
+                return pa.RecordBatchReader.from_batches(arrow_schema, arrow_table.to_batches())
+
             mock_scan.to_arrow_batch_reader = to_reader
             return mock_scan
 
@@ -1228,9 +1391,7 @@ class TestProgressCallbackIntegration:
         cb = MagicMock(spec=["started", "update", "log", "finished"])
         token = progress_callback.set(cb)
         try:
-            adapter._ingest_via_arrow(
-                InputDeclaration(table_address="estat.bar"), compute
-            )
+            adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         finally:
             progress_callback.reset(token)
 
@@ -1325,9 +1486,7 @@ class TestProgressCallbackIntegration:
 
         cb.log.assert_called_once_with("Switching to streaming Arrow fallback")
         # Without failed(), falls back to finished()
-        assert any(
-            "Arrow fallback" in str(c) for c in cb.finished.call_args_list
-        )
+        assert any("Arrow fallback" in str(c) for c in cb.finished.call_args_list)
 
     def test_write_versioned_duckdb_non_fallback_error_calls_finished(self):
         """write_versioned calls cb.finished() on non-fallback DuckDB errors."""

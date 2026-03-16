@@ -13,11 +13,9 @@ class TestAppHelp:
         assert result.exit_code == 0
         assert "init" in result.output
         assert "status" in result.output
-        assert "check" in result.output
-        assert "schema" in result.output
-        assert "load" in result.output
-        assert "run" in result.output
-        assert "publish" in result.output
+        assert "model" in result.output
+        assert "project" in result.output
+        assert "config" in result.output
 
     def test_no_args_shows_help(self):
         result = runner.invoke(app, [])
@@ -48,22 +46,59 @@ class TestAppHelp:
         result = runner.invoke(app, ["config", "--help"])
         assert result.exit_code == 0
         assert "default" in result.output
-        assert "info" in result.output
+        assert "model" in result.output
+
+    def test_config_model_help(self):
+        result = runner.invoke(app, ["config", "model", "a.b", "--help"])
+        assert result.exit_code == 0
+        assert "schema" in result.output
+        assert "version" in result.output
+        assert "columns" in result.output
+        assert "input" in result.output
+
+    def test_model_help(self):
+        result = runner.invoke(app, ["model", "--help"])
+        assert result.exit_code == 0
+        assert "sync" in result.output
+        assert "load" in result.output
+        assert "exec" in result.output
+        assert "publish" in result.output
+        assert "run" in result.output
+
+    def test_project_help(self):
+        result = runner.invoke(app, ["project", "--help"])
+        assert result.exit_code == 0
+        assert "sync" in result.output
+        assert "load" in result.output
+        assert "exec" in result.output
+        assert "publish" in result.output
+        assert "run" in result.output
+
+    def test_status_help(self):
+        result = runner.invoke(app, ["status", "--help"])
+        assert result.exit_code == 0
+        assert "check" in result.output
 
     def test_no_color_flag(self, tmp_path):
         lock = tmp_path / "dbport.lock"
         lock.write_text("# ok\n")
-        result = runner.invoke(app, [
-            "--no-color",
-            "--lockfile", str(lock),
-            "check",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "--no-color",
+                "--lockfile",
+                str(lock),
+                "status",
+                "check",
+            ],
+        )
         assert result.exit_code == 0
 
 
 class TestCliEntrypoint:
     def test_main_function_importable(self):
         from dbport.cli import main
+
         assert callable(main)
 
     def test_main_invokes_app(self):

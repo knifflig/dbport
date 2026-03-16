@@ -9,7 +9,7 @@ import pytest
 from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
 from dbport.adapters.secondary.lock.toml import TomlLockAdapter
 from dbport.application.services.ingest import IngestService
-from dbport.domain.entities.input import InputDeclaration
+from dbport.domain.entities.input import IngestRecord, InputDeclaration
 
 # ---------------------------------------------------------------------------
 # Test doubles
@@ -33,6 +33,16 @@ class _FakeCatalog:
 
     def current_snapshot(self, table_address):
         return self._snapshot_id, None
+
+    def inspect_input(self, declaration):
+        return IngestRecord(
+            table_address=declaration.table_address,
+            last_snapshot_id=self._snapshot_id,
+            last_snapshot_timestamp_ms=123456,
+            rows_loaded=2,
+            filters=declaration.filters,
+            version=declaration.version or self._dbport_version,
+        )
 
     def ingest_into_compute(self, declaration, compute, snapshot_id=None):
         """Seed two rows directly into DuckDB without any Arrow/S3 involvement."""
@@ -121,6 +131,18 @@ class TestIngestServiceLoad:
         record = svc.execute(declaration)
         assert record.filters == {"wstatus": "EMP"}
 
+    def test_configure_persists_record_without_loading(self, compute, lock):
+        catalog = _FakeCatalog(snapshot_id=41, dbport_version="2026-03-14")
+        svc = IngestService(catalog, compute, lock)
+        declaration = InputDeclaration(table_address="wifor.emp", filters={"geo": "DE"})
+
+        record = svc.configure(declaration)
+
+        assert record.last_snapshot_id == 41
+        assert record.version == "2026-03-14"
+        assert catalog.ingest_called == []
+        assert lock.read_ingest_records()[0] == record
+
 
 class TestIngestServiceSkip:
     def test_skips_when_snapshot_unchanged_and_relation_exists(self, compute, lock):
@@ -207,9 +229,7 @@ class TestIngestServiceVersionPinning:
         """An explicit version is forwarded to resolve_input_snapshot."""
         catalog = _FakeCatalog(snapshot_id=77, dbport_version="2026-01-01")
         svc = IngestService(catalog, compute, lock)
-        record = svc.execute(
-            InputDeclaration(table_address="wifor.emp", version="2025-01-01")
-        )
+        record = svc.execute(InputDeclaration(table_address="wifor.emp", version="2025-01-01"))
         assert record.version == "2025-01-01"
         assert record.last_snapshot_id == 77
 

@@ -19,7 +19,9 @@ from ..render import cli_tree_progress, print_info, print_json, print_success
 def run_cmd(
     ctx: typer.Context,
     model: str | None = typer.Argument(None, help="Model key (agency.dataset_id)."),
-    version: str | None = typer.Option(None, "--version", help="Version to publish after execution."),
+    version: str | None = typer.Option(
+        None, "--version", help="Version to publish after execution."
+    ),
     timing: bool = typer.Option(False, "--timing", help="Print execution duration."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not publish."),
     refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
@@ -56,20 +58,16 @@ def run_cmd(
                     # Resolve version: CLI flag → config → latest completed → fail
                     pub_version = version
                     if pub_version is None:
-                        pub_version = read_lock_version_config(
-                            cli_ctx.lockfile_path, model_key
-                        )
+                        pub_version = read_lock_version_config(cli_ctx.lockfile_path, model_key)
                     if pub_version is None:
-                        lock_versions = read_lock_versions(
-                            cli_ctx.lockfile_path, model_key
-                        )
+                        lock_versions = read_lock_versions(cli_ctx.lockfile_path, model_key)
                         completed = [v for v in lock_versions if v.get("completed")]
                         if completed:
                             pub_version = completed[-1]["version"]
                     if pub_version is None:
                         raise typer.BadParameter(
                             "No version available. Set one with: "
-                            "dbp config version <version>"
+                            f"dbp config model {model_key} version <version>"
                         )
 
                     mode = None

@@ -30,12 +30,21 @@ class IngestService:
       dbport.lock.
     """
 
-    def __init__(
-        self, catalog: ICatalog, compute: ICompute, lock: ILockStore
-    ) -> None:
+    def __init__(self, catalog: ICatalog, compute: ICompute, lock: ILockStore) -> None:
         self._catalog = catalog
         self._compute = compute
         self._lock = lock
+
+    def configure(self, declaration: InputDeclaration) -> IngestRecord:
+        """Resolve an input against the warehouse and persist it to dbport.lock.
+
+        This validates that the configured input exists, resolves the effective
+        version and snapshot, computes the row count to persist, and then writes
+        the resulting IngestRecord through the lock adapter.
+        """
+        record = self._catalog.inspect_input(declaration)
+        self._lock.write_ingest_record(record)
+        return record
 
     def execute(self, declaration: InputDeclaration) -> IngestRecord:
         """Load (or skip) the input. Returns the resulting IngestRecord."""
@@ -63,9 +72,9 @@ class IngestService:
             raise
         except Exception as exc:
             logger.debug(
-                "resolve_input_snapshot failed for %s (%s); "
-                "falling back to current_snapshot()",
-                table_address, exc,
+                "resolve_input_snapshot failed for %s (%s); falling back to current_snapshot()",
+                table_address,
+                exc,
             )
 
         if resolved_snap_id is None:
@@ -76,7 +85,9 @@ class IngestService:
 
         logger.debug(
             "Resolved %s → version=%s snapshot_id=%s",
-            table_address, resolved_version, resolved_snap_id,
+            table_address,
+            resolved_version,
+            resolved_snap_id,
         )
 
         # ------------------------------------------------------------------
@@ -100,7 +111,9 @@ class IngestService:
                 cb.log(f"Skipping {table_address} (snapshot unchanged)")
             logger.debug(
                 "Skipping %s (snapshot unchanged: %s version=%s)",
-                table_address, resolved_snap_id, resolved_version,
+                table_address,
+                resolved_snap_id,
+                resolved_version,
             )
             return current_record  # type: ignore[return-value]
 
@@ -109,14 +122,18 @@ class IngestService:
         # ------------------------------------------------------------------
         logger.debug(
             "Loading %s (version=%s snapshot=%s)",
-            table_address, resolved_version, resolved_snap_id,
+            table_address,
+            resolved_version,
+            resolved_snap_id,
         )
         rows_loaded = self._catalog.ingest_into_compute(
             declaration, self._compute, snapshot_id=resolved_snap_id
         )
         logger.debug(
             "Loaded %d rows into %s.%s",
-            rows_loaded, schema_name, table_name,
+            rows_loaded,
+            schema_name,
+            table_name,
         )
 
         # ------------------------------------------------------------------

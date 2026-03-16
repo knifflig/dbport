@@ -1,13 +1,14 @@
-"""Minimal DBPort example — demonstrates the full Python client API.
+"""Minimal DBPort example and CLI-safe model hook for table1.
 
-Loads inputs from the warehouse (with filters), configures column metadata
-and codelist attachments, runs multi-step transforms, and publishes with
-all three modes (dry-run, normal, refresh).
+When executed through the CLI, DBPort injects an active ``port`` and calls
+``run(port)``. When executed directly as a Python script, this file opens its
+own DBPort instance.
 """
 
 from dbport import DBPort
 
-with DBPort(agency="test", dataset_id="table1") as port:
+
+def run(port: DBPort) -> None:
     # 1. Ensure target schema exists in DuckDB
     port.execute("CREATE SCHEMA IF NOT EXISTS test")
 
@@ -29,11 +30,11 @@ with DBPort(agency="test", dataset_id="table1") as port:
     port.execute("sql/staging.sql")
     port.execute("sql/transform.sql")
 
-    # 7. Dry-run publish — validates schema only, no data written
-    port.publish(version="2026-03-16", params={"wstatus": "EMP"}, mode="dry")
 
-    # 8. Normal publish — idempotent, skips if version already completed
-    port.publish(version="2026-03-16", params={"wstatus": "EMP"})
-
-    # 9. Refresh publish — overwrites existing version unconditionally
-    port.publish(version="2026-03-16", params={"wstatus": "EMP"}, mode="refresh")
+if __name__ == "__main__":
+    with DBPort(agency="test", dataset_id="table1") as port:
+        run(port)
+        # Standalone client usage can still own publish explicitly.
+        port.publish(version="2026-03-16", params={"wstatus": "EMP"}, mode="dry")
+        port.publish(version="2026-03-16", params={"wstatus": "EMP"})
+        port.publish(version="2026-03-16", params={"wstatus": "EMP"}, mode="refresh")
