@@ -320,6 +320,17 @@ class TestInitCommand:
         assert result.exit_code == 0, result.output
         assert (abs_target / "sql" / "create_output.sql").exists()
 
+    def test_init_path_only_no_name(self, tmp_path: Path):
+        """dbp init --path <dir> with no name should still scaffold."""
+        repo = _setup_repo(tmp_path)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "init",
+            "--path", str(repo / "default_proj"),
+        ])
+        assert result.exit_code == 0
+        assert "Created model" in result.output
+
     def test_init_existing_model_in_lock_errors(self, tmp_path: Path):
         """Init should error if the model already exists in the lock file."""
         repo = _setup_repo(tmp_path)
