@@ -9,6 +9,7 @@ run hook via ``def run(port)``.
 
 from dbport import DBPort
 
+
 def run(port):
     """Model logic — called by both CLI and standalone execution."""
     # 1. Ensure target schema exists in DuckDB
@@ -31,6 +32,7 @@ def run(port):
     # 6. Multi-step transforms: staging view first, then final insert
     port.execute("sql/staging.sql")
     port.execute("sql/transform.sql")
+
 
 if __name__ == "__main__":
     with DBPort(agency="test", dataset_id="table1") as port:

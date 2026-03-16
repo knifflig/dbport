@@ -6,8 +6,8 @@ in ``dbport.lock``.
 
 from __future__ import annotations
 
-from datetime import datetime
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -31,8 +31,8 @@ config_app = typer.Typer(
 
 def _make_lock_adapter(cli_ctx):
     """Create a TomlLockAdapter for the resolved model."""
-    from ..context import resolve_model_paths
     from ...adapters.secondary.lock.toml import TomlLockAdapter
+    from ..context import resolve_model_paths
 
     paths = resolve_model_paths(cli_ctx)
     model_key = f"{paths.agency}.{paths.dataset_id}"
@@ -84,8 +84,7 @@ def default_cmd(
         if model_key not in models:
             available = list(models.keys()) if models else []
             print_error(
-                f"Model '{model_key}' not found in {cli_ctx.lockfile_path}. "
-                f"Available: {available}"
+                f"Model '{model_key}' not found in {cli_ctx.lockfile_path}. Available: {available}"
             )
             raise typer.Exit(1)
 
@@ -220,7 +219,7 @@ def meta_cmd(
     codelist_labels: str | None = typer.Option(
         None,
         "--labels",
-        help="JSON labels (e.g. '{\"en\": \"Geography\"}').",
+        help='JSON labels (e.g. \'{"en": "Geography"}\').',
     ),
 ) -> None:
     """Show or set codelist metadata for output columns."""
@@ -262,7 +261,9 @@ def meta_cmd(
                     rows,
                 )
             else:
-                print_info("No columns defined. Apply a schema first: dbp schema sql/create_output.sql")
+                print_info(
+                    "No columns defined. Apply a schema first: dbp schema sql/create_output.sql"
+                )
             return
 
         from ...domain.entities.codelist import CodelistEntry
@@ -438,7 +439,9 @@ def info_cmd(
 
         if schema.get("ddl"):
             col_count = len(schema.get("columns", []))
-            print_info(f"  Schema:     defined ({col_count} columns, source: {schema.get('source', '?')})")
+            print_info(
+                f"  Schema:     defined ({col_count} columns, source: {schema.get('source', '?')})"
+            )
         else:
             print_info("  Schema:     [dim]not defined[/]")
 
@@ -527,9 +530,7 @@ def _handle_check(cli_ctx, strict: bool) -> None:
                     {"name": "lockfile_readable", "status": "pass", "detail": "valid TOML"}
                 )
             except Exception as exc:
-                checks.append(
-                    {"name": "lockfile_readable", "status": "fail", "detail": str(exc)}
-                )
+                checks.append({"name": "lockfile_readable", "status": "fail", "detail": str(exc)})
 
         try:
             import duckdb
@@ -537,7 +538,9 @@ def _handle_check(cli_ctx, strict: bool) -> None:
             conn = duckdb.connect(":memory:")
             conn.execute("SELECT 1")
             conn.close()
-            checks.append({"name": "duckdb", "status": "pass", "detail": f"duckdb {duckdb.__version__}"})
+            checks.append(
+                {"name": "duckdb", "status": "pass", "detail": f"duckdb {duckdb.__version__}"}
+            )
         except Exception as exc:
             checks.append({"name": "duckdb", "status": "fail", "detail": str(exc)})
 
