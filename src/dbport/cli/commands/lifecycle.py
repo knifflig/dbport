@@ -1,0 +1,248 @@
+"""Shared lifecycle helpers for model and project CLI commands."""
+
+from __future__ import annotations
+
+import time
+from contextlib import contextmanager
+
+from ..context import read_lock_versions, resolve_model_paths_from_data
+
+
+@contextmanager
+def _phase(key: str, *, title: str, icon: str):
+    from ...infrastructure.progress import progress_phase
+
+    with progress_phase(key, title=title, icon=icon):
+        yield
+
+
+def _run_execute_step(port, target: str) -> None:
+    from ...application.services.run import execute_hook
+    from ...infrastructure.progress import progress_callback
+
+    callback = progress_callback.get(None)
+    if callback is not None:
+        callback.started(f"Executing {target}")
+    try:
+        execute_hook(port, target)
+    except Exception:
+        failed = getattr(callback, "failed", None)
+        if callable(failed):
+            failed(f"Failed executing {target}")
+        raise
+    if callback is not None:
+        callback.finished(f"Executed {target}")
+
+
+def resolve_publish_version(cli_ctx, model_key: str, explicit_version: str | None) -> str:
+    """Resolve the publish version for a model.
+
+    Priority: explicit CLI flag, configured version in lock, latest completed
+    version in lock.
+    """
+    from ..context import read_lock_version_config
+
+    if explicit_version is not None:
+        return explicit_version
+
+    configured = read_lock_version_config(cli_ctx.lockfile_path, model_key)
+    if configured is not None:
+        return configured
+
+    lock_versions = read_lock_versions(cli_ctx.lockfile_path, model_key)
+    completed = [item for item in lock_versions if item.get("completed")]
+    if completed:
+        return completed[-1]["version"]
+
+    raise RuntimeError(
+        f"No version available. Set one with: dbp config model {model_key} version <version>"
+    )
+
+
+def resolve_publish_version_for_publish(
+    cli_ctx,
+    model_key: str,
+    explicit_version: str | None,
+) -> str:
+    """Resolve the publish version for publish-only commands."""
+    if explicit_version is not None:
+        return explicit_version
+
+    lock_versions = read_lock_versions(cli_ctx.lockfile_path, model_key)
+    completed = [item for item in lock_versions if item.get("completed")]
+    if completed:
+        return completed[-1]["version"]
+
+    raise RuntimeError("No completed versions found in lock file. Specify --version explicitly.")
+
+
+def resolve_publish_mode(*, dry_run: bool, refresh: bool) -> str | None:
+    """Map CLI publish flags to the DBPort publish mode."""
+    if dry_run:
+        return "dry"
+    if refresh:
+        return "refresh"
+    return None
+
+
+def sync_model(cli_ctx, model_data: dict) -> dict:
+    """Sync one model by opening DBPort, which runs sync in __init__."""
+    from ...adapters.primary.client import DBPort
+
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+        load_inputs_on_init=False,
+    ):
+        pass
+
+    return {
+        "agency": paths.agency,
+        "dataset_id": paths.dataset_id,
+    }
+
+
+def load_model(
+    cli_ctx,
+    model_key: str,
+    model_data: dict,
+    *,
+    update: bool = False,
+) -> dict:
+    """Load configured inputs for one model."""
+    from ...adapters.primary.client import DBPort
+
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
+    inputs = model_data.get("inputs", [])
+    loaded: list[str] = []
+
+    if not inputs:
+        return {
+            "model": model_key,
+            "loaded": loaded,
+            "updated": update,
+        }
+
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+        load_inputs_on_init=False,
+    ) as port:
+        with _phase("load", title="Load", icon="📥"):
+            for item in inputs:
+                port.load(
+                    item["table_address"],
+                    filters=item.get("filters"),
+                    version=None if update else item.get("version"),
+                )
+                loaded.append(item["table_address"])
+
+    return {
+        "model": model_key,
+        "loaded": loaded,
+        "updated": update,
+    }
+
+
+def exec_model(cli_ctx, model_key: str, model_data: dict, *, target: str | None = None) -> dict:
+    """Execute a model hook or an explicit override target."""
+    from ...adapters.primary.client import DBPort
+
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
+    started = time.monotonic()
+
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+    ) as port:
+        effective_target = target or port.run_hook
+        _run_execute_step(port, effective_target)
+
+    return {
+        "model": model_key,
+        "target": effective_target,
+        "elapsed_seconds": round(time.monotonic() - started, 3),
+    }
+
+
+def publish_model(
+    cli_ctx,
+    model_key: str,
+    model_data: dict,
+    *,
+    version: str | None = None,
+    dry_run: bool = False,
+    refresh: bool = False,
+) -> dict:
+    """Publish one model."""
+    from ...adapters.primary.client import DBPort
+
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
+    pub_version = resolve_publish_version_for_publish(cli_ctx, model_key, version)
+    mode = resolve_publish_mode(dry_run=dry_run, refresh=refresh)
+
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+    ) as port:
+        with _phase("publish", title="Publish", icon="🚀"):
+            port.publish(version=pub_version, mode=mode)
+
+    return {
+        "model": model_key,
+        "version": pub_version,
+        "mode": mode,
+    }
+
+
+def run_model(
+    cli_ctx,
+    model_key: str,
+    model_data: dict,
+    *,
+    version: str | None = None,
+    target: str | None = None,
+    dry_run: bool = False,
+    refresh: bool = False,
+) -> dict:
+    """Run sync, execute hook, and publish for one model."""
+    from ...adapters.primary.client import DBPort
+
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
+    pub_version = resolve_publish_version(cli_ctx, model_key, version)
+    mode = resolve_publish_mode(dry_run=dry_run, refresh=refresh)
+    started = time.monotonic()
+
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+    ) as port:
+        effective_target = target or port.run_hook
+        with _phase("exec", title="Exec", icon="⚙️"):
+            _run_execute_step(port, effective_target)
+        with _phase("publish", title="Publish", icon="🚀"):
+            port.publish(version=pub_version, mode=mode)
+
+    return {
+        "model": model_key,
+        "target": effective_target,
+        "version": pub_version,
+        "mode": mode,
+        "elapsed_seconds": round(time.monotonic() - started, 3),
+    }

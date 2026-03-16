@@ -109,9 +109,7 @@ class TestSyncInputs:
         )
         svc, catalog, compute, lock = self._make_service(records=[record])
 
-        with patch(
-            "dbport.application.services.ingest.IngestService"
-        ) as MockIngest:
+        with patch("dbport.application.services.ingest.IngestService") as MockIngest:
             mock_ingest = MagicMock()
             MockIngest.return_value = mock_ingest
             svc.execute("test.tbl")
@@ -130,9 +128,7 @@ class TestSyncInputs:
         )
         svc, catalog, compute, lock = self._make_service(records=[record])
 
-        with patch(
-            "dbport.application.services.ingest.IngestService"
-        ) as MockIngest:
+        with patch("dbport.application.services.ingest.IngestService") as MockIngest:
             mock_ingest = MagicMock()
             mock_ingest.execute.side_effect = RuntimeError("network error")
             MockIngest.return_value = mock_ingest
@@ -150,9 +146,7 @@ class TestSyncInputs:
         cb = MagicMock()
         token = progress_callback.set(cb)
         try:
-            with patch(
-                "dbport.application.services.ingest.IngestService"
-            ) as MockIngest:
+            with patch("dbport.application.services.ingest.IngestService") as MockIngest:
                 mock_ingest = MagicMock()
                 mock_ingest.execute.side_effect = RuntimeError("fail")
                 MockIngest.return_value = mock_ingest
@@ -160,6 +154,7 @@ class TestSyncInputs:
         finally:
             progress_callback.reset(token)
 
+        cb.log.assert_called_once_with("Failed to sync estat.bad: fail")
         cb.failed.assert_called_once_with("Failed to sync estat.bad")
 
     def test_syncs_input_with_filters_and_version(self):
@@ -173,9 +168,7 @@ class TestSyncInputs:
         )
         svc, catalog, compute, lock = self._make_service(records=[record])
 
-        with patch(
-            "dbport.application.services.ingest.IngestService"
-        ) as MockIngest:
+        with patch("dbport.application.services.ingest.IngestService") as MockIngest:
             mock_ingest = MagicMock()
             MockIngest.return_value = mock_ingest
             svc.execute("test.tbl")

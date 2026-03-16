@@ -1,14 +1,17 @@
-"""Tests for dbp load command."""
+"""Tests for dbp config model input command."""
 
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
+from dbport.adapters.secondary.lock.toml import TomlLockAdapter
 from dbport.cli.main import app
+from dbport.domain.entities.input import IngestRecord
 
 runner = CliRunner()
 
@@ -20,84 +23,191 @@ def _create_lock(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-_MODEL_LOCK = '''
+_MODEL_LOCK = """
 [models."a.b"]
 agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
-'''
+"""
 
 
 class TestLoadCommand:
-    def test_load_no_model_fails(self, tmp_path: Path):
+    def test_input_show_no_model_fails(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
-        result = runner.invoke(app, [
-            "--lockfile", str(lock),
-            "load", "estat.table",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "--lockfile",
+                str(lock),
+                "config",
+                "model",
+                "a.b",
+                "input",
+            ],
+        )
         assert result.exit_code != 0
-        assert "No models found" in result.output
+        assert "Model 'a.b' not found" in result.output
 
-    def test_load_no_args_no_inputs(self, tmp_path: Path):
+    def test_input_show_no_inputs(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
 
-        mock_port = MagicMock()
-        mock_port.__enter__ = MagicMock(return_value=mock_port)
-        mock_port.__exit__ = MagicMock(return_value=False)
-
-        with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load",
-            ])
+        result = runner.invoke(
+            app,
+            [
+                "--lockfile",
+                str(lock),
+                "--project",
+                str(tmp_path),
+                "config",
+                "model",
+                "a.b",
+                "input",
+            ],
+        )
         assert result.exit_code == 0
-        assert "No inputs" in result.output or "Warning" in result.output
+        assert "No inputs configured" in result.output
 
-    def test_load_single_dataset(self, tmp_path: Path):
+    def test_input_add_configures_only_by_default(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
 
         mock_port = MagicMock()
         mock_port.__enter__ = MagicMock(return_value=mock_port)
         mock_port.__exit__ = MagicMock(return_value=False)
+        resolved = IngestRecord(
+            table_address="estat.table1",
+            last_snapshot_id=123,
+            last_snapshot_timestamp_ms=456,
+            rows_loaded=789,
+            version="2026-03-14",
+        )
 
-        with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load", "estat.table1",
-            ])
+        def _configure_input(*args, **kwargs):
+            TomlLockAdapter(
+                lock, model_key="a.b", model_root=".", duckdb_path="data/b.duckdb"
+            ).write_ingest_record(resolved)
+            return resolved
+
+        mock_port.configure_input.side_effect = _configure_input
+
+        with patch(_PATCH_TARGET, return_value=mock_port) as mock_cls:
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "config",
+                    "model",
+                    "a.b",
+                    "input",
+                    "estat.table1",
+                ],
+            )
         assert result.exit_code == 0
-        assert "Loaded estat.table1" in result.output
-        mock_port.load.assert_called_once_with("estat.table1")
+        assert "Configured input estat.table1" in result.output
+        mock_port.configure_input.assert_called_once_with(
+            "estat.table1",
+            filters=None,
+            version=None,
+        )
+        _, kwargs = mock_cls.call_args
+        assert kwargs["load_inputs_on_init"] is False
+        doc = tomllib.loads(lock.read_text())
+        item = doc["models"]["a.b"]["inputs"][0]
+        assert item["table_address"] == "estat.table1"
+        assert item["version"] == "2026-03-14"
+        assert item["last_snapshot_id"] == 123
+        assert item["rows_loaded"] == 789
 
-    def test_load_single_dataset_json(self, tmp_path: Path):
+    def test_input_add_and_load_with_flag(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
 
         mock_port = MagicMock()
         mock_port.__enter__ = MagicMock(return_value=mock_port)
         mock_port.__exit__ = MagicMock(return_value=False)
+        resolved = IngestRecord(
+            table_address="estat.table1",
+            last_snapshot_id=123,
+            last_snapshot_timestamp_ms=456,
+            rows_loaded=789,
+            version="2026-03-14",
+        )
+        mock_port.load.return_value = resolved
+
+        with patch(_PATCH_TARGET, return_value=mock_port) as mock_cls:
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "config",
+                    "model",
+                    "a.b",
+                    "input",
+                    "estat.table1",
+                    "--load",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Configured and loaded input estat.table1" in result.output
+        mock_port.load.assert_called_once_with("estat.table1", filters=None, version=None)
+        _, kwargs = mock_cls.call_args
+        assert kwargs["load_inputs_on_init"] is False
+
+    def test_input_add_json(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+        resolved = IngestRecord(
+            table_address="estat.table1",
+            last_snapshot_id=123,
+            last_snapshot_timestamp_ms=456,
+            rows_loaded=789,
+            version="2026-03-14",
+        )
+        mock_port.configure_input.return_value = resolved
 
         with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
-                "--json",
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load", "estat.table1",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "--json",
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "config",
+                    "model",
+                    "a.b",
+                    "input",
+                    "estat.table1",
+                ],
+            )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["ok"] is True
-        assert data["data"]["loaded"] == ["estat.table1"]
+        assert data["data"]["table_address"] == "estat.table1"
+        assert data["data"]["version"] == "2026-03-14"
+        assert data["data"]["last_snapshot_id"] == 123
+        assert data["data"]["rows_loaded"] == 789
+        assert data["data"]["load"] is False
 
-    def test_load_all_configured_inputs(self, tmp_path: Path):
+    def test_input_show_existing_inputs(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
-        _create_lock(lock, '''
+        _create_lock(
+            lock,
+            """
 [models."a.b"]
 agency = "a"
 dataset_id = "b"
@@ -109,56 +219,165 @@ table_address = "ns.tbl1"
 
 [[models."a.b".inputs]]
 table_address = "ns.tbl2"
-''')
-
-        mock_port = MagicMock()
-        mock_port.__enter__ = MagicMock(return_value=mock_port)
-        mock_port.__exit__ = MagicMock(return_value=False)
-
-        with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load",
-            ])
-        assert result.exit_code == 0
-        assert "2 input(s)" in result.output
-        assert mock_port.load.call_count == 2
-
-    def test_load_all_inputs_with_filters(self, tmp_path: Path):
-        lock = tmp_path / "dbport.lock"
-        _create_lock(lock, '''
-[models."a.b"]
-agency = "a"
-dataset_id = "b"
-model_root = "."
-duckdb_path = "data/b.duckdb"
-
-[[models."a.b".inputs]]
-table_address = "ns.tbl1"
-
-[models."a.b".inputs.filters]
-wstatus = "EMP"
-''')
-
-        mock_port = MagicMock()
-        mock_port.__enter__ = MagicMock(return_value=mock_port)
-        mock_port.__exit__ = MagicMock(return_value=False)
-
-        with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load",
-            ])
-        assert result.exit_code == 0
-        mock_port.load.assert_called_once_with(
-            "ns.tbl1", filters={"wstatus": "EMP"}, version=None
+""",
         )
 
-    def test_load_all_json_output(self, tmp_path: Path):
+        result = runner.invoke(
+            app,
+            [
+                "--lockfile",
+                str(lock),
+                "--project",
+                str(tmp_path),
+                "config",
+                "model",
+                "a.b",
+                "input",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "ns.tbl1" in result.output
+        assert "ns.tbl2" in result.output
+
+    def test_input_add_with_filters_and_version_load(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
-        _create_lock(lock, '''
+        _create_lock(lock, _MODEL_LOCK)
+
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+        resolved = IngestRecord(
+            table_address="ns.tbl1",
+            last_snapshot_id=321,
+            last_snapshot_timestamp_ms=654,
+            rows_loaded=987,
+            filters={"wstatus": "EMP"},
+            version="2026-03-01",
+        )
+
+        def _load(*args, **kwargs):
+            TomlLockAdapter(
+                lock, model_key="a.b", model_root=".", duckdb_path="data/b.duckdb"
+            ).write_ingest_record(resolved)
+            return resolved
+
+        mock_port.load.side_effect = _load
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "config",
+                    "model",
+                    "a.b",
+                    "input",
+                    "ns.tbl1",
+                    "--filter",
+                    "wstatus=EMP",
+                    "--version",
+                    "2026-03-01",
+                    "--load",
+                ],
+            )
+        assert result.exit_code == 0
+        mock_port.load.assert_called_once_with(
+            "ns.tbl1",
+            filters={"wstatus": "EMP"},
+            version="2026-03-01",
+        )
+        doc = tomllib.loads(lock.read_text())
+        item = doc["models"]["a.b"]["inputs"][0]
+        assert item["table_address"] == "ns.tbl1"
+        assert item["filters"]["wstatus"] == "EMP"
+        assert item["version"] == "2026-03-01"
+        assert item["last_snapshot_id"] == 321
+        assert item["rows_loaded"] == 987
+
+    def test_input_add_without_version_persists_latest_resolved_version(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+        resolved = IngestRecord(
+            table_address="test.table1",
+            last_snapshot_id=8351008129908343306,
+            last_snapshot_timestamp_ms=1773050000000,
+            rows_loaded=1485615,
+            version="2026-03-14",
+        )
+
+        def _configure_input(*args, **kwargs):
+            TomlLockAdapter(
+                lock, model_key="a.b", model_root=".", duckdb_path="data/b.duckdb"
+            ).write_ingest_record(resolved)
+            return resolved
+
+        mock_port.configure_input.side_effect = _configure_input
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "config",
+                    "model",
+                    "a.b",
+                    "input",
+                    "test.table1",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        doc = tomllib.loads(lock.read_text())
+        item = doc["models"]["a.b"]["inputs"][0]
+        assert item["version"] == "2026-03-14"
+        assert item["last_snapshot_id"] == 8351008129908343306
+        assert item["rows_loaded"] == 1485615
+
+    def test_input_add_invalid_version_from_warehouse_fails(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+        mock_port.configure_input.side_effect = ValueError("Version '2026-03-15' not found")
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "config",
+                    "model",
+                    "a.b",
+                    "input",
+                    "test.table1",
+                    "--version",
+                    "2026-03-15",
+                ],
+            )
+
+        assert result.exit_code != 0
+        assert "2026-03-15" in result.output
+
+    def test_model_load_uses_configured_inputs(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            """
 [models."a.b"]
 agency = "a"
 dataset_id = "b"
@@ -167,58 +386,152 @@ duckdb_path = "data/b.duckdb"
 
 [[models."a.b".inputs]]
 table_address = "ns.tbl1"
-''')
+filters = { wstatus = "EMP" }
+version = "2026-03-01"
+""",
+        )
+
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+
+        with patch(_PATCH_TARGET, return_value=mock_port) as mock_cls:
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "model",
+                    "load",
+                    "a.b",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        assert "Loaded 1 input(s) for a.b" in result.output
+        mock_port.load.assert_called_once_with(
+            "ns.tbl1",
+            filters={"wstatus": "EMP"},
+            version="2026-03-01",
+        )
+        _, kwargs = mock_cls.call_args
+        assert kwargs["load_inputs_on_init"] is False
+
+    def test_model_load_update_uses_latest_snapshot(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            """
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+
+[[models."a.b".inputs]]
+table_address = "ns.tbl1"
+version = "2026-03-01"
+""",
+        )
 
         mock_port = MagicMock()
         mock_port.__enter__ = MagicMock(return_value=mock_port)
         mock_port.__exit__ = MagicMock(return_value=False)
 
         with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "model",
+                    "load",
+                    "a.b",
+                    "--update",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        assert "Updated 1 input(s) for a.b" in result.output
+        mock_port.load.assert_called_once_with("ns.tbl1", filters=None, version=None)
+
+    def test_input_show_json(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            """
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+
+[[models."a.b".inputs]]
+table_address = "ns.tbl1"
+""",
+        )
+
+        result = runner.invoke(
+            app,
+            [
                 "--json",
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load",
-            ])
+                "--lockfile",
+                str(lock),
+                "--project",
+                str(tmp_path),
+                "config",
+                "model",
+                "a.b",
+                "input",
+            ],
+        )
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert data["data"]["loaded"] == ["ns.tbl1"]
+        assert data["data"]["inputs"][0]["table_address"] == "ns.tbl1"
 
-    def test_load_no_inputs_json(self, tmp_path: Path):
+    def test_input_show_no_inputs_json(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
 
-        mock_port = MagicMock()
-        mock_port.__enter__ = MagicMock(return_value=mock_port)
-        mock_port.__exit__ = MagicMock(return_value=False)
-
-        with patch(_PATCH_TARGET, return_value=mock_port):
-            result = runner.invoke(app, [
+        result = runner.invoke(
+            app,
+            [
                 "--json",
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load",
-            ])
+                "--lockfile",
+                str(lock),
+                "--project",
+                str(tmp_path),
+                "config",
+                "model",
+                "a.b",
+                "input",
+            ],
+        )
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert data["data"]["loaded"] == []
+        assert data["data"]["inputs"] == []
 
-    def test_load_no_args_models_gone_after_resolve(self, tmp_path: Path):
-        """Cover load.py line 47: models exist for resolve but gone on re-read."""
+    def test_input_invalid_filter_fails(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
 
-        mock_port = MagicMock()
-        mock_port.__enter__ = MagicMock(return_value=mock_port)
-        mock_port.__exit__ = MagicMock(return_value=False)
-
-        # After DBPort init succeeds, read_lock_models returns empty
-        with patch(_PATCH_TARGET, return_value=mock_port), \
-             patch("dbport.cli.commands.load.read_lock_models", return_value={}):
-            result = runner.invoke(app, [
-                "--lockfile", str(lock),
-                "--project", str(tmp_path),
-                "load",
-            ])
+        result = runner.invoke(
+            app,
+            [
+                "--lockfile",
+                str(lock),
+                "--project",
+                str(tmp_path),
+                "config",
+                "model",
+                "a.b",
+                "input",
+                "ns.tbl1",
+                "--filter",
+                "badfilter",
+            ],
+        )
         assert result.exit_code != 0
-        assert "No models" in result.output
+        assert "Expected key=value" in result.output

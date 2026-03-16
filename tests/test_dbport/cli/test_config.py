@@ -37,6 +37,7 @@ class TestConfigDefaultShow:
                 str(repo),
                 "config",
                 "default",
+                "model",
             ],
         )
         assert result.exit_code == 0
@@ -52,6 +53,7 @@ class TestConfigDefaultShow:
                 str(repo),
                 "config",
                 "default",
+                "model",
             ],
         )
         assert result.exit_code == 0
@@ -69,6 +71,7 @@ class TestConfigDefaultShow:
                 str(repo),
                 "config",
                 "default",
+                "model",
             ],
         )
         assert result.exit_code == 0
@@ -87,6 +90,7 @@ class TestConfigDefaultShow:
                 str(repo),
                 "config",
                 "default",
+                "model",
             ],
         )
         assert result.exit_code == 0
@@ -105,6 +109,7 @@ class TestConfigDefaultShow:
                 str(repo),
                 "config",
                 "default",
+                "model",
             ],
         )
         assert result.exit_code == 0
@@ -129,12 +134,14 @@ class TestConfigDefaultSet:
                 str(repo),
                 "config",
                 "default",
+                "model",
                 "b.y",
             ],
         )
         assert result.exit_code == 0
         assert "b.y" in result.output
 
+        # Verify lock file updated
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["default_model"] == "b.y"
 
@@ -148,6 +155,7 @@ class TestConfigDefaultSet:
                 str(repo),
                 "config",
                 "default",
+                "model",
                 "nonexistent.model",
             ],
         )
@@ -165,6 +173,7 @@ class TestConfigDefaultSet:
                 str(repo),
                 "config",
                 "default",
+                "model",
                 "a.x",
             ],
         )
@@ -193,6 +202,7 @@ class TestConfigDefaultSet:
                 str(repo),
                 "config",
                 "default",
+                "model",
                 "a.x",
             ],
         )
@@ -212,6 +222,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
             ],
         )
@@ -227,6 +238,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
             ],
         )
@@ -242,6 +254,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
                 "examples",
             ],
@@ -260,6 +273,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
                 "/examples/",
             ],
@@ -278,6 +292,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
             ],
         )
@@ -296,6 +311,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
                 "custom",
             ],
@@ -325,6 +341,7 @@ class TestConfigFolder:
                 "--project",
                 str(repo),
                 "config",
+                "default",
                 "folder",
                 "examples",
             ],
@@ -364,7 +381,8 @@ class TestConfigRunHook:
                 "--project",
                 str(repo),
                 "config",
-                "run-hook",
+                "default",
+                "hook",
             ],
         )
         assert result.exit_code == 0
@@ -379,11 +397,12 @@ class TestConfigRunHook:
                 "--project",
                 str(repo),
                 "config",
-                "run-hook",
+                "default",
+                "hook",
             ],
         )
         assert result.exit_code == 0
-        assert "No run hook" in result.output
+        assert "main.py" in result.output
 
     def test_show_json_output(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)
@@ -395,13 +414,32 @@ class TestConfigRunHook:
                 "--project",
                 str(repo),
                 "config",
-                "run-hook",
+                "default",
+                "hook",
             ],
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["data"]["run_hook"] == "sql/main.sql"
         assert data["data"]["model"] == "a.x"
+
+    def test_show_json_output_uses_main_py_default(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, self._LOCK_NO_HOOK)
+        result = runner.invoke(
+            app,
+            [
+                "--json",
+                "--project",
+                str(repo),
+                "config",
+                "default",
+                "hook",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["run_hook"] == "main.py"
 
     def test_set_hook(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)
@@ -412,13 +450,15 @@ class TestConfigRunHook:
                 "--project",
                 str(repo),
                 "config",
-                "run-hook",
+                "default",
+                "hook",
                 "sql/transform.sql",
             ],
         )
         assert result.exit_code == 0
         assert "sql/transform.sql" in result.output
 
+        # Verify persisted
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["models"]["a.x"]["run_hook"] == "sql/transform.sql"
 
@@ -432,7 +472,8 @@ class TestConfigRunHook:
                 "--project",
                 str(repo),
                 "config",
-                "run-hook",
+                "default",
+                "hook",
                 "run.py",
             ],
         )
@@ -457,6 +498,7 @@ class TestConfigRunHook:
         model_dir = repo / "models" / "x"
         model_dir.mkdir(parents=True)
 
+        # Set hook from repo root as if CWD is repo root
         old_cwd = os.getcwd()
         try:
             os.chdir(str(repo))
@@ -466,7 +508,8 @@ class TestConfigRunHook:
                     "--project",
                     str(repo),
                     "config",
-                    "run-hook",
+                    "default",
+                    "hook",
                     "models/x/sql/main.sql",
                 ],
             )
@@ -476,181 +519,6 @@ class TestConfigRunHook:
         assert result.exit_code == 0
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["models"]["a.x"]["run_hook"] == "sql/main.sql"
-
-
-class TestConfigUnknownKey:
-    def test_unknown_key_errors(self, tmp_path: Path):
-        repo = _setup_repo(tmp_path)
-        result = runner.invoke(
-            app,
-            [
-                "--project",
-                str(repo),
-                "config",
-                "nonexistent",
-            ],
-        )
-        assert result.exit_code != 0
-        assert "No such command" in result.output or "Usage" in result.output
-
-    def test_no_key_shows_help(self, tmp_path: Path):
-        repo = _setup_repo(tmp_path)
-        result = runner.invoke(
-            app,
-            [
-                "--project",
-                str(repo),
-                "config",
-            ],
-        )
-        assert result.exit_code in (0, 2)
-        assert "Usage" in result.output or "config" in result.output
-
-
-class TestConfigInfoBranches:
-    def test_info_no_schema_defined(self, tmp_path: Path):
-        repo = _setup_repo(tmp_path)
-        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
-        result = runner.invoke(
-            app,
-            [
-                "--project",
-                str(repo),
-                "config",
-                "info",
-            ],
-        )
-        assert result.exit_code == 0
-        assert "not defined" in result.output
-
-    def test_info_json_without_inputs_history(self, tmp_path: Path):
-        """JSON output without --inputs/--history should not include those keys."""
-        repo = _setup_repo(tmp_path)
-        _write_lock(
-            repo,
-            (
-                'default_model = "test.t1"\n\n'
-                '[models."test.t1"]\n'
-                'agency = "test"\n'
-                'dataset_id = "t1"\n'
-                'model_root = "models/t1"\n'
-                'duckdb_path = "models/t1/data/t1.duckdb"\n\n'
-                '[models."test.t1".schema]\n'
-                'ddl = "CREATE TABLE test.t1 (geo VARCHAR, value DOUBLE);"\n'
-                'source = "local"\n\n'
-                '[[models."test.t1".schema.columns]]\n'
-                'column_name = "geo"\n'
-                "column_pos = 0\n"
-                'sql_type = "VARCHAR"\n\n'
-                '[[models."test.t1".schema.columns]]\n'
-                'column_name = "value"\n'
-                "column_pos = 1\n"
-                'sql_type = "DOUBLE"\n\n'
-                '[[models."test.t1".inputs]]\n'
-                'table_address = "estat.table_a"\n'
-                "last_snapshot_id = 1234567890\n"
-                "last_snapshot_timestamp_ms = 1710000000000\n"
-                "rows_loaded = 5000\n\n"
-                '[[models."test.t1".inputs]]\n'
-                'table_address = "wifor.cl_nuts"\n'
-                "last_snapshot_id = 9876543210\n"
-                "last_snapshot_timestamp_ms = 1710100000000\n"
-                "rows_loaded = 200\n\n"
-                '[[models."test.t1".versions]]\n'
-                'version = "2026-03-01"\n'
-                "published_at = 2026-03-01T10:00:00Z\n"
-                "iceberg_snapshot_id = 1111111111\n"
-                "rows = 4800\n"
-                "completed = true\n\n"
-                '[[models."test.t1".versions]]\n'
-                'version = "2026-03-14"\n'
-                "published_at = 2026-03-14T12:00:00Z\n"
-                "iceberg_snapshot_id = 2222222222\n"
-                "rows = 5000\n"
-                "completed = true\n"
-            ),
-        )
-        result = runner.invoke(
-            app,
-            [
-                "--json",
-                "--project",
-                str(repo),
-                "config",
-                "info",
-            ],
-        )
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert "inputs" not in data["data"]
-        assert "versions" not in data["data"]
-        assert data["data"]["input_count"] == 2
-        assert data["data"]["version_count"] == 2
-
-    def test_info_history_flag_no_versions(self, tmp_path: Path):
-        """Cover branch: --history flag true but model has no versions."""
-        repo = _setup_repo(tmp_path)
-        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
-        result = runner.invoke(
-            app,
-            [
-                "--project",
-                str(repo),
-                "config",
-                "info",
-                "--history",
-            ],
-        )
-        assert result.exit_code == 0
-        # Should show summary but no history table (no versions to display)
-        assert "a.x" in result.output
-
-    def test_info_inputs_flag_no_inputs(self, tmp_path: Path):
-        """Cover branch: --inputs flag true but model has no inputs."""
-        repo = _setup_repo(tmp_path)
-        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
-        result = runner.invoke(
-            app,
-            [
-                "--project",
-                str(repo),
-                "config",
-                "info",
-                "--inputs",
-            ],
-        )
-        assert result.exit_code == 0
-        assert "a.x" in result.output
-
-    def test_info_inputs_without_timestamp(self, tmp_path: Path):
-        """Cover branch: input has no last_snapshot_timestamp_ms (ts is falsy)."""
-        repo = _setup_repo(tmp_path)
-        _write_lock(
-            repo,
-            (
-                'default_model = "a.x"\n\n'
-                '[models."a.x"]\n'
-                'agency = "a"\n'
-                'dataset_id = "x"\n'
-                'model_root = "."\n\n'
-                '[[models."a.x".inputs]]\n'
-                'table_address = "ns.tbl"\n'
-                "rows_loaded = 100\n"
-                # No last_snapshot_timestamp_ms
-            ),
-        )
-        result = runner.invoke(
-            app,
-            [
-                "--project",
-                str(repo),
-                "config",
-                "info",
-                "--inputs",
-            ],
-        )
-        assert result.exit_code == 0
-        assert "ns.tbl" in result.output
 
 
 # -- Lock content with schema columns for meta/attach tests ------------------
@@ -692,7 +560,7 @@ _LOCK_NO_SCHEMA = (
 )
 
 
-class TestConfigMeta:
+class TestConfigColumns:
     def test_show_columns_with_schema(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
@@ -702,7 +570,9 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -719,7 +589,9 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
             ],
         )
         assert result.exit_code == 0
@@ -735,7 +607,9 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
             ],
         )
         assert result.exit_code == 0
@@ -753,7 +627,10 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
+                "set",
                 "geo",
                 "--id",
                 "GEO_NUTS",
@@ -775,7 +652,10 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
+                "set",
                 "geo",
                 "--kind",
                 "hierarchical",
@@ -799,7 +679,10 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
+                "set",
                 "geo",
                 "--labels",
                 '{"en": "Geography", "de": "Geographie"}',
@@ -821,7 +704,10 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
+                "set",
                 "new_col",
                 "--id",
                 "NEW",
@@ -839,7 +725,10 @@ class TestConfigMeta:
                 "--project",
                 str(repo),
                 "config",
-                "meta",
+                "model",
+                "a.x",
+                "columns",
+                "set",
                 "geo",
                 "--id",
                 "GEO",
@@ -852,7 +741,7 @@ class TestConfigMeta:
         assert data["data"]["codelist_id"] == "GEO"
 
 
-class TestConfigAttach:
+class TestConfigColumnsAttach:
     def test_attach_table(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
@@ -862,9 +751,11 @@ class TestConfigAttach:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
+                "columns",
                 "attach",
                 "geo",
-                "--table",
                 "wifor.cl_nuts",
             ],
         )
@@ -885,9 +776,11 @@ class TestConfigAttach:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
+                "columns",
                 "attach",
                 "unknown_col",
-                "--table",
                 "ns.tbl",
             ],
         )
@@ -903,9 +796,11 @@ class TestConfigAttach:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
+                "columns",
                 "attach",
                 "geo",
-                "--table",
                 "wifor.cl_nuts",
             ],
         )
@@ -924,6 +819,9 @@ class TestConfigAttach:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
+                "columns",
                 "attach",
                 "geo",
             ],
@@ -941,6 +839,8 @@ class TestConfigVersion:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
                 "version",
             ],
         )
@@ -956,6 +856,8 @@ class TestConfigVersion:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
                 "version",
                 "2026-03-16",
             ],
@@ -975,6 +877,8 @@ class TestConfigVersion:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
                 "version",
                 "2026-03-16",
             ],
@@ -986,6 +890,8 @@ class TestConfigVersion:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
                 "version",
             ],
         )
@@ -1002,6 +908,8 @@ class TestConfigVersion:
                 "--project",
                 str(repo),
                 "config",
+                "model",
+                "a.x",
                 "version",
                 "2026-03-16",
             ],

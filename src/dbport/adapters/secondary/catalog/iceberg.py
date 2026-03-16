@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -157,8 +158,6 @@ class IcebergCatalogAdapter:
             if creds.s3_secret_key:
                 compute.execute(f"SET s3_secret_access_key='{_sql_escape(creds.s3_secret_key)}'")
 
-
-
         # REST catalog secret
         compute.execute(
             "CREATE OR REPLACE SECRET dbport_iceberg_catalog ("
@@ -261,6 +260,126 @@ class IcebergCatalogAdapter:
                 f"{[e.get('version') for e in versions_list]}"
             )
 
+    @staticmethod
+    def _build_row_filter(filters: dict[str, str] | None) -> Any:
+        if not filters:
+            return None
+
+        try:
+            from pyiceberg.expressions import And, EqualTo
+        except ImportError as exc:
+            raise RuntimeError(
+                "pyiceberg is required for input inspection. "
+                "Install it: pip install 'pyiceberg[s3fs]'"
+            ) from exc
+
+        expr: Any = None
+        for col, val in filters.items():
+            term = EqualTo(str(col), value=val)
+            expr = term if expr is None else And(expr, term)
+        return expr
+
+    @staticmethod
+    def _snapshot_timestamp_from_table(
+        iceberg_table: Any,
+        snapshot_id: int | None,
+    ) -> int | None:
+        if snapshot_id is None:
+            return None
+
+        snapshot: Any | None = None
+        try:
+            snapshot_by_id = getattr(iceberg_table, "snapshot_by_id", None)
+            if callable(snapshot_by_id):
+                snapshot = snapshot_by_id(snapshot_id)
+        except Exception:
+            snapshot = None
+
+        if snapshot is None:
+            try:
+                current_snapshot = getattr(iceberg_table, "current_snapshot", None)
+                if callable(current_snapshot):
+                    current = current_snapshot()
+                    if getattr(current, "snapshot_id", None) == snapshot_id:
+                        snapshot = current
+            except Exception:
+                snapshot = None
+
+        if snapshot is None:
+            return None
+
+        value = getattr(snapshot, "timestamp_ms", None)
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _inspect_input_row_count(
+        self,
+        iceberg_table: Any,
+        declaration: InputDeclaration,
+        *,
+        snapshot_id: int | None,
+    ) -> int:
+        estimated_total = self._estimate_ingest_total_rows(
+            iceberg_table,
+            snapshot_id=snapshot_id,
+            has_filter=bool(declaration.filters),
+        )
+        if estimated_total is not None:
+            return int(estimated_total)
+
+        row_filter = self._build_row_filter(declaration.filters)
+        scan_kwargs: dict[str, Any] = {}
+        if snapshot_id is not None:
+            scan_kwargs["snapshot_id"] = snapshot_id
+        if row_filter is not None:
+            scan_kwargs["row_filter"] = row_filter
+
+        scan = iceberg_table.scan(**scan_kwargs)
+        reader = scan.to_arrow_batch_reader()
+        return sum(batch.num_rows for batch in reader)
+
+    def inspect_input(
+        self,
+        declaration: InputDeclaration,
+    ) -> IngestRecord:
+        from ....domain.entities.input import IngestRecord
+
+        catalog = self._get_catalog()
+        ns, name = self._parse_address(declaration.table_address)
+        iceberg_table = catalog.load_table((ns, name))
+
+        resolved_version, resolved_snap_id = self.resolve_input_snapshot(
+            declaration.table_address,
+            declaration.version,
+        )
+
+        if declaration.version is not None and resolved_version is None:
+            raise ValueError(
+                f"Version {declaration.version!r} cannot be resolved for "
+                f"{declaration.table_address!r} because the table has no dbport metadata."
+            )
+
+        snap_ts_ms = self._snapshot_timestamp_from_table(iceberg_table, resolved_snap_id)
+        if resolved_snap_id is None:
+            resolved_snap_id, snap_ts_ms = self.current_snapshot(declaration.table_address)
+
+        rows_loaded = self._inspect_input_row_count(
+            iceberg_table,
+            declaration,
+            snapshot_id=resolved_snap_id,
+        )
+
+        return IngestRecord(
+            table_address=declaration.table_address,
+            last_snapshot_id=resolved_snap_id,
+            last_snapshot_timestamp_ms=snap_ts_ms,
+            rows_loaded=rows_loaded,
+            filters=declaration.filters,
+            version=resolved_version,
+        )
+
     _MAX_INGEST_RETRIES = 3
     _INGEST_RETRY_BACKOFF = (2, 4, 8)  # seconds
 
@@ -270,16 +389,23 @@ class IcebergCatalogAdapter:
         msg = str(exc).lower()
         # S3 key/auth errors that may be transient (token refresh, eventual consistency)
         for pattern in (
-            "invalidkey", "invalid key",
-            "nosuchkey", "no such key",
+            "invalidkey",
+            "invalid key",
+            "nosuchkey",
+            "no such key",
             "invalidaccesskeyid",
-            "requesttimeout", "request timeout",
+            "requesttimeout",
+            "request timeout",
             "slowdown",
-            "serviceunavailable", "service unavailable",
-            "internalerror", "internal error",
-            "connection reset", "connection aborted",
+            "serviceunavailable",
+            "service unavailable",
+            "internalerror",
+            "internal error",
+            "connection reset",
+            "connection aborted",
             "broken pipe",
-            "ioerror", "oserror",
+            "ioerror",
+            "oserror",
         ):
             if pattern in msg:
                 return True
@@ -308,13 +434,7 @@ class IcebergCatalogAdapter:
         """
         import time
 
-        try:
-            from pyiceberg.expressions import And, EqualTo
-        except ImportError as exc:
-            raise RuntimeError(
-                "pyiceberg is required for Arrow ingest fallback. "
-                "Install it: pip install 'pyiceberg[s3fs]'"
-            ) from exc
+        import pyarrow as pa
 
         from ....infrastructure.progress import progress_callback
 
@@ -322,13 +442,7 @@ class IcebergCatalogAdapter:
         ns, name = self._parse_address(declaration.table_address)
 
         # Build pyiceberg row filter from filters dict
-        row_filter: Any = None
-        if declaration.filters:
-            expr: Any = None
-            for col, val in declaration.filters.items():
-                term = EqualTo(str(col), value=val)
-                expr = term if expr is None else And(expr, term)
-            row_filter = expr
+        row_filter: Any = self._build_row_filter(declaration.filters)
 
         # Build scan kwargs — pin to snapshot when known (Fix A)
         scan_kwargs: dict[str, Any] = {}
@@ -345,31 +459,43 @@ class IcebergCatalogAdapter:
             try:
                 iceberg_table = catalog.load_table((ns, name))
                 scan = iceberg_table.scan(**scan_kwargs)
+                estimated_total = self._estimate_ingest_total_rows(
+                    iceberg_table,
+                    snapshot_id=snapshot_id,
+                    has_filter=(row_filter is not None),
+                )
 
                 if cb:
-                    cb.started(f"Loading {declaration.table_address}", total=None)
+                    cb.started(
+                        f"Loading {declaration.table_address}",
+                        total=estimated_total,
+                    )
 
                 reader = scan.to_arrow_batch_reader()
+                counted_reader = pa.RecordBatchReader.from_batches(
+                    reader.schema,
+                    self._iter_batches_with_progress(reader, cb),
+                )
                 compute.execute(f"CREATE SCHEMA IF NOT EXISTS {ns}")
-                compute.register_arrow("_dbport_ingest_tmp", reader)
+                compute.register_arrow("_dbport_ingest_tmp", counted_reader)
                 try:
                     compute.execute(
-                        f"CREATE OR REPLACE TABLE {ns}.{name} AS "
-                        f"SELECT * FROM _dbport_ingest_tmp"
+                        f"CREATE OR REPLACE TABLE {ns}.{name} AS SELECT * FROM _dbport_ingest_tmp"
                     )
                 finally:
                     compute.unregister_arrow("_dbport_ingest_tmp")
 
-                row_count = compute.execute(
-                    f"SELECT COUNT(*) FROM {ns}.{name}"
-                ).fetchone()[0]
+                row_count = compute.execute(f"SELECT COUNT(*) FROM {ns}.{name}").fetchone()[0]
 
                 if cb:
                     cb.finished(f"Loaded {declaration.table_address} ({row_count:,} rows)")
 
                 logger.debug(
                     "Arrow ingest: %d rows into %s.%s (snapshot=%s)",
-                    row_count, ns, name, snapshot_id,
+                    row_count,
+                    ns,
+                    name,
+                    snapshot_id,
                 )
                 return int(row_count)
 
@@ -391,14 +517,96 @@ class IcebergCatalogAdapter:
                 elif cb:
                     cb.finished()
                 logger.warning(
-                    "Transient error loading %s (attempt %d/%d): %s; "
-                    "retrying in %ds",
-                    declaration.table_address, attempt,
-                    self._MAX_INGEST_RETRIES, exc, backoff,
+                    "Transient error loading %s (attempt %d/%d): %s; retrying in %ds",
+                    declaration.table_address,
+                    attempt,
+                    self._MAX_INGEST_RETRIES,
+                    exc,
+                    backoff,
                 )
                 time.sleep(backoff)
 
         raise last_exc  # type: ignore[misc]  # pragma: no cover — unreachable, satisfies type checker
+
+    @staticmethod
+    def _iter_batches_with_progress(reader: Any, cb: Any):
+        """Yield batches while advancing the active progress callback."""
+        for batch in reader:
+            if cb is not None:
+                cb.update(batch.num_rows)
+            yield batch
+
+    @staticmethod
+    def _snapshot_summary(snapshot: Any) -> dict[str, Any]:
+        """Return the best-effort summary dict for a pyiceberg snapshot object."""
+        summary = getattr(snapshot, "summary", None)
+        if callable(summary):
+            try:
+                summary = summary()
+            except Exception:
+                summary = None
+        if isinstance(summary, Mapping):
+            result: dict[str, Any] = {}
+            try:
+                for item in summary:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        key, value = item
+                    else:
+                        key = item
+                        value = summary[key]
+                    if isinstance(key, str):
+                        result[key] = value
+            except Exception:
+                return {}
+            return result
+        return {}
+
+    def _estimate_ingest_total_rows(
+        self,
+        iceberg_table: Any,
+        *,
+        snapshot_id: int | None,
+        has_filter: bool,
+    ) -> int | None:
+        """Estimate row count for an ingest progress bar from snapshot metadata.
+
+        Returns ``None`` when a cheap estimate is not available, for example
+        when filters are applied or the snapshot summary does not expose a row
+        count field.
+        """
+        if has_filter:
+            return None
+
+        snapshot: Any | None = None
+        try:
+            if snapshot_id is not None:
+                snapshot_by_id = getattr(iceberg_table, "snapshot_by_id", None)
+                if callable(snapshot_by_id):
+                    snapshot = snapshot_by_id(snapshot_id)
+        except Exception:
+            snapshot = None
+
+        if snapshot is None:
+            try:
+                current_snapshot = getattr(iceberg_table, "current_snapshot", None)
+                if callable(current_snapshot):
+                    snapshot = current_snapshot()
+            except Exception:
+                snapshot = None
+
+        if snapshot is None:
+            return None
+
+        summary = self._snapshot_summary(snapshot)
+        for key in ("total-records", "added-records"):
+            value = summary.get(key)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+        return None
 
     def ingest_into_compute(
         self,
@@ -474,7 +682,10 @@ class IcebergCatalogAdapter:
     _CHECKPOINT_RETRIES = 3
 
     def _write_checkpoint_with_retry(
-        self, ns: str, name: str, properties: dict[str, str],
+        self,
+        ns: str,
+        name: str,
+        properties: dict[str, str],
     ) -> None:
         """Write completion checkpoint properties with retry on transient failures."""
         import time
@@ -487,20 +698,27 @@ class IcebergCatalogAdapter:
                 return
             except Exception as exc:
                 if attempt < self._CHECKPOINT_RETRIES:
-                    delay = 2 ** attempt
+                    delay = 2**attempt
                     logger.warning(
                         "Checkpoint write attempt %d/%d failed: %s (retrying in %ds)",
-                        attempt, self._CHECKPOINT_RETRIES, exc, delay,
+                        attempt,
+                        self._CHECKPOINT_RETRIES,
+                        exc,
+                        delay,
                     )
                     time.sleep(delay)
                 else:
                     logger.error(
                         "Checkpoint write failed after %d attempts: %s",
-                        self._CHECKPOINT_RETRIES, exc,
+                        self._CHECKPOINT_RETRIES,
+                        exc,
                     )
 
     def _write_via_duckdb(
-        self, table_address: str, compute: Any, overwrite: bool,
+        self,
+        table_address: str,
+        compute: Any,
+        overwrite: bool,
     ) -> None:
         """Primary write path: DuckDB iceberg extension. Data never leaves DuckDB."""
         self._ensure_warehouse_attached(compute)
@@ -521,14 +739,14 @@ class IcebergCatalogAdapter:
                     logger.error(
                         "CREATE failed after DROP for %s — table was dropped "
                         "but could not be recreated: %s",
-                        table_address, exc,
+                        table_address,
+                        exc,
                     )
                 raise
         else:
             try:
                 compute.execute(
-                    f"INSERT INTO dbport_warehouse.{table_address} "
-                    f"SELECT * FROM {table_address}"
+                    f"INSERT INTO dbport_warehouse.{table_address} SELECT * FROM {table_address}"
                 )
             except Exception as exc:
                 # Only fall through to CREATE if this looks like a missing-table error.
@@ -579,7 +797,8 @@ class IcebergCatalogAdapter:
 
         # Get Arrow schema from DuckDB (zero rows)
         schema_reader = compute.to_arrow_batches(
-            f"SELECT * FROM {table_address} LIMIT 0", batch_size=1,
+            f"SELECT * FROM {table_address} LIMIT 0",
+            batch_size=1,
         )
         arrow_schema = schema_reader.schema
 
@@ -598,7 +817,8 @@ class IcebergCatalogAdapter:
                 iceberg_table = catalog.load_table((ns, name))
             except Exception:
                 iceberg_table = catalog.create_table(
-                    f"{ns}.{name}", schema=arrow_schema,
+                    f"{ns}.{name}",
+                    schema=arrow_schema,
                 )
 
             # Read checkpoint from remote
@@ -641,10 +861,12 @@ class IcebergCatalogAdapter:
                     # Atomic: data append + checkpoint in one transaction
                     tx = iceberg_table.transaction()
                     tx.append(arrow_chunk)
-                    tx.set_properties({
-                        batches_prop: str(batches_total + 1),
-                        rows_prop: str(rows_total + batch.num_rows),
-                    })
+                    tx.set_properties(
+                        {
+                            batches_prop: str(batches_total + 1),
+                            rows_prop: str(rows_total + batch.num_rows),
+                        }
+                    )
                     tx.commit_transaction()
 
                     batches_total += 1
@@ -656,7 +878,8 @@ class IcebergCatalogAdapter:
                     if batches_total % 20 == 0:
                         logger.debug(
                             "Streaming write progress: %d/%d rows (%.0f%%)",
-                            rows_total, total_rows,
+                            rows_total,
+                            total_rows,
                             100 * rows_total / total_rows if total_rows else 0,
                         )
 
@@ -666,7 +889,8 @@ class IcebergCatalogAdapter:
                         had_conflict = True
                         logger.warning(
                             "Commit conflict (attempt %d/%d); retrying from checkpoint",
-                            attempt, self._MAX_COMMIT_CONFLICT_RETRIES,
+                            attempt,
+                            self._MAX_COMMIT_CONFLICT_RETRIES,
                         )
                         break
                     raise
@@ -682,17 +906,19 @@ class IcebergCatalogAdapter:
 
             # Mark completed
             self._write_checkpoint_with_retry(
-                ns, name, {completed_prop: "1", rows_prop: str(rows_total)},
+                ns,
+                name,
+                {completed_prop: "1", rows_prop: str(rows_total)},
             )
 
             if cb:
-                cb.finished(
-                    f"Published {table_address} ({rows_total:,} rows)"
-                )
+                cb.finished(f"Published {table_address} ({rows_total:,} rows)")
 
             logger.debug(
                 "Streaming write complete: %d rows in %d batches (%s)",
-                rows_total, batches_total, table_address,
+                rows_total,
+                batches_total,
+                table_address,
             )
             break  # Done
 
@@ -736,12 +962,15 @@ class IcebergCatalogAdapter:
                         cb.log(f"Version {version_key} already completed; skipping")
                     logger.info(
                         "Version %s already completed; skipping (table=%s rows=%d)",
-                        version_key, table_address, committed_rows,
+                        version_key,
+                        table_address,
+                        committed_rows,
                     )
                     snap_id, snap_ts_ms = self.current_snapshot(table_address)
                     snap_ts = (
                         datetime.fromtimestamp(snap_ts_ms / 1000, tz=UTC)
-                        if snap_ts_ms is not None else None
+                        if snap_ts_ms is not None
+                        else None
                     )
                     return VersionRecord(
                         version=version.version,
@@ -755,25 +984,26 @@ class IcebergCatalogAdapter:
             except Exception:
                 pass  # Table doesn't exist yet — proceed with write
 
-        row_count = compute.execute(
-            f"SELECT COUNT(*) FROM {table_address}"
-        ).fetchone()[0]
+        row_count = compute.execute(f"SELECT COUNT(*) FROM {table_address}").fetchone()[0]
 
         cb = progress_callback.get(None)
+
+        if overwrite:
+            logger.info(
+                "Using streaming Arrow fallback for refresh publish (table=%s)",
+                table_address,
+            )
+            self._duckdb_writes_supported = False
 
         # --- Primary: DuckDB iceberg extension ---
         if self._duckdb_writes_supported is not False:
             if cb:
-                cb.started(
-                    f"Publishing {table_address} ({row_count:,} rows)", total=None
-                )
+                cb.started(f"Publishing {table_address} ({row_count:,} rows)", total=None)
             try:
                 self._write_via_duckdb(table_address, compute, overwrite)
                 self._duckdb_writes_supported = True
                 if cb:
-                    cb.finished(
-                        f"Published {table_address} ({row_count:,} rows)"
-                    )
+                    cb.finished(f"Published {table_address} ({row_count:,} rows)")
             except Exception as exc:
                 if self._is_duckdb_write_unsupported(exc):
                     if cb:
@@ -796,19 +1026,27 @@ class IcebergCatalogAdapter:
         # --- Fallback: streaming Arrow via pyiceberg ---
         if self._duckdb_writes_supported is False:
             self._write_via_streaming_arrow(
-                table_address, version, compute, overwrite, row_count,
+                table_address,
+                version,
+                compute,
+                overwrite,
+                row_count,
             )
 
         logger.debug(
             "write_versioned: done (table=%s version=%s rows=%d)",
-            table_address, version_key, row_count,
+            table_address,
+            version_key,
+            row_count,
         )
 
         # Mark completed (DuckDB path only; fallback marks its own)
         if self._duckdb_writes_supported is True:
             ns, name = self._parse_address(table_address)
             self._write_checkpoint_with_retry(
-                ns, name, {completed_prop: "1", rows_prop: str(row_count)},
+                ns,
+                name,
+                {completed_prop: "1", rows_prop: str(row_count)},
             )
 
         snap_id, snap_ts_ms = self.current_snapshot(table_address)
@@ -826,9 +1064,7 @@ class IcebergCatalogAdapter:
             completed=True,
         )
 
-    def get_table_property(
-        self, table_address: str, key: str
-    ) -> str | None:
+    def get_table_property(self, table_address: str, key: str) -> str | None:
         """Return a single table property value, or None if not set."""
         catalog = self._get_catalog()
         ns, name = self._parse_address(table_address)
@@ -838,18 +1074,14 @@ class IcebergCatalogAdapter:
         except Exception:
             return None
 
-    def update_table_properties(
-        self, table_address: str, properties: dict[str, str]
-    ) -> None:
+    def update_table_properties(self, table_address: str, properties: dict[str, str]) -> None:
         """Merge key/value properties into the Iceberg table metadata."""
         catalog = self._get_catalog()
         ns, name = self._parse_address(table_address)
         table = catalog.load_table((ns, name))
         _write_table_properties(table, properties)
 
-    def update_column_docs(
-        self, table_address: str, column_docs: dict[str, str]
-    ) -> None:
+    def update_column_docs(self, table_address: str, column_docs: dict[str, str]) -> None:
         """Write column doc strings to the Iceberg table schema."""
         catalog = self._get_catalog()
         ns, name = self._parse_address(table_address)

@@ -1,4 +1,4 @@
-"""Tests for dbp run command (full workflow: sync, execute, publish)."""
+"""Tests for dbp model run command."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
-run_hook = "sql/main.sql"
+run_hook = "main.py"
 version = "2026-03-15"
 """
 
@@ -45,7 +45,7 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
-run_hook = "sql/main.sql"
+run_hook = "main.py"
 """
 
 _MULTI_MODEL_LOCK = """
@@ -54,7 +54,7 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
-run_hook = "sql/main.sql"
+run_hook = "main.py"
 version = "2026-03-15"
 
 [models."c.d"]
@@ -72,7 +72,7 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
-run_hook = "sql/main.sql"
+run_hook = "main.py"
 
 [[models."a.b".versions]]
 version = "2026-03-14"
@@ -84,11 +84,12 @@ completed = true
 """
 
 
-def _mock_dbport(run_hook="sql/main.sql"):
+def _mock_dbport(run_hook="main.py"):
     mock_port = MagicMock()
     mock_port.__enter__ = MagicMock(return_value=mock_port)
     mock_port.__exit__ = MagicMock(return_value=False)
     mock_port.run_hook = run_hook
+    mock_port._dataset = type("D", (), {"model_root": "."})()
     return mock_port
 
 
@@ -96,7 +97,9 @@ class TestRunCommand:
     def test_run_no_hook_defaults_to_main_py(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_NO_HOOK)
-        mp = _mock_dbport(run_hook=None)
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp = _mock_dbport(run_hook="main.py")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -106,11 +109,14 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                 ],
             )
-        assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+        assert result.exit_code == 0, result.output
+        assert "main.py" in result.output
+        mp.execute.assert_called_once_with("SELECT 1")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_no_version_fails(self, tmp_path: Path):
         """When no version is configured or in history, run fails early."""
@@ -126,21 +132,28 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                 ],
             )
         assert result.exit_code != 0
         assert "No version available" in result.output
+        assert "dbp config model a.b" in result.output
+        assert "version" in result.output
+        assert "<version>" in result.output
 
     def test_run_help(self):
-        result = runner.invoke(app, ["run", "--help"])
+        result = runner.invoke(app, ["model", "run", "--help"])
         assert result.exit_code == 0
-        assert "workflow" in result.output.lower()
+        assert "publish" in result.output.lower()
+        assert "--target" in result.output
 
     def test_run_success(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -150,13 +163,43 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                 ],
             )
         assert result.exit_code == 0
         assert "Executed" in result.output
-        # Auto-resolves version from config
-        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+        mp.execute.assert_called_once_with("SELECT 1")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
+
+    def test_run_python_hook_callable_uses_injected_port(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+        (tmp_path / "main.py").write_text(
+            "def run(port):\n"
+            "    port.execute('SELECT 2')\n\n"
+            "if __name__ == '__main__':\n"
+            "    raise RuntimeError('should not execute standalone block')\n",
+            encoding="utf-8",
+        )
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile",
+                    str(lock),
+                    "--project",
+                    str(tmp_path),
+                    "model",
+                    "run",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        mp.execute.assert_called_once_with("SELECT 2")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_with_model_positional_arg(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -171,6 +214,7 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "c.d",
                 ],
@@ -185,6 +229,8 @@ class TestRunCommand:
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -194,18 +240,21 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--version",
                     "2026-03-15",
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_with_timing(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -215,6 +264,7 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--timing",
                 ],
@@ -226,6 +276,8 @@ class TestRunCommand:
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -236,13 +288,14 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                 ],
             )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["ok"] is True
-        assert data["data"]["run_hook"] == "sql/main.sql"
+        assert data["data"]["target"] == "main.py"
         assert data["data"]["model"] == "a.b"
         assert "elapsed_seconds" in data["data"]
 
@@ -254,6 +307,7 @@ class TestRunCommand:
             [
                 "--lockfile",
                 str(lock),
+                "model",
                 "run",
             ],
         )
@@ -264,6 +318,8 @@ class TestRunCommand:
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -273,6 +329,7 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--version",
                     "2026-03-15",
@@ -280,12 +337,14 @@ class TestRunCommand:
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode="dry")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="dry")
 
     def test_run_refresh_mode(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -295,6 +354,7 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--version",
                     "2026-03-15",
@@ -302,12 +362,14 @@ class TestRunCommand:
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode="refresh")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
 
     def test_run_refresh_without_version_uses_latest(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -317,17 +379,20 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--refresh",
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode="refresh")
+        mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
 
     def test_run_json_output_with_version(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -338,6 +403,7 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--version",
                     "2026-03-15",
@@ -362,6 +428,7 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "c.d",
                 ],
@@ -375,6 +442,8 @@ class TestRunCommand:
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -384,17 +453,20 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_falls_back_to_latest_completed_version(self, tmp_path: Path):
         """Without config version, falls back to latest completed version."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -404,17 +476,20 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+        mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_explicit_version_overrides_config(self, tmp_path: Path):
         """--version flag takes precedence over config version."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
+        (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
+        mp._dataset = type("D", (), {"model_root": str(tmp_path)})()
 
         with patch(_PATCH_TARGET, return_value=mp):
             result = runner.invoke(
@@ -424,10 +499,11 @@ class TestRunCommand:
                     str(lock),
                     "--project",
                     str(tmp_path),
+                    "model",
                     "run",
                     "--version",
                     "2026-04-01",
                 ],
             )
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version="2026-04-01", mode=None)
+        mp.publish.assert_called_once_with(version="2026-04-01", mode=None)

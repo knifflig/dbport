@@ -40,7 +40,10 @@ def _version_callback(value: bool) -> None:
 def main_callback(
     ctx: typer.Context,
     version: bool = typer.Option(
-        False, "--version", callback=_version_callback, is_eager=True,
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
         help="Show version and exit.",
     ),
     project: str | None = ProjectOption,
@@ -73,15 +76,10 @@ def get_cli_ctx(ctx: typer.Context) -> CliContext:
 
 # -- Register commands --------------------------------------------------------
 
-from .commands import config, execute, init, load, publish, run, schema, status, sync  # noqa: E402
+from .commands import config, init, model, project, status  # noqa: E402
 
 app.command(name="init")(init.init_cmd)
-app.command(name="sync")(sync.sync_cmd)
-app.command(name="status")(status.status_cmd)
-app.command(name="schema")(schema.schema_cmd)
-app.command(name="load")(load.load_cmd)
-app.command(name="exec")(execute.exec_cmd)
-app.command(name="execute", hidden=True)(execute.exec_cmd)
-app.command(name="run")(run.run_cmd)
-app.command(name="publish")(publish.publish_cmd)
+app.add_typer(status.status_app, name="status")
+app.add_typer(model.model_app, name="model")
+app.add_typer(project.project_app, name="project")
 app.add_typer(config.config_app, name="config")

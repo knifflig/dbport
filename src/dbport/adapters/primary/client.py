@@ -54,6 +54,7 @@ def _caller_dir(stack_depth: int = 2) -> Path:
     stack_depth=2: frame 0 = _caller_dir, frame 1 = __init__, frame 2 = user code.
     """
     import inspect
+
     frame = inspect.stack()[stack_depth]
     return Path(frame.filename).resolve().parent
 
@@ -85,6 +86,7 @@ class DBPort:
         duckdb_path: str | None = None,
         lock_path: str | None = None,
         model_root: str | None = None,
+        load_inputs_on_init: bool = True,
     ) -> None:
         setup_logging()
 
@@ -172,14 +174,21 @@ class DBPort:
         # Public column registry
         self.columns = ColumnRegistry(self._lock)
 
-        # Auto-detect schema from warehouse if table exists
-        self._auto_detect_schema()
+        from ...infrastructure.progress import progress_phase
 
-        # Sync local DuckDB state with lock + warehouse
-        self._sync_local_state()
+        with progress_phase("sync", title="Sync", icon="🔄"):
+            # Auto-detect schema from warehouse if table exists
+            self._auto_detect_schema()
 
-        # Update last_fetched_at on every run (fire-and-forget)
-        self._update_last_fetched()
+            # Sync local DuckDB output state with lock + warehouse
+            self._sync_output_state()
+
+            # Update last_fetched_at on every run (fire-and-forget)
+            self._update_last_fetched()
+
+        if load_inputs_on_init:
+            with progress_phase("load", title="Load", icon="📥"):
+                self._load_inputs()
 
         logger.debug(
             "Ready: %s (model_root=%s, duckdb=%s)",
@@ -196,11 +205,9 @@ class DBPort:
         """Declare the output table schema from a DDL string or .sql file path."""
         from ...application.services.schema import DefineSchemaService
 
-        svc = DefineSchemaService(
-            self._compute,
-            self._lock,
-            catalog=self._catalog,
-            table_address=self._dataset.table_address,
+        svc = DefineSchemaService(self._compute, self._lock).with_catalog(
+            self._catalog,
+            self._dataset.table_address,
         )
         svc.execute(ddl_or_path, base_dir=self._dataset.model_root)
         self.columns._refresh()
@@ -211,7 +218,7 @@ class DBPort:
         *,
         filters: dict[str, str] | None = None,
         version: str | None = None,
-    ) -> None:
+    ) -> IngestRecord:
         """Load an Iceberg table into DuckDB.
 
         For tables published by DBPort, the load is automatically
@@ -234,7 +241,23 @@ class DBPort:
         declaration = InputDeclaration(
             table_address=table_address, filters=filters, version=version
         )
-        svc.execute(declaration)
+        return svc.execute(declaration)
+
+    def configure_input(
+        self,
+        table_address: str,
+        *,
+        filters: dict[str, str] | None = None,
+        version: str | None = None,
+    ) -> IngestRecord:
+        """Validate and persist an input declaration without loading it."""
+        from ...application.services.ingest import IngestService
+
+        svc = IngestService(self._catalog, self._compute, self._lock)
+        declaration = InputDeclaration(
+            table_address=table_address, filters=filters, version=version
+        )
+        return svc.configure(declaration)
 
     def execute(self, sql_or_path: str) -> None:
         """Run a SQL string or .sql file in DuckDB."""
@@ -262,8 +285,10 @@ class DBPort:
 
     @property
     def run_hook(self) -> str | None:
-        """Return the configured run hook path, or None if not set."""
-        return self._lock.read_run_hook()
+        """Return the configured run hook path, defaulting to main.py."""
+        from ...application.services.run import resolve_run_hook
+
+        return resolve_run_hook(self._lock, self._dataset.model_root)
 
     def publish(
         self,
@@ -318,18 +343,24 @@ class DBPort:
         duckdb_path: str,
     ) -> ILockStore:
         from ...adapters.secondary.lock.toml import TomlLockAdapter
-        return TomlLockAdapter(path, model_key=model_key, model_root=model_root, duckdb_path=duckdb_path)
+
+        return TomlLockAdapter(
+            path, model_key=model_key, model_root=model_root, duckdb_path=duckdb_path
+        )
 
     def _make_compute(self, path: Path) -> ICompute:
         from ...adapters.secondary.compute.duckdb import DuckDBComputeAdapter
+
         return DuckDBComputeAdapter(path)
 
     def _make_catalog(self, creds: WarehouseCreds) -> ICatalog:
         from ...adapters.secondary.catalog.iceberg import IcebergCatalogAdapter
+
         return IcebergCatalogAdapter(creds)
 
     def _make_metadata(self) -> IMetadataStore:
         from ...adapters.secondary.metadata.materialize import MetadataAdapter
+
         return MetadataAdapter()
 
     def _auto_detect_schema(self) -> None:
@@ -360,15 +391,25 @@ class DBPort:
                 cb.finished("Schema detection skipped")
             logger.debug("Auto-schema detection skipped: %s", exc)
 
-    def _sync_local_state(self) -> None:
-        """Sync DuckDB with lock file: output table + inputs."""
+    def _sync_output_state(self) -> None:
+        """Sync DuckDB output table with lock file state."""
         from ...application.services.sync import SyncService
 
         try:
             svc = SyncService(self._catalog, self._compute, self._lock)
-            svc.execute(self._dataset.table_address)
+            svc.sync_output_table(self._dataset.table_address)
         except Exception as exc:
             logger.debug("Local sync skipped: %s", exc)
+
+    def _load_inputs(self) -> None:
+        """Load configured inputs into DuckDB."""
+        from ...application.services.sync import SyncService
+
+        try:
+            svc = SyncService(self._catalog, self._compute, self._lock)
+            svc.sync_inputs()
+        except Exception as exc:
+            logger.debug("Input sync skipped: %s", exc)
 
     def _update_last_fetched(self) -> None:
         from ...application.services.fetch import FetchService

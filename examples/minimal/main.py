@@ -1,17 +1,14 @@
-"""Minimal DBPort example — demonstrates the full Python client API.
+"""Minimal DBPort example and CLI-safe model hook for table1.
 
-Loads inputs from the warehouse (with filters), configures column metadata
-and codelist attachments, then runs multi-step transforms.
-
-Works both as a standalone script (``python main.py``) and as a CLI
-run hook via ``def run(port)``.
+When executed through the CLI, DBPort injects an active ``port`` and calls
+``run(port)``. When executed directly as a Python script, this file opens its
+own DBPort instance.
 """
 
 from dbport import DBPort
 
 
-def run(port):
-    """Model logic — called by both CLI and standalone execution."""
+def run(port: DBPort) -> None:
     # 1. Ensure target schema exists in DuckDB
     port.execute("CREATE SCHEMA IF NOT EXISTS test")
 
@@ -37,4 +34,7 @@ def run(port):
 if __name__ == "__main__":
     with DBPort(agency="test", dataset_id="table1") as port:
         run(port)
+        # Standalone client usage can still own publish explicitly.
+        port.publish(version="2026-03-16", params={"wstatus": "EMP"}, mode="dry")
         port.publish(version="2026-03-16", params={"wstatus": "EMP"})
+        port.publish(version="2026-03-16", params={"wstatus": "EMP"}, mode="refresh")

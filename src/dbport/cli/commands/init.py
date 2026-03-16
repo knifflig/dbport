@@ -8,13 +8,7 @@ import typer
 
 from ..context import read_lock_models
 from ..errors import cli_error_handler
-from ..render import (
-    cli_progress,
-    print_error,
-    print_info,
-    print_json,
-    print_success,
-)
+from ..render import cli_progress, print_error, print_info, print_json, print_success
 
 _SQL_TEMPLATE = """\
 -- Output schema for {dataset}
@@ -28,45 +22,44 @@ CREATE OR REPLACE TABLE {agency}.{dataset} (
 
 _MAIN_SQL_TEMPLATE = """\
 -- Main transform for {dataset}
--- This file is executed by `dbp exec`.
+-- This file is executed from `main.py` via `dbp run` or `dbp exec`.
 
 -- Example:
 -- INSERT INTO {agency}.{dataset}
 -- SELECT * FROM staging;
 """
 
-_RUN_PY_TEMPLATE = '''\
-"""Custom model logic for {dataset}."""
+_MAIN_PY_TEMPLATE = '''\
+"""Default model entrypoint for {dataset}."""
 
 from dbport import DBPort
 
 
-def main() -> None:
-    with DBPort(agency="{agency}", dataset_id="{dataset}") as port:
-        port.schema("sql/create_output.sql")
-        # port.load("namespace.table_name")
-        port.execute("sql/main.sql")
-        # port.publish(version="YYYY-MM-DD")
+def run(port) -> None:
+    """Execute the model with an active DBPort instance."""
+    port.schema("sql/create_output.sql")
+    # port.load("namespace.table_name")
+    port.execute("sql/main.sql")
 
 
 if __name__ == "__main__":
-    main()
+    with DBPort(agency="{agency}", dataset_id="{dataset}") as port:
+        run(port)
 '''
 
 
 def init_cmd(
     ctx: typer.Context,
-    name: str | None = typer.Argument(None, help="Model name (agency.dataset or project name)."),
-    template: str = typer.Option("sql", "--template", help="Template type: sql, python, or hybrid."),
+    name: str | None = typer.Argument(None, help="Model key (agency.dataset) or new project name."),
+    template: str = typer.Option(
+        "sql", "--template", help="Template type: sql, python, or hybrid."
+    ),
     dataset: str | None = typer.Option(None, "--dataset", help="Output dataset ID."),
     agency: str | None = typer.Option(None, "--agency", help="Agency identifier."),
     path: str | None = typer.Option(None, "--path", help="Target directory (default: ./<name>)."),
     force: bool = typer.Option(False, "--force", help="Overwrite existing files."),
 ) -> None:
-    """Scaffold a new model and register it in the lock file.
-
-    If the model already exists in the lock file, use 'dbp sync' instead.
-    """
+    """Scaffold a new model and register it in the lock file."""
     from ..main import get_cli_ctx
 
     cli_ctx = get_cli_ctx(ctx)
@@ -75,17 +68,16 @@ def init_cmd(
         if name is None and not agency and not dataset and not path:
             print_error(
                 "No model name specified. Usage: dbp init <name>\n"
-                "To sync existing models, use: dbp sync"
+                "To synchronize existing models, use: dbp model sync or dbp project sync"
             )
             raise typer.Exit(1)
 
-        # Check if model already exists in lock file
         models = read_lock_models(cli_ctx.lockfile_path)
         model_key = _resolve_model_key(name, agency, dataset)
-        if model_key and model_key in models and not force:
+        if model_key and model_key in models:
             print_error(
                 f"Model '{model_key}' already exists in {cli_ctx.lockfile_path}. "
-                "Use 'dbp sync' to update it, or --force to re-scaffold."
+                "Use 'dbp model sync' to update it."
             )
             raise typer.Exit(1)
 
@@ -93,7 +85,9 @@ def init_cmd(
 
 
 def _resolve_model_key(
-    name: str | None, agency: str | None, dataset: str | None,
+    name: str | None,
+    agency: str | None,
+    dataset: str | None,
 ) -> str | None:
     """Derive a model key from the user's arguments.
 
@@ -111,13 +105,19 @@ def _resolve_model_key(
 # Scaffold
 # ---------------------------------------------------------------------------
 
+
 def _scaffold_model(
-    cli_ctx, name: str, template: str, dataset: str | None,
-    agency: str | None, path: str | None, force: bool,
+    cli_ctx,
+    name: str,
+    template: str,
+    dataset: str | None,
+    agency: str | None,
+    path: str | None,
+    force: bool,
 ) -> None:
     """Create a new model scaffold and register in the lock file."""
-    from ..context import read_models_folder
     from ...infrastructure.progress import progress_callback
+    from ..context import read_models_folder
 
     project_name = name
 
@@ -151,8 +151,7 @@ def _scaffold_model(
         existing = list(target.iterdir()) if target.is_dir() else [target]
         if existing:
             print_error(
-                f"Directory '{target}' already exists and is not empty. "
-                "Use --force to overwrite."
+                f"Directory '{target}' already exists and is not empty. Use --force to overwrite."
             )
             raise typer.Exit(1)
 
@@ -180,10 +179,9 @@ def _scaffold_model(
         if not main_sql.exists() or force:
             main_sql.write_text(_MAIN_SQL_TEMPLATE.format(**fmt), encoding="utf-8")
 
-        if template in ("python", "hybrid"):
-            run_py = target / "run.py"
-            if not run_py.exists() or force:
-                run_py.write_text(_RUN_PY_TEMPLATE.format(**fmt), encoding="utf-8")
+        main_py = target / "main.py"
+        if not main_py.exists() or force:
+            main_py.write_text(_MAIN_PY_TEMPLATE.format(**fmt), encoding="utf-8")
 
         if cb:
             cb.finished()
@@ -204,15 +202,12 @@ def _scaffold_model(
 
         _register_model(lock_path, _agency, _dataset, model_root_rel, duckdb_rel)
 
-        # Set run_hook based on template
-        if template in ("python", "hybrid"):
-            run_hook = "run.py"
-        else:
-            run_hook = "sql/main.sql"
+        run_hook = "main.py"
         _set_run_hook(lock_path, _agency, _dataset, model_root_rel, duckdb_rel, run_hook)
 
         # Always set the newly initialized model as the default
         from ..context import write_default_model
+
         model_key = f"{_agency}.{_dataset}"
         write_default_model(lock_path, model_key)
 
@@ -220,15 +215,18 @@ def _scaffold_model(
             cb.finished()
 
     if cli_ctx.json_output:
-        print_json("init", {
-            "name": project_name,
-            "path": str(target),
-            "agency": _agency,
-            "dataset": _dataset,
-            "template": template,
-            "model_root": model_root_rel,
-            "run_hook": run_hook,
-        })
+        print_json(
+            "init",
+            {
+                "name": project_name,
+                "path": str(target),
+                "agency": _agency,
+                "dataset": _dataset,
+                "template": template,
+                "model_root": model_root_rel,
+                "run_hook": run_hook,
+            },
+        )
     else:
         print_success(f"Created model '{project_name}' at {target}")
         print_info(f"  Agency:     {_agency}")
@@ -240,7 +238,7 @@ def _scaffold_model(
         print_info("")
         print_info("Next steps:")
         print_info(f"  cd {model_root_rel}")
-        print_info("  dbp schema sql/create_output.sql")
+        print_info(f"  dbp config model {model_key} schema sql/create_output.sql")
         print_info("  dbp load <namespace.table>")
         print_info("  dbp run --version YYYY-MM-DD")
 
@@ -249,9 +247,13 @@ def _scaffold_model(
 # Lock helpers
 # ---------------------------------------------------------------------------
 
+
 def _register_model(
-    lock_path: Path, agency: str, dataset_id: str,
-    model_root: str, duckdb_path: str,
+    lock_path: Path,
+    agency: str,
+    dataset_id: str,
+    model_root: str,
+    duckdb_path: str,
 ) -> None:
     """Add a model entry to the repo-root dbport.lock."""
     from ...adapters.secondary.lock.toml import TomlLockAdapter
@@ -270,8 +272,12 @@ def _register_model(
 
 
 def _set_run_hook(
-    lock_path: Path, agency: str, dataset_id: str,
-    model_root: str, duckdb_path: str, hook: str,
+    lock_path: Path,
+    agency: str,
+    dataset_id: str,
+    model_root: str,
+    duckdb_path: str,
+    hook: str,
 ) -> None:
     """Set the run_hook for a model in the lock file."""
     from ...adapters.secondary.lock.toml import TomlLockAdapter

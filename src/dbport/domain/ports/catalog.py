@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from ..entities.input import InputDeclaration
+    from ..entities.input import IngestRecord, InputDeclaration
     from ..entities.version import DatasetVersion, VersionRecord
 
 
@@ -41,6 +41,18 @@ class ICatalog(Protocol):
           list and return its snapshot_id.
         - Table has no DBPort metadata → return (None, None) so the caller falls
           back to ``current_snapshot()``.
+        """
+        ...
+
+    def inspect_input(
+        self,
+        declaration: InputDeclaration,
+    ) -> IngestRecord:
+        """Resolve a configured input against the warehouse.
+
+        Validates that the input table exists, resolves the effective version
+        and snapshot, and returns the row count that should be persisted in
+        ``dbport.lock``.
         """
         ...
 
