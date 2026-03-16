@@ -293,3 +293,11 @@ def read_lock_versions(lockfile_path: Path, model_key: str) -> list[dict]:
     if model_key not in models:
         return []
     return models[model_key].get("versions", [])
+
+
+def read_lock_version_config(lockfile_path: Path, model_key: str) -> str | None:
+    """Read the configured default version for a model from the lock file."""
+    models = read_lock_models(lockfile_path)
+    if model_key not in models:
+        return None
+    return models[model_key].get("version")

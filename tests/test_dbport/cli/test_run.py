@@ -27,6 +27,7 @@ dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
 run_hook = "sql/main.sql"
+version = "2026-03-15"
 '''
 
 _MODEL_LOCK_NO_HOOK = '''
@@ -35,6 +36,16 @@ agency = "a"
 dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
+version = "2026-03-15"
+'''
+
+_MODEL_LOCK_NO_VERSION = '''
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+run_hook = "sql/main.sql"
 '''
 
 _MULTI_MODEL_LOCK = '''
@@ -44,6 +55,7 @@ dataset_id = "b"
 model_root = "."
 duckdb_path = "data/b.duckdb"
 run_hook = "sql/main.sql"
+version = "2026-03-15"
 
 [models."c.d"]
 agency = "c"
@@ -51,6 +63,7 @@ dataset_id = "d"
 model_root = "models/d"
 duckdb_path = "models/d/data/d.duckdb"
 run_hook = "sql/run.sql"
+version = "2026-03-15"
 '''
 
 _MODEL_LOCK_WITH_VERSIONS = '''
@@ -92,7 +105,22 @@ class TestRunCommand:
                 "run",
             ])
         assert result.exit_code == 0
-        mp.run.assert_called_once_with(version=None, mode=None)
+        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+
+    def test_run_no_version_fails(self, tmp_path: Path):
+        """When no version is configured or in history, run fails early."""
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK_NO_VERSION)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run",
+            ])
+        assert result.exit_code != 0
+        assert "No version available" in result.output
 
     def test_run_help(self):
         result = runner.invoke(app, ["run", "--help"])
@@ -112,7 +140,8 @@ class TestRunCommand:
             ])
         assert result.exit_code == 0
         assert "Executed" in result.output
-        mp.run.assert_called_once_with(version=None, mode=None)
+        # Auto-resolves version from config
+        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
 
     def test_run_with_model_positional_arg(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"
@@ -262,3 +291,48 @@ class TestRunCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["data"]["model"] == "c.d"
+
+    def test_run_auto_resolves_config_version(self, tmp_path: Path):
+        """Without --version, run uses version from lock config."""
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run",
+            ])
+        assert result.exit_code == 0
+        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+
+    def test_run_falls_back_to_latest_completed_version(self, tmp_path: Path):
+        """Without config version, falls back to latest completed version."""
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run",
+            ])
+        assert result.exit_code == 0
+        mp.run.assert_called_once_with(version="2026-03-15", mode=None)
+
+    def test_run_explicit_version_overrides_config(self, tmp_path: Path):
+        """--version flag takes precedence over config version."""
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mp = _mock_dbport()
+
+        with patch(_PATCH_TARGET, return_value=mp):
+            result = runner.invoke(app, [
+                "--lockfile", str(lock),
+                "--project", str(tmp_path),
+                "run", "--version", "2026-04-01",
+            ])
+        assert result.exit_code == 0
+        mp.run.assert_called_once_with(version="2026-04-01", mode=None)

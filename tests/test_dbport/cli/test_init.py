@@ -74,6 +74,19 @@ class TestInitCommand:
         assert model["model_root"] == "examples/proj"
         assert model["duckdb_path"] == "examples/proj/data/d.duckdb"
 
+    def test_init_scaffold_ddl_no_trailing_comma(self, tmp_path: Path):
+        """Generated DDL template must not have a trailing comma before closing paren."""
+        repo = _setup_repo(tmp_path)
+        runner.invoke(app, [
+            "--project", str(repo),
+            "init", "proj",
+            "--agency", "a",
+            "--dataset", "d",
+            "--path", str(repo / "proj"),
+        ])
+        ddl = (repo / "proj" / "sql" / "create_output.sql").read_text()
+        assert ",\n);" not in ddl, "Trailing comma before closing paren is invalid SQL"
+
     def test_init_hybrid_template_creates_run_py(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)
         result = runner.invoke(app, [

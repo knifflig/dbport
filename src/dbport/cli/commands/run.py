@@ -7,6 +7,7 @@ import time
 import typer
 
 from ..context import (
+    read_lock_version_config,
     read_lock_versions,
     resolve_model_key,
     resolve_model_paths_from_data,
@@ -52,15 +53,24 @@ def run_cmd(
                     # Read hook path for display / JSON output
                     run_hook = port.run_hook or "main.py"
 
-                    # Resolve version for --dry-run / --refresh fallbacks
+                    # Resolve version: CLI flag → config → latest completed → fail
                     pub_version = version
-                    if pub_version is None and (refresh or dry_run):
+                    if pub_version is None:
+                        pub_version = read_lock_version_config(
+                            cli_ctx.lockfile_path, model_key
+                        )
+                    if pub_version is None:
                         lock_versions = read_lock_versions(
                             cli_ctx.lockfile_path, model_key
                         )
                         completed = [v for v in lock_versions if v.get("completed")]
                         if completed:
                             pub_version = completed[-1]["version"]
+                    if pub_version is None:
+                        raise typer.BadParameter(
+                            "No version available. Set one with: "
+                            "dbp config version <version>"
+                        )
 
                     mode = None
                     if dry_run:

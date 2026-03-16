@@ -15,13 +15,16 @@ source = "local"
 column_name = "geo"
 column_pos = 0
 sql_type = "VARCHAR"
-codelist_id = "geo"
+codelist_id = "GEO"
+codelist_kind = "reference"
+attach_table = "wifor.cl_nuts2024"
 
 [[models."test.table1".schema.columns]]
 column_name = "year"
 column_pos = 1
 sql_type = "INTEGER"
 codelist_id = "year"
+codelist_type = "categorical"
 
 [[models."test.table1".schema.columns]]
 column_name = "value"
@@ -33,7 +36,14 @@ codelist_id = "value"
 table_address = "estat.nama_10r_3empers"
 last_snapshot_id = 3372712588430296313
 last_snapshot_timestamp_ms = 1773053637272
-rows_loaded = 1485951
+rows_loaded = 500891
+filters = {wstatus = "EMP"}
+
+[[models."test.table1".inputs]]
+table_address = "wifor.cl_nuts2024"
+last_snapshot_id = 1338096627627806607
+last_snapshot_timestamp_ms = 1773059379172
+rows_loaded = 1529
 
 [[models."test.table1".versions]]
 version = "2026-03-13"

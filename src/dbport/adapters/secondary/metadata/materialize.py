@@ -136,6 +136,7 @@ class MetadataAdapter:
 
         result: dict[str, bytes] = {}
 
+        failed: list[str] = []
         for col_name, entry in codelists.entries.items():
             try:
                 if entry.attach_table:
@@ -143,9 +144,16 @@ class MetadataAdapter:
                 else:
                     result[col_name] = generate_csv_for_column(compute, output_table, col_name)
             except Exception as exc:
-                logger.warning(
+                failed.append(col_name)
+                logger.error(
                     "generate_codelist_bytes: failed for column %s: %s", col_name, exc
                 )
+
+        if failed:
+            logger.warning(
+                "Codelist generation failed for %d column(s): %s",
+                len(failed), ", ".join(failed),
+            )
 
         return result
 

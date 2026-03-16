@@ -351,7 +351,7 @@ class TestConfigUnknownKey:
             "config", "nonexistent",
         ])
         assert result.exit_code != 0
-        assert "Unknown config key" in result.output
+        assert "No such command" in result.output or "Usage" in result.output
 
     def test_no_key_shows_help(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)
@@ -361,3 +361,355 @@ class TestConfigUnknownKey:
         ])
         assert result.exit_code in (0, 2)
         assert "Usage" in result.output or "config" in result.output
+ 
+ 
+class TestConfigInfoBranches:
+    def test_info_no_schema_defined(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "info",
+        ])
+        assert result.exit_code == 0
+        assert "not defined" in result.output
+
+    def test_info_json_without_inputs_history(self, tmp_path: Path):
+        """JSON output without --inputs/--history should not include those keys."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, (
+            'default_model = "test.t1"\n\n'
+            '[models."test.t1"]\n'
+            'agency = "test"\n'
+            'dataset_id = "t1"\n'
+            'model_root = "models/t1"\n'
+            'duckdb_path = "models/t1/data/t1.duckdb"\n\n'
+            '[models."test.t1".schema]\n'
+            'ddl = "CREATE TABLE test.t1 (geo VARCHAR, value DOUBLE);"\n'
+            'source = "local"\n\n'
+            '[[models."test.t1".schema.columns]]\n'
+            'column_name = "geo"\n'
+            'column_pos = 0\n'
+            'sql_type = "VARCHAR"\n\n'
+            '[[models."test.t1".schema.columns]]\n'
+            'column_name = "value"\n'
+            'column_pos = 1\n'
+            'sql_type = "DOUBLE"\n\n'
+            '[[models."test.t1".inputs]]\n'
+            'table_address = "estat.table_a"\n'
+            'last_snapshot_id = 1234567890\n'
+            'last_snapshot_timestamp_ms = 1710000000000\n'
+            'rows_loaded = 5000\n\n'
+            '[[models."test.t1".inputs]]\n'
+            'table_address = "wifor.cl_nuts"\n'
+            'last_snapshot_id = 9876543210\n'
+            'last_snapshot_timestamp_ms = 1710100000000\n'
+            'rows_loaded = 200\n\n'
+            '[[models."test.t1".versions]]\n'
+            'version = "2026-03-01"\n'
+            'published_at = 2026-03-01T10:00:00Z\n'
+            'iceberg_snapshot_id = 1111111111\n'
+            'rows = 4800\n'
+            'completed = true\n\n'
+            '[[models."test.t1".versions]]\n'
+            'version = "2026-03-14"\n'
+            'published_at = 2026-03-14T12:00:00Z\n'
+            'iceberg_snapshot_id = 2222222222\n'
+            'rows = 5000\n'
+            'completed = true\n'
+        ))
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "info",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "inputs" not in data["data"]
+        assert "versions" not in data["data"]
+        assert data["data"]["input_count"] == 2
+        assert data["data"]["version_count"] == 2
+
+    def test_info_history_flag_no_versions(self, tmp_path: Path):
+        """Cover branch: --history flag true but model has no versions."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "info", "--history",
+        ])
+        assert result.exit_code == 0
+        # Should show summary but no history table (no versions to display)
+        assert "a.x" in result.output
+
+    def test_info_inputs_flag_no_inputs(self, tmp_path: Path):
+        """Cover branch: --inputs flag true but model has no inputs."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "info", "--inputs",
+        ])
+        assert result.exit_code == 0
+        assert "a.x" in result.output
+
+    def test_info_inputs_without_timestamp(self, tmp_path: Path):
+        """Cover branch: input has no last_snapshot_timestamp_ms (ts is falsy)."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, (
+            'default_model = "a.x"\n\n'
+            '[models."a.x"]\n'
+            'agency = "a"\n'
+            'dataset_id = "x"\n'
+            'model_root = "."\n\n'
+            '[[models."a.x".inputs]]\n'
+            'table_address = "ns.tbl"\n'
+            'rows_loaded = 100\n'
+            # No last_snapshot_timestamp_ms
+        ))
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "info", "--inputs",
+        ])
+        assert result.exit_code == 0
+        assert "ns.tbl" in result.output
+ 
+ 
+# -- Lock content with schema columns for meta/attach tests ------------------
+
+_LOCK_WITH_SCHEMA = (
+    'default_model = "a.x"\n\n'
+    '[models."a.x"]\n'
+    'agency = "a"\n'
+    'dataset_id = "x"\n'
+    'model_root = "."\n'
+    'duckdb_path = "data/x.duckdb"\n\n'
+    '[models."a.x".schema]\n'
+    'ddl = "CREATE TABLE a.x (geo VARCHAR, year INTEGER, value DOUBLE);"\n'
+    'source = "local"\n\n'
+    '[[models."a.x".schema.columns]]\n'
+    'column_name = "geo"\n'
+    'column_pos = 0\n'
+    'sql_type = "VARCHAR"\n'
+    'codelist_id = "geo"\n\n'
+    '[[models."a.x".schema.columns]]\n'
+    'column_name = "year"\n'
+    'column_pos = 1\n'
+    'sql_type = "INTEGER"\n'
+    'codelist_id = "year"\n\n'
+    '[[models."a.x".schema.columns]]\n'
+    'column_name = "value"\n'
+    'column_pos = 2\n'
+    'sql_type = "DOUBLE"\n'
+    'codelist_id = "value"\n'
+)
+
+_LOCK_NO_SCHEMA = (
+    'default_model = "a.x"\n\n'
+    '[models."a.x"]\n'
+    'agency = "a"\n'
+    'dataset_id = "x"\n'
+    'model_root = "."\n'
+    'duckdb_path = "data/x.duckdb"\n'
+)
+
+
+class TestConfigMeta:
+    def test_show_columns_with_schema(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "meta",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "geo" in result.output
+        assert "year" in result.output
+        assert "value" in result.output
+
+    def test_show_no_columns(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_NO_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "meta",
+        ])
+        assert result.exit_code == 0
+        assert "No columns defined" in result.output
+
+    def test_show_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "meta",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert "geo" in data["data"]["columns"]
+        assert data["data"]["columns"]["geo"]["codelist_id"] == "geo"
+
+    def test_set_codelist_id(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "meta", "geo", "--id", "GEO_NUTS",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Updated metadata" in result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        cols = doc["models"]["a.x"]["schema"]["columns"]
+        geo = next(c for c in cols if c["column_name"] == "geo")
+        assert geo["codelist_id"] == "GEO_NUTS"
+
+    def test_set_kind_and_type(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "meta", "geo", "--kind", "hierarchical", "--type", "reference",
+        ])
+        assert result.exit_code == 0, result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        cols = doc["models"]["a.x"]["schema"]["columns"]
+        geo = next(c for c in cols if c["column_name"] == "geo")
+        assert geo["codelist_kind"] == "hierarchical"
+        assert geo["codelist_type"] == "reference"
+
+    def test_set_labels(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "meta", "geo",
+            "--labels", '{"en": "Geography", "de": "Geographie"}',
+        ])
+        assert result.exit_code == 0, result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        cols = doc["models"]["a.x"]["schema"]["columns"]
+        geo = next(c for c in cols if c["column_name"] == "geo")
+        assert geo["codelist_labels"]["en"] == "Geography"
+
+    def test_set_new_column(self, tmp_path: Path):
+        """Setting meta on a column not in schema creates a new entry."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "meta", "new_col", "--id", "NEW",
+        ])
+        assert result.exit_code == 0, result.output
+
+    def test_set_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "meta", "geo", "--id", "GEO",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["column"] == "geo"
+        assert data["data"]["codelist_id"] == "GEO"
+
+
+class TestConfigAttach:
+    def test_attach_table(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "attach", "geo", "--table", "wifor.cl_nuts",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Attached" in result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        cols = doc["models"]["a.x"]["schema"]["columns"]
+        geo = next(c for c in cols if c["column_name"] == "geo")
+        assert geo["attach_table"] == "wifor.cl_nuts"
+
+    def test_attach_new_column(self, tmp_path: Path):
+        """Attaching to a column not in schema creates a new entry."""
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "attach", "unknown_col", "--table", "ns.tbl",
+        ])
+        assert result.exit_code == 0, result.output
+
+    def test_attach_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "attach", "geo", "--table", "wifor.cl_nuts",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["column"] == "geo"
+        assert data["data"]["table"] == "wifor.cl_nuts"
+
+    def test_attach_requires_table_flag(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "attach", "geo",
+        ])
+        assert result.exit_code != 0
+
+
+class TestConfigVersion:
+    def test_version_show_none(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version",
+        ])
+        assert result.exit_code == 0
+        assert "No version set" in result.output
+
+    def test_version_set(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version", "2026-03-16",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "2026-03-16" in result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models"]["a.x"]["version"] == "2026-03-16"
+
+    def test_version_show_existing(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        # First set
+        runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version", "2026-03-16",
+        ])
+        # Then show
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version",
+        ])
+        assert result.exit_code == 0
+        assert "2026-03-16" in result.output
+
+    def test_version_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "version", "2026-03-16",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["version"] == "2026-03-16"

@@ -58,3 +58,11 @@ class ILockStore(Protocol):
     def write_run_hook(self, hook: str) -> None:
         """Persist the run hook path for this model."""
         ...
+
+    def read_version(self) -> str | None:
+        """Return the configured default publish version, or None."""
+        ...
+
+    def write_version(self, version: str) -> None:
+        """Set the default publish version for this model."""
+        ...
