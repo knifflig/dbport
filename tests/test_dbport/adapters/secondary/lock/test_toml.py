@@ -572,6 +572,93 @@ class TestVersionConfig:
         assert lock.read_version() == "2026-03-16"
 
 
+# ---------------------------------------------------------------------------
+# Project-level operations
+# ---------------------------------------------------------------------------
+
+class TestProjectLevelOperations:
+    """Test project-level (non-model-scoped) lock operations."""
+
+    def test_read_default_model_key_returns_none_when_empty(self, tmp_path: Path):
+        adapter = TomlLockAdapter(tmp_path / "dbport.lock")
+        assert adapter.read_default_model_key() is None
+
+    def test_write_and_read_default_model_key(self, tmp_path: Path):
+        adapter = TomlLockAdapter(tmp_path / "dbport.lock")
+        adapter.write_default_model_key("wifor.emp")
+        assert adapter.read_default_model_key() == "wifor.emp"
+
+    def test_read_models_folder_defaults_to_models(self, tmp_path: Path):
+        adapter = TomlLockAdapter(tmp_path / "dbport.lock")
+        assert adapter.read_models_folder() == "models"
+
+    def test_write_and_read_models_folder(self, tmp_path: Path):
+        adapter = TomlLockAdapter(tmp_path / "dbport.lock")
+        adapter.write_models_folder("src/models")
+        assert adapter.read_models_folder() == "src/models"
+
+    def test_list_model_keys_empty(self, tmp_path: Path):
+        adapter = TomlLockAdapter(tmp_path / "dbport.lock")
+        assert adapter.list_model_keys() == []
+
+    def test_list_model_keys_with_models(self, tmp_path: Path):
+        path = tmp_path / "dbport.lock"
+        lock_a = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="")
+        lock_b = TomlLockAdapter(path, model_key="wifor.sector", model_root="models/sector", duckdb_path="")
+        lock_a.write_run_hook("main.py")
+        lock_b.write_run_hook("main.py")
+        adapter = TomlLockAdapter(path)
+        keys = adapter.list_model_keys()
+        assert set(keys) == {"wifor.emp", "wifor.sector"}
+
+    def test_read_model_data_returns_none_for_missing(self, tmp_path: Path):
+        adapter = TomlLockAdapter(tmp_path / "dbport.lock")
+        assert adapter.read_model_data("wifor.emp") is None
+
+    def test_read_model_data_returns_dict(self, tmp_path: Path):
+        path = tmp_path / "dbport.lock"
+        lock = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb")
+        lock.write_run_hook("main.py")
+        adapter = TomlLockAdapter(path)
+        data = adapter.read_model_data("wifor.emp")
+        assert data is not None
+        assert data["agency"] == "wifor"
+        assert data["dataset_id"] == "emp"
+        assert data["model_root"] == "models/emp"
+
+    def test_register_model_creates_header(self, tmp_path: Path):
+        path = tmp_path / "dbport.lock"
+        adapter = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb"
+        )
+        adapter.register_model()
+        assert path.exists()
+        data = adapter.read_model_data("wifor.emp")
+        assert data is not None
+        assert data["agency"] == "wifor"
+        assert data["dataset_id"] == "emp"
+
+    def test_register_model_is_idempotent(self, tmp_path: Path):
+        path = tmp_path / "dbport.lock"
+        adapter = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb"
+        )
+        adapter.register_model()
+        adapter.register_model()
+        data = adapter.read_model_data("wifor.emp")
+        assert data["agency"] == "wifor"
+
+    def test_project_ops_preserve_model_data(self, tmp_path: Path):
+        """Writing project-level keys doesn't lose model data."""
+        path = tmp_path / "dbport.lock"
+        lock = TomlLockAdapter(path, model_key="wifor.emp", model_root=".", duckdb_path="")
+        lock.write_run_hook("main.py")
+        project = TomlLockAdapter(path)
+        project.write_default_model_key("wifor.emp")
+        # Model data should still be there
+        assert lock.read_run_hook() == "main.py"
+
+
 class TestAtomicWriteErrorHandling:
     def test_original_file_preserved_on_write_failure(self, tmp_path: Path):
         """If os.replace fails, the original lock file is not corrupted."""

@@ -267,60 +267,29 @@ def _handle_default_folder(cli_ctx, folder: str | None) -> None:
 
 def _handle_default_hook(cli_ctx, hook_path: str | None) -> None:
     """Show or set the run hook for the resolved model."""
-    from ..context import resolve_model_paths
-
     with cli_error_handler("config default hook", json_output=cli_ctx.json_output):
-        if hook_path is None:
-            # Show current run_hook
-            paths = resolve_model_paths(cli_ctx)
-            from ...adapters.secondary.lock.toml import TomlLockAdapter
-            from ...application.services.run import resolve_run_hook
+        adapter, model_key = _make_lock_adapter(cli_ctx)
 
-            model_key = f"{paths.agency}.{paths.dataset_id}"
-            raw_root = (
-                str(Path(paths.model_root).relative_to(cli_ctx.project_path))
-                if Path(paths.model_root).is_absolute()
-                else paths.model_root
-            )
-            raw_db = (
-                str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path))
-                if Path(paths.duckdb_path).is_absolute()
-                else paths.duckdb_path
-            )
-            adapter = TomlLockAdapter(
-                cli_ctx.lockfile_path,
-                model_key=model_key,
-                model_root=raw_root,
-                duckdb_path=raw_db,
-            )
+        if hook_path is None:
+            from ...application.services.run import resolve_run_hook
+            from ..context import resolve_model_paths
+
+            paths = resolve_model_paths(cli_ctx)
             current = resolve_run_hook(adapter, str(paths.model_root))
             if cli_ctx.json_output:
                 print_json("config default hook", {"run_hook": current, "model": model_key})
             else:
                 print_info(f"Run hook for {model_key}: {current}")
         else:
-            # Set run_hook
-            paths = resolve_model_paths(cli_ctx)
-            from ...adapters.secondary.lock.toml import TomlLockAdapter
+            from ..context import resolve_model_paths
 
-            model_key = f"{paths.agency}.{paths.dataset_id}"
+            paths = resolve_model_paths(cli_ctx)
+            # Normalize hook_path: resolve relative to CWD, store relative to model_root
             raw_root = (
                 str(Path(paths.model_root).relative_to(cli_ctx.project_path))
                 if Path(paths.model_root).is_absolute()
                 else paths.model_root
             )
-            raw_db = (
-                str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path))
-                if Path(paths.duckdb_path).is_absolute()
-                else paths.duckdb_path
-            )
-            adapter = TomlLockAdapter(
-                cli_ctx.lockfile_path,
-                model_key=model_key,
-                model_root=raw_root,
-                duckdb_path=raw_db,
-            )
-            # Normalize hook_path: resolve relative to CWD, store relative to model_root
             abs_model_root = (cli_ctx.project_path / raw_root).resolve()
             hook = Path(hook_path)
             if not hook.is_absolute():
@@ -419,8 +388,6 @@ def _handle_version_for_model(cli_ctx, model_key: str, version: str | None) -> N
 
 
 def _handle_inputs_show(cli_ctx, model_key: str) -> None:
-    from ...adapters.secondary.lock.toml import TomlLockAdapter
-
     with cli_error_handler("config input", json_output=cli_ctx.json_output):
         adapter, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
         records = adapter.read_ingest_records()
@@ -596,14 +563,14 @@ def _handle_columns_set(
     codelist_labels: str | None,
 ) -> None:
     with cli_error_handler("config columns", json_output=cli_ctx.json_output):
-        adapter, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
+        _, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
         overrides = _parse_column_override_args(
             codelist_id=codelist_id,
             codelist_type=codelist_type,
             codelist_kind=codelist_kind,
             codelist_labels=codelist_labels,
         )
-        _update_column_metadata(cli_ctx, adapter, resolved_model_key, column, overrides)
+        _update_column_metadata(cli_ctx, resolved_model_key, column, overrides)
 
 
 def _parse_column_override_args(
@@ -630,24 +597,28 @@ def _parse_column_override_args(
 
 def _handle_attach_for_model(cli_ctx, model_key: str, column: str, table: str) -> None:
     with cli_error_handler("config columns attach", json_output=cli_ctx.json_output):
-        adapter, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
-        _attach_column_table(cli_ctx, adapter, resolved_model_key, column, table)
+        _, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
+        _attach_column_table(cli_ctx, resolved_model_key, column, table)
 
 
-def _update_column_metadata(cli_ctx, adapter, model_key: str, column: str, overrides: dict) -> None:
-    from ...domain.entities.codelist import CodelistEntry
+def _update_column_metadata(cli_ctx, model_key: str, column: str, overrides: dict) -> None:
+    from ...adapters.primary.client import DBPort
+    from ..context import resolve_model_paths_from_data, read_lock_models
 
-    entries = adapter.read_codelist_entries()
-    existing = entries.get(column)
-    if existing is None:
-        existing = CodelistEntry(
-            column_name=column,
-            column_pos=0,
-            codelist_id=column,
-        )
+    models = read_lock_models(cli_ctx.lockfile_path)
+    model_data = models[model_key]
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
 
-    updated = existing.model_copy(update=overrides)
-    adapter.write_codelist_entry(updated)
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+        config_only=True,
+    ) as port:
+        col = getattr(port.columns, column)
+        col.meta(**overrides)
 
     if cli_ctx.json_output:
         print_json(
@@ -655,29 +626,31 @@ def _update_column_metadata(cli_ctx, adapter, model_key: str, column: str, overr
             {
                 "column": column,
                 "model": model_key,
-                "codelist_id": updated.codelist_id,
-                "codelist_type": updated.codelist_type,
-                "codelist_kind": updated.codelist_kind,
+                **{k: v for k, v in overrides.items() if v is not None},
             },
         )
     else:
         print_success(f"Updated metadata for column '{column}'")
 
 
-def _attach_column_table(cli_ctx, adapter, model_key: str, column: str, table: str) -> None:
-    from ...domain.entities.codelist import CodelistEntry
+def _attach_column_table(cli_ctx, model_key: str, column: str, table: str) -> None:
+    from ...adapters.primary.client import DBPort
+    from ..context import resolve_model_paths_from_data, read_lock_models
 
-    entries = adapter.read_codelist_entries()
-    existing = entries.get(column)
-    if existing is None:
-        existing = CodelistEntry(
-            column_name=column,
-            column_pos=0,
-            codelist_id=column,
-        )
+    models = read_lock_models(cli_ctx.lockfile_path)
+    model_data = models[model_key]
+    paths = resolve_model_paths_from_data(cli_ctx, model_data)
 
-    updated = existing.model_copy(update={"attach_table": table})
-    adapter.write_codelist_entry(updated)
+    with DBPort(
+        agency=paths.agency,
+        dataset_id=paths.dataset_id,
+        lock_path=paths.lock_path,
+        duckdb_path=paths.duckdb_path,
+        model_root=paths.model_root,
+        config_only=True,
+    ) as port:
+        col = getattr(port.columns, column)
+        col.attach(table=table)
 
     if cli_ctx.json_output:
         print_json(

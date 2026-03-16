@@ -265,10 +265,7 @@ def _register_model(
         model_root=model_root,
         duckdb_path=duckdb_path,
     )
-    doc = adapter._load()
-    m = adapter._model_doc(doc)
-    adapter._ensure_model_header(m)
-    adapter._save(doc)
+    adapter.register_model()
 
 
 def _set_run_hook(

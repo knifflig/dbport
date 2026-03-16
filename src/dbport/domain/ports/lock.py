@@ -66,3 +66,35 @@ class ILockStore(Protocol):
     def write_version(self, version: str) -> None:
         """Set the default publish version for this model."""
         ...
+
+    # ------------------------------------------------------------------
+    # Project-level operations (not model-scoped)
+    # ------------------------------------------------------------------
+
+    def read_default_model_key(self) -> str | None:
+        """Return the default_model key from the lock file, or None."""
+        ...
+
+    def write_default_model_key(self, model_key: str) -> None:
+        """Set the default_model key in the lock file."""
+        ...
+
+    def read_models_folder(self) -> str:
+        """Return the models_folder from the lock file, defaulting to 'models'."""
+        ...
+
+    def write_models_folder(self, folder: str) -> None:
+        """Set the models_folder key in the lock file."""
+        ...
+
+    def list_model_keys(self) -> list[str]:
+        """Return all model keys present in the lock file."""
+        ...
+
+    def read_model_data(self, model_key: str) -> dict | None:
+        """Return raw model data dict for *model_key*, or None if absent."""
+        ...
+
+    def register_model(self) -> None:
+        """Ensure this model's header (agency, dataset_id, paths) exists in the lock file."""
+        ...
