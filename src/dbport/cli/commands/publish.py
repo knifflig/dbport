@@ -19,9 +19,6 @@ def publish_cmd(
     version: str | None = typer.Option(None, "--version", help="Version identifier for this publish."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate only; do not write data."),
     refresh: bool = typer.Option(False, "--refresh", help="Overwrite existing version."),
-    message: str | None = typer.Option(None, "--message", "-m", help="Publish note for history."),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
-    strict: bool = typer.Option(False, "--strict", help="Fail on warnings."),
 ) -> None:
     """Publish the current output dataset to the warehouse."""
     from ..main import get_cli_ctx
@@ -79,5 +76,3 @@ def publish_cmd(
             else:
                 print_success(f"Published version {pub_version}")
             print_info(f"  Model: {model_key}")
-            if message:
-                print_info(f"  Note:  {message}")

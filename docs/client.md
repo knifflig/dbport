@@ -103,6 +103,8 @@ port.schema("""
 
 Call `port.schema()` once, early in the script. Re-running the same DDL is idempotent.
 
+**Warehouse validation**: If the output table already exists in the warehouse, `port.schema()` compares the local DDL schema against the warehouse schema immediately. If they are incompatible, `SchemaDriftError` is raised before any loads or transforms run. If the table does not yet exist (first publish), the check is skipped.
+
 ---
 
 ### `port.load(table_address, *, filters=None)`
@@ -221,7 +223,7 @@ port.publish(version="2026-03-09", mode="refresh")
 
 1. **Schema defined** — raises `RuntimeError` if `port.schema()` has not been called.
 2. **Version idempotency** — if `version` already completed successfully, returns immediately without writing. Skipped when `mode="refresh"`.
-3. **Schema drift** — if the Iceberg table already exists, compares the local schema to the warehouse schema. Raises `SchemaDriftError` with a diff if they are incompatible:
+3. **Schema drift** — if the Iceberg table already exists, compares the local schema to the warehouse schema. This check runs at both `port.schema()` time (early fail-fast) and `port.publish()` time (safety net for changes between schema declaration and publish). Raises `SchemaDriftError` with a diff if they are incompatible:
    ```
    SchemaDriftError: Schema drift detected:
      + new_column (string)     # added locally, not in warehouse
@@ -360,5 +362,5 @@ with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
 | `ValidationError` | Missing required credentials (`catalog_uri`, `catalog_token`, `warehouse`) |
 | `ValueError` | `port.schema()` called with a string that is not a valid `CREATE TABLE` DDL |
 | `RuntimeError` | `port.publish()` called before `port.schema()`; DuckDB iceberg extension unavailable |
-| `SchemaDriftError` | Local schema is incompatible with the existing warehouse table schema |
+| `SchemaDriftError` | Local schema is incompatible with the existing warehouse table schema (raised by both `port.schema()` and `port.publish()`) |
 | `FileNotFoundError` | `.sql` file path passed to `schema()` or `execute()` does not exist |

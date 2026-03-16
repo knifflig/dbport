@@ -206,17 +206,17 @@ Complete Command Interface
 
 Command surface
 
-dbp init
-dbp status
-dbp check
-dbp schema
-dbp load
-dbp run
-dbp publish
-dbp config default
-dbp config info
-dbp validate          (planned)
-dbp recompute         (planned)
+dbp init NAME                     # scaffold new model
+dbp sync [MODEL]                  # sync model(s) from catalog
+dbp status                        # show project state (--inputs, --history, --raw)
+dbp schema [SOURCE]               # show/apply schema
+dbp load [DATASET]                # load inputs
+dbp exec TARGET                   # execute transforms (alias: execute)
+dbp run [MODEL]                   # full workflow
+dbp publish [MODEL]               # publish output
+dbp config KEY [VALUE]            # get/set config (keys: default, folder, run-hook, check)
+dbp validate                      (planned)
+dbp recompute                     (planned)
 
 The interface is deliberately compact and closely aligned with the product lifecycle.
 
@@ -254,46 +254,34 @@ Command-by-command reference
 
 dbp init
 
-Initialize or sync models.
+Scaffold a new model.
 
-This command has two modes: it either **syncs existing models** from the lock file or **scaffolds a new model** and registers it. The mode is determined automatically based on whether the given name or agency/dataset combination matches an existing model in `dbport.lock`.
+This command creates a new model directory with starter files and registers it in `dbport.lock`. To sync existing models from the warehouse, use `dbp sync`.
 
 Interface
 
-dbp init [NAME]
+dbp init NAME
 
 Arguments
 
-NAME              Model key (agency.dataset_id) to sync, or new project name to scaffold
+NAME              Model name (agency.dataset_id or project name)
 
 Flags
 
 --template TEXT   Template type: sql, python, or hybrid (default: sql)
 --dataset TEXT    Output dataset ID (default: NAME)
 --agency TEXT     Agency identifier (default: "default")
---path PATH       Target directory (default: ./<NAME>)
+--path PATH       Target directory (default: models_folder/agency/dataset)
 --force           Overwrite existing files
 
-Behavior: sync vs scaffold
-
-The command resolves what to do based on the arguments:
-
-	•	No arguments — syncs all models in the lock file, running them in parallel
-	•	Model key that exists in lock (e.g. `test.table1`) — syncs that specific model
-	•	`--agency` + `--dataset` matching an existing model — syncs that model
-	•	Name or agency/dataset not in lock — scaffolds a new model
-
-Sync mode
-	•	Creates a DBPort instance for each model, triggering the init-time sync (schema detection, local state reconciliation)
-	•	Multiple models run in parallel using a thread pool (up to 4 concurrent workers)
-	•	Progress is displayed as a Rich tree where each model is a parent node and sync steps are children (see Progress Display below)
-
-Scaffold mode (new models)
-	•	Creates a directory scaffold with starter SQL templates
+Behavior
+	•	Scaffolds a new model directory with starter SQL templates
 	•	Registers the model in the repo-root dbport.lock under [models."agency.dataset_id"]
-	•	Sets the newly initialized model as the default (every init updates the default)
+	•	Sets the newly initialized model as the default
 	•	model_root and duckdb_path are stored as paths relative to the repo root
 	•	Does NOT connect to the warehouse (offline operation)
+	•	Errors if model already exists in lock file (use --force to overwrite, or `dbp sync` to sync)
+	•	Errors with no arguments (suggests `dbp sync` for syncing existing models)
 
 What scaffold creates
 
@@ -306,19 +294,43 @@ What scaffold creates
 
 Example usage
 
-dbp init                                    # sync all models in lock file
-dbp init test.table1                        # sync a specific existing model
-dbp init --agency test --dataset table1     # sync by agency + dataset
-dbp init regional_trends --template hybrid --dataset emp__regional_trends --agency wifor  # scaffold new
-dbp init --agency wifor --dataset emp_test --path examples/emp_test                       # scaffold new
+dbp init regional_trends --template hybrid --dataset emp__regional_trends --agency wifor
+dbp init --agency wifor --dataset emp_test --path examples/emp_test
+dbp init test.brand_new                   # parses agency="test", dataset="brand_new"
+
+⸻
+
+dbp sync
+
+Sync existing models from the lock file and warehouse.
+
+Creates a DBPort instance for each model, triggering the init-time sync: auto-schema detection from the warehouse, local DuckDB state reconciliation, and last_fetched_at update.
+
+Interface
+
+dbp sync [MODEL]
+
+Arguments
+
+MODEL             Model key (agency.dataset_id) to sync. Optional — syncs all models if omitted.
+
+Behavior
+	•	Without argument: syncs all models in the lock file, running in parallel (up to 4 concurrent workers)
+	•	With model key: syncs that specific model
+	•	Progress is displayed as a Rich tree where each model is a parent node with sync steps as children
+
+Example usage
+
+dbp sync                          # sync all models
+dbp sync test.table1              # sync a specific model
 
 ⸻
 
 dbp status
 
-Show resolved project and runtime state across all models.
+Show resolved project and runtime state.
 
-This is the dashboard view — a quick operational summary.
+This is the unified dashboard — combining the operational summary with detailed inspection (formerly split between `status` and `config info`).
 
 Interface
 
@@ -326,36 +338,41 @@ dbp status
 
 Flags
 
---show-history    Show version publish history table
+--inputs          Show detailed input table (table addresses, rows, snapshot IDs, filters)
+--history         Show version publish history table
+--raw             Dump raw lock file TOML to stdout
 
 What it shows
 	•	project root and lockfile path
+	•	default model
 	•	for each model in the lock file:
 	  •	agency, dataset ID, model root, DuckDB path
 	  •	schema state (defined or not, column count)
 	  •	loaded inputs (table addresses, row counts)
 	  •	published versions (count, latest version)
-	  •	optional version history table (with --show-history)
+	  •	optional detailed input table (with --inputs)
+	  •	optional version history table (with --history)
 
 Example usage
 
 dbp status
 dbp status --json
-dbp status --show-history
+dbp status --inputs
+dbp status --history
+dbp status --inputs --history
+dbp status --raw
 
 ⸻
 
-dbp check
+dbp config check
 
 Check whether the project is operationally healthy.
 
+Health checks are a setup/configuration concern, so this is accessed via `dbp config check` rather than as a standalone command.
+
 Interface
 
-dbp check
-
-Flags
-
---strict          Fail on warnings
+dbp config check [--strict]
 
 Checks performed
 	•	lockfile — dbport.lock exists
@@ -368,8 +385,8 @@ Each check produces pass, warn, or fail. In --strict mode, any warning becomes a
 
 Example usage
 
-dbp check
-dbp check --strict
+dbp config check
+dbp config check --strict
 
 ⸻
 
@@ -455,10 +472,43 @@ Flags
 Behavior
 	•	Resolves the model from the positional argument or default model resolution
 	•	Creates a DBPort instance, triggering init-time sync (schema detection, input loading)
-	•	Reads the run_hook from the lock file and executes it via port.execute()
+	•	Reads the run_hook from the lock file and dispatches it (see Run Hooks below)
 	•	If --version is provided, publishes after execution
 	•	If --refresh or --dry-run is used without --version, falls back to the latest completed version from the lock file
-	•	Progress is displayed as a Rich tree (same renderer as dbp init) with sync steps, execution, and publish as child nodes
+	•	Progress is displayed as a Rich tree with sync steps, execution, and publish as child nodes
+
+Run hooks
+
+The run_hook setting in `dbport.lock` determines what `dbp run` executes. If not configured, defaults to `main.py`.
+
+**SQL hooks** (`.sql` files):
+Executed directly via `port.execute()`. Simple and declarative — best for models that are pure SQL transforms.
+
+**Python hooks** (`.py` files):
+Executed via `exec()` with the active `port` object available in scope. `__name__` is set to `"__dbport_hook__"` (not `"__main__"`), so that `if __name__ == "__main__"` guards are skipped.
+
+If the script defines a top-level callable `run(port)`, it is called automatically after module-level code executes. This enables a **dual-mode pattern** — the same file works both as a CLI hook and as a standalone script:
+
+```python
+from dbport import DBPort
+
+def run(port):
+    """Model logic — called by both CLI and standalone execution."""
+    port.schema("sql/create_output.sql")
+    port.load("estat.nama_10r_3empers")
+    port.execute("sql/transform.sql")
+
+if __name__ == "__main__":
+    with DBPort(agency="test", dataset_id="table1") as port:
+        run(port)
+        port.publish(version="2026-03-13")
+```
+
+When run via CLI (`dbp run`), the `__main__` guard is skipped and only `run(port)` executes with the CLI's port instance. When run standalone (`python main.py`), the script creates its own port and controls the full lifecycle.
+
+Scripts without a `run()` function continue to work — module-level code executes with `port` in scope (backward compatible).
+
+Set the run hook via: `dbp config run-hook sql/main.sql` or `dbp config run-hook main.py`
 
 Example usage
 
@@ -488,9 +538,6 @@ Flags
 --version TEXT     Version identifier (e.g. "2026-03-15"). Optional — falls back to the latest completed version in the lock file.
 --dry-run          Validate only; do not write data (mode="dry")
 --refresh          Overwrite existing version (mode="refresh")
---message TEXT     Publish note for history
---yes, -y          Skip confirmation prompt
---strict           Fail on warnings
 
 Publish modes
 	•	default (no flag): idempotent — skip if version already completed
@@ -512,33 +559,28 @@ dbp publish test.table1 --version 2026-03-15
 dbp publish --refresh                             # overwrite latest version of default model
 dbp publish test.table1 --refresh                 # overwrite latest version of specific model
 dbp publish --version 2026-03-15 --dry-run
-dbp publish --version 2026-03-15 --message "Quarterly recompute"
 
 ⸻
 
 dbp config
 
-Repo-level control plane for inspecting and managing project configuration.
+Repo-level control plane for project configuration.
 
-The config command is a subcommand group. It replaces the earlier dbp lock concept by unifying configuration management and lock file inspection into a single surface.
+Uses a unified `KEY [VALUE]` pattern: omit VALUE to read, provide VALUE to set.
 
-Design: dbp status is the dashboard (quick operational summary across all models). dbp config is the control plane (deep inspection and configuration of persisted state for the resolved model).
+Interface
+
+dbp config KEY [VALUE]
+
+Valid keys: `default`, `folder`, `run-hook`, `check`
 
 dbp config default
 
 Show or set the default model for the project.
 
-Interface
-
-dbp config default [MODEL_KEY]
-
-Arguments
-
-MODEL_KEY         Model key (agency.dataset_id) to set as default
-
 Behavior
-	•	without argument: show current default model
-	•	with argument: validate the model exists in the lock, then set it as default
+	•	without value: show current default model
+	•	with value: validate the model exists in the lock, then set it as default
 
 The default model is persisted as a top-level default_model key in dbport.lock:
 
@@ -555,37 +597,32 @@ dbp config default
 dbp config default wifor.emp__regional_trends
 dbp config default --json
 
-dbp config info
+dbp config folder
 
-Inspect persisted lock file state for the resolved model.
-
-This is the deep dive into persisted state — input snapshots, version history, raw TOML.
-
-Interface
-
-dbp config info
-
-Flags
-
---inputs          Show detailed input table
---history         Show detailed version history table
---raw             Dump raw lock file TOML to stdout
+Show or set the models folder (base directory for scaffolded models).
 
 Behavior
-	•	default (no flags): summary for the resolved model — default model, identity, schema state, input count, version count
-	•	--inputs: detailed input table with table address, rows loaded, snapshot ID, snapshot timestamp, and filters
-	•	--history: detailed version history table with version, published_at, snapshot ID, rows, and completion status
-	•	--raw: raw TOML dump of the entire lock file (useful for debugging and piping)
-	•	flags can be combined: --inputs --history shows both tables
+	•	without value: show current models folder
+	•	with value: set the models folder path (relative to repo root)
 
 Example usage
 
-dbp config info
-dbp config info --inputs
-dbp config info --history
-dbp config info --raw
-dbp config info --inputs --history
-dbp config info --json
+dbp config folder
+dbp config folder models
+
+dbp config run-hook
+
+Show or set the run hook for the resolved model.
+
+Behavior
+	•	without value: show current run hook for the resolved model
+	•	with value: set the run hook (path is normalized relative to model root)
+
+Example usage
+
+dbp config run-hook
+dbp config run-hook main.py
+dbp config run-hook sql/main.sql
 
 ⸻
 
@@ -788,15 +825,15 @@ src/
       errors.py            cli_error_handler context manager
       commands/
         __init__.py
-        init.py            dbp init
-        status.py          dbp status
-        check.py           dbp check
+        init.py            dbp init (scaffold only)
+        sync.py            dbp sync
+        status.py          dbp status (merged with former config info)
         schema.py          dbp schema
         load.py            dbp load
         run.py             dbp run
-        execute.py         dbp execute
+        execute.py         dbp exec (alias: execute)
         publish.py         dbp publish
-        config.py          dbp config (default, info)
+        config.py          dbp config KEY [VALUE] (keys: default, folder, run-hook, check)
         validate.py        dbp validate (planned)
         recompute.py       dbp recompute (planned)
 
@@ -984,7 +1021,7 @@ Example user workflow
 dbp init regional_trends --template hybrid --dataset emp__regional_trends --agency wifor
 cd regional_trends
 
-dbp check
+dbp config check
 dbp status
 
 dbp schema sql/create_output.sql
@@ -995,8 +1032,8 @@ dbp publish --refresh                             # re-publish latest version
 dbp run wifor.emp__regional_trends --timing       # address specific model
 dbp publish wifor.emp__regional_trends --refresh  # re-publish specific model
 
-dbp config info --inputs
-dbp config info --history
+dbp status --inputs
+dbp status --history
 dbp config default
 
 ⸻

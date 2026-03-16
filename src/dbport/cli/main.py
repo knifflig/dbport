@@ -73,14 +73,15 @@ def get_cli_ctx(ctx: typer.Context) -> CliContext:
 
 # -- Register commands --------------------------------------------------------
 
-from .commands import check, config, execute, init, load, publish, run, schema, status  # noqa: E402
+from .commands import config, execute, init, load, publish, run, schema, status, sync  # noqa: E402
 
 app.command(name="init")(init.init_cmd)
+app.command(name="sync")(sync.sync_cmd)
 app.command(name="status")(status.status_cmd)
-app.command(name="check")(check.check_cmd)
 app.command(name="schema")(schema.schema_cmd)
 app.command(name="load")(load.load_cmd)
-app.command(name="execute")(execute.execute_cmd)
+app.command(name="exec")(execute.exec_cmd)
+app.command(name="execute", hidden=True)(execute.exec_cmd)
 app.command(name="run")(run.run_cmd)
 app.command(name="publish")(publish.publish_cmd)
 app.add_typer(config.config_app, name="config")
