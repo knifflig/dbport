@@ -159,6 +159,47 @@ def run_hook_cmd(
                 print_success(f"Run hook set to: {normalized}")
 
 
+@config_app.command(name="version")
+def version_cmd(
+    ctx: typer.Context,
+    version: str | None = typer.Argument(None, help="Version string to set (e.g. 2026-03-16)."),
+) -> None:
+    """Show or set the default publish version for the resolved model."""
+    from ..context import resolve_model_paths
+    from ..main import get_cli_ctx
+
+    cli_ctx = get_cli_ctx(ctx)
+
+    with cli_error_handler("config version", json_output=cli_ctx.json_output):
+        paths = resolve_model_paths(cli_ctx)
+        from ...adapters.secondary.lock.toml import TomlLockAdapter
+
+        model_key = f"{paths.agency}.{paths.dataset_id}"
+        raw_root = str(Path(paths.model_root).relative_to(cli_ctx.project_path)) if Path(paths.model_root).is_absolute() else paths.model_root
+        raw_db = str(Path(paths.duckdb_path).relative_to(cli_ctx.project_path)) if Path(paths.duckdb_path).is_absolute() else paths.duckdb_path
+        adapter = TomlLockAdapter(
+            cli_ctx.lockfile_path,
+            model_key=model_key,
+            model_root=raw_root,
+            duckdb_path=raw_db,
+        )
+
+        if version is None:
+            current = adapter.read_version()
+            if cli_ctx.json_output:
+                print_json("config version", {"version": current, "model": model_key})
+            elif current:
+                print_info(f"Version for {model_key}: {current}")
+            else:
+                print_info(f"No version set for {model_key}.")
+        else:
+            adapter.write_version(version)
+            if cli_ctx.json_output:
+                print_json("config version", {"version": version, "model": model_key})
+            else:
+                print_success(f"Version set to: {version}")
+
+
 def _make_lock_adapter(cli_ctx):
     """Create a TomlLockAdapter for the resolved model."""
     from ..context import resolve_model_paths

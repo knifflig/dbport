@@ -558,6 +558,20 @@ class TestRunHook:
         assert lock.read_run_hook() == "run.py"
 
 
+class TestVersionConfig:
+    def test_read_version_returns_none_when_not_set(self, lock):
+        assert lock.read_version() is None
+
+    def test_write_and_read_version(self, lock):
+        lock.write_version("2026-03-16")
+        assert lock.read_version() == "2026-03-16"
+
+    def test_write_version_overwrites(self, lock):
+        lock.write_version("2026-03-15")
+        lock.write_version("2026-03-16")
+        assert lock.read_version() == "2026-03-16"
+
+
 class TestAtomicWriteErrorHandling:
     def test_original_file_preserved_on_write_failure(self, tmp_path: Path):
         """If os.replace fails, the original lock file is not corrupted."""

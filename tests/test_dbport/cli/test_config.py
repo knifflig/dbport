@@ -806,3 +806,55 @@ class TestConfigAttach:
             "config", "attach", "geo",
         ])
         assert result.exit_code != 0
+
+
+class TestConfigVersion:
+    def test_version_show_none(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version",
+        ])
+        assert result.exit_code == 0
+        assert "No version set" in result.output
+
+    def test_version_set(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version", "2026-03-16",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "2026-03-16" in result.output
+        doc = tomllib.loads((repo / "dbport.lock").read_text())
+        assert doc["models"]["a.x"]["version"] == "2026-03-16"
+
+    def test_version_show_existing(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        # First set
+        runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version", "2026-03-16",
+        ])
+        # Then show
+        result = runner.invoke(app, [
+            "--project", str(repo),
+            "config", "version",
+        ])
+        assert result.exit_code == 0
+        assert "2026-03-16" in result.output
+
+    def test_version_json_output(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        _write_lock(repo, _LOCK_WITH_SCHEMA)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "config", "version", "2026-03-16",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["version"] == "2026-03-16"

@@ -26,6 +26,7 @@ echo ""
 echo "=== 2. Config: set defaults ==="
 dbp config default test.cli_table1
 dbp config run-hook sql/main.sql
+dbp config version "$VERSION"
 dbp config info
 
 echo ""
@@ -72,8 +73,8 @@ echo "=== 11. Publish: refresh (overwrite) ==="
 dbp publish --version "$VERSION" --refresh --yes
 
 echo ""
-echo "=== 12. Run (hook-based workflow) ==="
-dbp run --version "$VERSION" --timing --refresh
+echo "=== 12. Run (hook-based workflow, auto-publishes with configured version) ==="
+dbp run --timing --refresh
 
 echo ""
 echo "=== 13. Status ==="
