@@ -34,9 +34,12 @@ nav = [
         "examples/python-workflow.md",
         "examples/cli-workflow.md",
     ]},
-    { "Changelog" = "changelog.md" },
-    { "Roadmap" = "roadmap.md" },
-    { "Release Versioning" = "release-versioning.md" },
+    { "Versions" = [
+        "versions/index.md",
+        "versions/changelog.md",
+        "versions/roadmap.md",
+        "versions/release-versioning.md",
+    ]},
 ]
 
 [project.theme]
