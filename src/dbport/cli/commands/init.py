@@ -68,7 +68,7 @@ def init_cmd(
         if name is None and not agency and not dataset and not path:
             print_error(
                 "No model name specified. Usage: dbp init <name>\n"
-                "To synchronize existing models, use: dbp model sync or dbp project sync"
+                "To synchronize an existing model, use: dbp model sync"
             )
             raise typer.Exit(1)
 
@@ -239,8 +239,8 @@ def _scaffold_model(
         print_info("Next steps:")
         print_info(f"  cd {model_root_rel}")
         print_info(f"  dbp config model {model_key} schema sql/create_output.sql")
-        print_info("  dbp load <namespace.table>")
-        print_info("  dbp run --version YYYY-MM-DD")
+        print_info("  dbp model load")
+        print_info("  dbp model run --version YYYY-MM-DD")
 
 
 # ---------------------------------------------------------------------------
