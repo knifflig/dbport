@@ -71,6 +71,7 @@ toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
 
 [project.theme.icon]
+logo = "lucide/fishing-hook"
 repo = "fontawesome/brands/github"
 
 [project.extra]
