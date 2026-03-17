@@ -137,61 +137,21 @@ Status: `done`
 
 Theme: release history and roadmap foundations.
 
-### DBP-VERS-003 - Add a first-class changelog page to the docs site
+Status: `done`
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `docs/changelog.md`
-  - `zensical.toml`
-- Required changes:
-  - Add a dedicated changelog page
-  - Add it to the docs navigation
-  - Structure it around versions
-- Relevant Zensical docs:
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-  - [Lists](https://zensical.org/docs/authoring/lists/)
-  - [Formatting](https://zensical.org/docs/authoring/formatting/)
-- Acceptance criteria:
-  - The docs site exposes a visible changelog page
+### What was implemented
 
-### DBP-VERS-004 - Ensure every published version receives a changelog entry
+- **Changelog page** — added `docs/changelog.md` with version-structured entries; the 0.0.1 entry comprehensively documents all foundational capabilities (core runtime, data operations, column metadata, write strategy, domain model, adapters, services, CLI, infrastructure, docs site, testing, CI/CD, and examples); the changelog convention requires every released version to have an entry with version number, date, and categorized changes
+- **Roadmap page** — added `docs/roadmap.md` with a milestone overview table and per-version summaries covering the full repository scope (package, CLI, runtime, docs, release, testing); roadmap is kept distinct from changelog (planned future vs completed past)
+- **Docs navigation** — both pages added as top-level nav items in `zensical.toml` (alongside Home, Getting Started, Concepts, API Reference, Examples)
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `docs/changelog.md`
-  - release/versioning process
-- Required changes:
-  - Require a changelog entry for every released version
-  - Make changelog updates part of the release workflow
-  - Define the minimum expected content for each entry
-- Acceptance criteria:
-  - No published version exists without a corresponding changelog entry
+### Items delivered
 
-### DBP-VERS-008 - Add a first-class roadmap page for the full repository
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `docs/roadmap.md`
-  - `zensical.toml`
-  - broader repo planning workflow
-- Required changes:
-  - Add a dedicated roadmap page to the docs site
-  - Use the same milestone-based structure used in this backlog
-  - Expand the scope beyond docs to include package, CLI, runtime, release, testing, and repository-wide work
-  - Keep roadmap distinct from changelog:
-    - roadmap = planned future work
-    - changelog = completed released work
-  - Add the roadmap page to the docs navigation
-- Relevant Zensical docs:
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-  - [Lists](https://zensical.org/docs/authoring/lists/)
-  - [Formatting](https://zensical.org/docs/authoring/formatting/)
-  - [Data tables](https://zensical.org/docs/authoring/data-tables/)
-- Acceptance criteria:
-  - The docs site contains a roadmap page for the full repository, not only documentation tasks
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-VERS-003 | `P0` | Changelog page added to docs site, structured around versions with categorized changes |
+| DBP-VERS-004 | `P0` | Changelog convention established; minimum content defined (version, date, grouped changes) |
+| DBP-VERS-008 | `P0` | Roadmap page added covering all repository work from 0.0.1 through 0.1.0 |
 
 ---
 

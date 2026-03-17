@@ -33,6 +33,8 @@ nav = [
         "examples/python-workflow.md",
         "examples/cli-workflow.md",
     ]},
+    { "Changelog" = "changelog.md" },
+    { "Roadmap" = "roadmap.md" },
 ]
 
 [project.theme]
