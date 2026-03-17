@@ -8,6 +8,7 @@ is shifting and must be reviewed deliberately.
 from __future__ import annotations
 
 import inspect
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -27,6 +28,35 @@ class TestModuleExports:
 
     def test_dbport_importable(self):
         from dbport import DBPort  # noqa: F401
+
+    def test_no_version_attribute(self):
+        """__version__ is deliberately absent — use importlib.metadata instead."""
+        import dbport
+
+        assert not hasattr(dbport, "__version__")
+
+    def test_version_via_importlib(self):
+        """The approved way to get the version."""
+        from importlib.metadata import version
+
+        v = version("dbport")
+        assert isinstance(v, str)
+        assert re.match(r"\d+\.\d+\.\d+", v)
+
+    def test_no_internal_symbols_leak(self):
+        """Only DBPort should be exported via __all__."""
+        import dbport
+        import types
+
+        # Filter out submodules and __future__ imports
+        public = [
+            name
+            for name in dir(dbport)
+            if not name.startswith("_")
+            and not isinstance(getattr(dbport, name), types.ModuleType)
+            and name != "annotations"  # from __future__ import annotations
+        ]
+        assert public == ["DBPort"]
 
 
 # ---------------------------------------------------------------------------

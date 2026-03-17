@@ -15,7 +15,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.3 | Version policy and release planning language | Done |
 | 0.0.4 | Python API reference correctness | Done |
 | 0.0.5 | CLI reference and executable workflows | Done |
-| 0.0.6 | Public package surface and repository trustworthiness | Planned |
+| 0.0.6 | Public package surface and repository trustworthiness | Done |
 | 0.0.7 | Execution model and conceptual docs depth | Planned |
 | 0.0.8 | Zensical navigation model | Planned |
 | 0.0.9 | Homepage UX and publication-facing polish | Planned |
@@ -44,12 +44,12 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.0.6 — Public package surface and repository trustworthiness
 
-- Clean up README drift
-- Make docs sections (API, concepts, examples) serve distinct roles
-- Lock down the public Python package surface
-- Complete PyPI-facing package metadata
-- Decide policy for generated docs artifacts in the repository
-- Add baseline governance files (`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`)
+- ~~Clean up README drift~~
+- ~~Make docs sections (API, concepts, examples) serve distinct roles~~
+- ~~Lock down the public Python package surface~~
+- ~~Complete PyPI-facing package metadata~~
+- ~~Decide policy for generated docs artifacts in the repository~~
+- ~~Add baseline governance files (`CONTRIBUTING.md`, `SECURITY.md`)~~
 
 ## 0.0.7 — Execution model and conceptual docs depth
 
