@@ -1,0 +1,86 @@
+name: Docs
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build docs
+        run: uv run zensical build --clean
+
+      - name: Deploy versioned docs to gh-pages
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Configure git for the bot
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Save built site
+          BUILT_SITE=$(mktemp -d)
+          cp -r site/* "$BUILT_SITE/"
+
+          # Fetch or create gh-pages branch
+          if git fetch origin gh-pages 2>/dev/null; then
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+            git commit --allow-empty -m "Initialize gh-pages"
+          fi
+
+          # Deploy to versioned subdirectory
+          rm -rf "$VERSION"
+          mkdir -p "$VERSION"
+          cp -r "$BUILT_SITE"/* "$VERSION/"
+
+          # Update "latest" alias (full copy, not symlink — GitHub Pages doesn't support symlinks)
+          rm -rf latest
+          mkdir -p latest
+          cp -r "$BUILT_SITE"/* latest/
+
+          # Update versions.json
+          python3 scripts/update_versions.py "$VERSION"
+
+          # Ensure the versions script is available on gh-pages
+          mkdir -p scripts
+          git checkout "${GITHUB_REF_NAME}" -- scripts/update_versions.py
+
+          # Create root index.html redirect to latest
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head><meta http-equiv="refresh" content="0; url=latest/"></head>
+            <body><a href="latest/">Redirecting to latest docs...</a></body>
+          </html>
+          EOF
+
+          # Ensure .nojekyll exists (GitHub Pages)
+          touch .nojekyll
+
+          # Commit and push
+          git add -A
+          git diff --cached --quiet && echo "No changes to deploy" && exit 0
+          git commit -m "Deploy docs for v${VERSION}"
+          git push origin gh-pages
