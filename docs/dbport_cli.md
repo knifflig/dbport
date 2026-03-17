@@ -215,11 +215,6 @@ dbp model load
 dbp model exec
 dbp model publish
 dbp model run
-dbp project sync
-dbp project load
-dbp project exec
-dbp project publish
-dbp project run
 dbp config default model
 dbp config model
 dbp config model input
@@ -264,7 +259,7 @@ dbp init
 
 Initialize a new model scaffold.
 
-`dbp init` is now scaffold-only. It creates a new model directory, registers it in `dbport.lock`, and fails fast if the target model already exists. Operational lifecycle work has moved to the `dbp model ...` and `dbp project ...` command groups.
+`dbp init` is now scaffold-only. It creates a new model directory, registers it in `dbport.lock`, and fails fast if the target model already exists. Operational lifecycle work has moved to the `dbp model ...` command group.
 
 Interface
 
@@ -288,7 +283,7 @@ Behavior
  • Sets the newly initialized model as the default (every init updates the default)
  • model_root and duckdb_path are stored as paths relative to the repo root
  • Does NOT connect to the warehouse (offline operation)
- • If the model key already exists, exits with an error and directs the user to `dbp model sync` or `dbp project sync`
+ • If the model key already exists, exits with an error and directs the user to `dbp model sync`
 
 Scaffold contents
  • Creates a directory scaffold with starter SQL templates
@@ -473,38 +468,6 @@ dbp model publish --version 2026-03-15
 dbp model publish test.table1 --refresh
 dbp model run --version 2026-03-15 --timing
 dbp model run test.table1 --target sql/main.sql --dry-run
-
-⸻
-
-dbp project sync | load | exec | publish | run
-
-Run lifecycle operations across every model in the lock file.
-
-Interface
-
-dbp project sync
-dbp project load [--update]
-dbp project exec [--target PATH]
-dbp project publish [--version TEXT] [--dry-run] [--refresh] [--message TEXT]
-dbp project run [--version TEXT] [--target PATH] [--dry-run] [--refresh]
-
-Behavior
- • Iterates over every model registered in `dbport.lock`
- • Executes models in parallel with a thread pool while preserving one Rich tree branch per model
- • `load` reuses configured inputs for each model; `--update` refreshes each input to the newest available snapshot
- • For `exec` and `run`, `--target` overrides each model's configured hook for that invocation
- • For `publish` and `run`, `--dry-run` and `--refresh` map directly to DBPort publish modes
- • Fails the overall command if any model fails, while still reporting which models completed successfully
-
-Example usage
-
-dbp project sync
-dbp project load
-dbp project load --update
-dbp project exec --target sql/transform.sql
-dbp project publish --dry-run
-dbp project publish --message "Quarterly recompute"
-dbp project run --refresh
 
 ⸻
 
@@ -781,8 +744,7 @@ src/
   check.py           dbp status check
   schema.py          dbp config model <model> schema
   model.py           dbp model sync|exec|publish|run
-  project.py         dbp project sync|exec|publish|run
-  run.py             hook execution helpers used by model/project commands
+  run.py             hook execution helpers used by model commands
   execute.py         legacy root exec command module
   publish.py         legacy root publish command module
   load.py            legacy root load command module
@@ -819,7 +781,6 @@ tests/
       test_status.py
       test_check.py
       test_schema.py
-   test_project.py
       test_load.py
       test_run.py
    test_execute.py
@@ -865,10 +826,10 @@ src/dbport/cli/render.py
 Rich output helpers:
  • Tables, panels, summaries, and JSON serialization helpers
  • Module-level console respects --no-color
- • `RichProgressAdapter` — flat spinner/progress bar for single-task progress (used by `dbp model exec`, `dbp project exec`, and scaffold operations)
+ • `RichProgressAdapter` — flat spinner/progress bar for single-task progress (used by `dbp model exec` and scaffold operations)
  • `ModelNode` — per-model tree progress callback with animated spinners for indeterminate tasks and text-based progress bars (row counts, ETA) for determinate tasks like streaming Arrow publish
  • `cli_progress()` — context manager wiring Rich progress to the `progress_callback` contextvar (flat display)
- • `cli_tree_progress()` — context manager rendering a Rich tree with per-model branches; yields a `model_context` factory for thread-safe per-model progress. Used by `dbp model sync|publish|run` and all `dbp project ...` lifecycle commands
+ • `cli_tree_progress()` — context manager rendering a Rich tree with per-model branches; yields a `model_context` factory for thread-safe per-model progress. Used by `dbp model sync|publish|run`
 
 src/dbport/cli/errors.py
 
@@ -900,16 +861,15 @@ Progress display
 
 Commands that perform long-running operations show real-time progress using Rich.
 
-Single-task commands (`dbp model exec`, `dbp project exec`) use a flat spinner/progress bar:
+Single-task commands (`dbp model exec`) use a flat spinner/progress bar:
  • Indeterminate tasks show an animated spinner with a description
  • Determinate tasks (e.g. streaming Arrow publish) show a progress bar with row counts, elapsed time, and ETA
 
-Model and project lifecycle commands use a Rich tree layout:
+Model lifecycle commands use a Rich tree layout:
  • Each model is a parent node with an animated spinner while in progress, then ✓ or ✗ when done
  • Steps (sync, execute, publish) appear as child nodes under each model
  • Indeterminate steps show animated spinners with live elapsed time (e.g. schema detection, loading, executing)
  • Determinate steps show text-based progress bars: `━━━━━━━━━━ 500,000 / 1,485,615 rows  ETA 0:02:45`
- • For `dbp project ...`, models run in parallel and the tree updates each model branch independently without losing spinner or progress-bar detail
 
 All tree-based lifecycle commands use the same `cli_tree_progress` renderer for a consistent experience.
 
