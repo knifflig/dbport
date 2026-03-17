@@ -287,8 +287,6 @@ The script builds a real versioned docs tree in `_preview/` (git-ignored) matchi
 
 The version selector navigates between real paths locally. The docs version label is derived from `pyproject.toml`. The deployment workflow validates that the git tag matches `pyproject.toml` before deploying.
 
-Zensical does not wire `extra.version` into the JS config by default. The `overrides/main.html` template override fixes this by passing `config.extra.version` into the `__config` JSON block so the version selector activates.
-
 ---
 
 ## See Also
