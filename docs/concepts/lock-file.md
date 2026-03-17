@@ -4,7 +4,7 @@
 
 ## Location
 
-The lock file lives at the **repository root**, next to `pyproject.toml`. When `lock_path` is not provided, `DBPort` walks up from the calling script's directory until it finds a `pyproject.toml`.
+The lock file lives at the **repository root**, next to `pyproject.toml`. When not provided explicitly, DBPort walks up from the working directory until it finds a `pyproject.toml`.
 
 ## Properties
 
@@ -15,16 +15,31 @@ The lock file lives at the **repository root**, next to `pyproject.toml`. When `
 
 ## When does the lock file change?
 
-| Operation | What changes |
-|---|---|
-| `DBPort()` init | Model header created if new model |
-| `port.schema(ddl)` | `[schema]` section written or replaced |
-| `port.columns.*.meta(...)` | Column entry in `[[schema.columns]]` updated |
-| `port.columns.*.attach(...)` | `attach_table` field set on column entry |
-| `port.load(table)` | `[[inputs]]` entry added or updated with `last_snapshot_id` |
-| `port.publish(version)` | `[[versions]]` entry appended |
+Every mutating operation writes to disk immediately — there is no deferred flush.
 
-Changes are written to disk immediately after each operation. There is no deferred flush.
+=== "CLI"
+
+    | Command | What changes |
+    |---|---|
+    | `dbp init` | Model header created, set as default |
+    | `dbp model sync` | Model header created if new; `last_fetched_at` updated |
+    | `dbp config model … schema` | `[schema]` section written or replaced |
+    | `dbp config model … input` | `[[inputs]]` entry added or updated |
+    | `dbp config model … input --load` | `[[inputs]]` entry added + `last_snapshot_id` resolved |
+    | `dbp model load` | `[[inputs]]` entries updated with `last_snapshot_id` |
+    | `dbp model publish` | `[[versions]]` entry appended |
+    | `dbp model run` | All of the above (sync → load → exec → publish) |
+
+=== "Python"
+
+    | Operation | What changes |
+    |---|---|
+    | `DBPort()` init | Model header created if new model |
+    | `port.schema(ddl)` | `[schema]` section written or replaced |
+    | `port.columns.*.meta(...)` | Column entry in `[[schema.columns]]` updated |
+    | `port.columns.*.attach(...)` | `attach_table` field set on column entry |
+    | `port.load(table)` | `[[inputs]]` entry added or updated with `last_snapshot_id` |
+    | `port.publish(version)` | `[[versions]]` entry appended |
 
 ## Why commit the lock file
 
@@ -69,36 +84,76 @@ Normal development produces predictable diffs. Here are the three most common pa
 +completed    = true
 ```
 
-## Recovery and merge conflicts
-
-### Merge conflicts
+## Merge conflicts
 
 The lock file is structured to minimize conflicts:
 
 - **`[[versions]]`** — append-only. Accept both sides; each publish appends a new entry.
-- **`[schema]`** — take the version that matches the current DDL in your SQL file. If both sides changed the DDL, resolve the DDL first, then re-run `port.schema()`.
-- **`[[inputs]]`** — take the entry with the higher `last_snapshot_id`. The next `port.load()` will re-check against the warehouse regardless.
+- **`[schema]`** — take the version that matches the current DDL in your SQL file. If both sides changed the DDL, resolve the DDL first, then re-run the schema command.
+- **`[[inputs]]`** — take the entry with the higher `last_snapshot_id`. The next load will re-check against the warehouse regardless.
 
-### Stale or missing lock file
+## Stale or missing lock file
 
-If the lock file is deleted or stale:
+If the lock file is deleted or becomes stale, DBPort recovers gracefully on the next run.
 
-1. `DBPort()` re-creates a fresh model header on next initialization
-2. Re-run `port.schema()` to restore the schema section
-3. Re-run `port.load()` for each input — snapshots will be fetched from the warehouse
-4. Version history is lost locally but the warehouse table properties retain the authoritative publish record
+=== "CLI"
 
-### Fields that matter for correctness
+    ```bash
+    # 1. Sync re-creates the model header and detects the schema
+    dbp model sync
+
+    # 2. Load resolves fresh snapshots for all configured inputs
+    dbp model load
+
+    # 3. Or do everything in one step
+    dbp model run --version 2026-03-15
+    ```
+
+=== "Python"
+
+    ```python
+    # 1. DBPort() re-creates a fresh model header on init
+    with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
+        # 2. Re-run schema to restore the schema section
+        port.schema("sql/create_output.sql")
+
+        # 3. Re-run load for each input — snapshots fetched from warehouse
+        port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
+
+        # 4. Publish as normal
+        port.publish(version="2026-03-15", params={"wstatus": "EMP"})
+    ```
+
+Version history is lost locally, but the warehouse table properties retain the authoritative publish record.
+
+## Regeneration
+
+Running the full pipeline rebuilds all lock state from scratch. The warehouse is the source of truth.
+
+=== "CLI"
+
+    ```bash
+    dbp model run --version 2026-03-15
+    ```
+
+=== "Python"
+
+    ```python
+    # schema() → load() → execute() → publish() regenerates everything
+    with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
+        port.schema("sql/create_output.sql")
+        port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
+        port.execute("sql/transform.sql")
+        port.publish(version="2026-03-15", params={"wstatus": "EMP"})
+    ```
+
+## Fields that matter for correctness
 
 Most fields are informational, but three have behavioral consequences:
 
 - **`last_snapshot_id`** — drives the ingest cache; a wrong value causes stale data or unnecessary reloads
 - **`completed`** on versions — drives publish idempotency; flipping this causes skipped or duplicate publishes
-- **`ddl`** — must match what DuckDB actually has; use `port.schema()` to change it
-
-### Regeneration
-
-Running the full pipeline (`schema()` → `load()` → `publish()`) rebuilds all lock state from scratch. The warehouse is the source of truth.
+- **`ddl`** — must match what DuckDB actually has; use the schema command to change it
 
 ## Multi-model support
 
