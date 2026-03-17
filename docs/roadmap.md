@@ -16,7 +16,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.4 | Python API reference correctness | Done |
 | 0.0.5 | CLI reference and executable workflows | Done |
 | 0.0.6 | Public package surface and repository trustworthiness | Done |
-| 0.0.7 | Execution model and conceptual docs depth | Planned |
+| 0.0.7 | Execution model and conceptual docs depth | Done |
 | 0.0.8 | Zensical navigation model | Planned |
 | 0.0.9 | Homepage UX and publication-facing polish | Planned |
 | 0.1.0 | First public release (PyPI + GitHub Pages) | Planned |
@@ -53,10 +53,10 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.0.7 — Execution model and conceptual docs depth
 
-- Turn the lock file page into an operator guide with annotated examples and recovery guidance
-- Add dedicated documentation for hook-based workflows
-- Strengthen section index pages
-- Tighten hook execution and publish safety semantics
+- ~~Turn the lock file page into an operator guide with annotated examples and recovery guidance~~
+- ~~Add dedicated documentation for hook-based workflows~~
+- ~~Strengthen section index pages~~
+- ~~Tighten hook execution and publish safety semantics~~
 
 ## 0.0.8 — Zensical navigation model
 

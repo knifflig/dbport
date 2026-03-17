@@ -10,6 +10,8 @@ You bring the model. DBPort manages the dataset lifecycle.
 - An Iceberg REST catalog with S3-compatible object storage
 - Catalog credentials (URI, token, warehouse name)
 
+If you're new to DBPort, work through these pages in order.
+
 ## Next steps
 
 <div class="grid cards" markdown>

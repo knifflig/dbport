@@ -382,23 +382,57 @@ class TestPublishServiceConnectionErrors:
             model_root=str(tmp_path),
         )
 
-    def test_schema_drift_check_non_drift_exception_continues(self, tmp_path: Path):
-        """Non-SchemaDriftError during schema check logs warning but continues publish."""
+    def test_schema_drift_check_non_network_exception_continues(self, tmp_path: Path):
+        """Non-OSError, non-SchemaDriftError during schema check logs warning but continues."""
 
         class _DriftErrorCatalog(_FakeCatalog):
             def __init__(self):
                 super().__init__(table_exists=True)
 
             def load_arrow_schema(self, table_address):
-                raise ConnectionError("catalog unreachable during schema check")
+                raise TypeError("unexpected type mapping")
 
         catalog = _DriftErrorCatalog()
         svc = PublishService(
             self._dataset(tmp_path), catalog, _FakeCompute(), _FakeLock(), _FakeMetadata(tmp_path)
         )
-        # Should NOT raise — the ConnectionError is caught and logged as warning
+        # Should NOT raise — non-OSError exceptions are caught and logged as warning
         result = svc.execute(DatasetVersion(version="2026-03-10"))
         assert result.version == "2026-03-10"
+
+    def test_schema_drift_check_connection_error_blocks_publish(self, tmp_path: Path):
+        """ConnectionError during schema check blocks publish with RuntimeError."""
+
+        class _ConnErrorCatalog(_FakeCatalog):
+            def __init__(self):
+                super().__init__(table_exists=True)
+
+            def load_arrow_schema(self, table_address):
+                raise ConnectionError("catalog unreachable")
+
+        catalog = _ConnErrorCatalog()
+        svc = PublishService(
+            self._dataset(tmp_path), catalog, _FakeCompute(), _FakeLock(), _FakeMetadata(tmp_path)
+        )
+        with pytest.raises(RuntimeError, match="Cannot verify warehouse schema"):
+            svc.execute(DatasetVersion(version="2026-03-10"))
+
+    def test_schema_drift_check_timeout_error_blocks_publish(self, tmp_path: Path):
+        """TimeoutError during schema check blocks publish with RuntimeError."""
+
+        class _TimeoutCatalog(_FakeCatalog):
+            def __init__(self):
+                super().__init__(table_exists=True)
+
+            def load_arrow_schema(self, table_address):
+                raise TimeoutError("connection timed out")
+
+        catalog = _TimeoutCatalog()
+        svc = PublishService(
+            self._dataset(tmp_path), catalog, _FakeCompute(), _FakeLock(), _FakeMetadata(tmp_path)
+        )
+        with pytest.raises(RuntimeError, match="Cannot verify warehouse schema"):
+            svc.execute(DatasetVersion(version="2026-03-10"))
 
     def test_schema_drift_error_propagates(self, tmp_path: Path):
         """SchemaDriftError during schema check IS propagated."""

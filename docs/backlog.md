@@ -411,10 +411,12 @@ Theme: public package surface, repository trustworthiness, and docs trustworthin
 
 Theme: execution model and conceptual docs depth.
 
+Status: `done`
+
 ### DBP-LOCK-001 - Turn the lock file page into an operator guide
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/concepts/lock-file.md`
 - Required changes:
@@ -428,7 +430,7 @@ Theme: execution model and conceptual docs depth.
 ### DBP-LOCK-002 - Add annotated lock file examples and diff walkthroughs
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/concepts/lock-file.md`
 - Required changes:
@@ -442,7 +444,7 @@ Theme: execution model and conceptual docs depth.
 ### DBP-LOCK-003 - Document lock file recovery and merge conflict handling
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/concepts/lock-file.md`
   - related workflow docs if needed
@@ -457,7 +459,7 @@ Theme: execution model and conceptual docs depth.
 ### DBP-IA-002 - Add dedicated documentation for hook-based workflows
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/concepts/hooks.md` or equivalent new page
   - `docs/examples/python-workflow.md`
@@ -472,7 +474,7 @@ Theme: execution model and conceptual docs depth.
 ### DBP-IA-003 - Use section index pages more deliberately
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/getting-started/index.md`
   - `docs/concepts/index.md`
@@ -487,7 +489,7 @@ Theme: execution model and conceptual docs depth.
 ### DBP-RUN-001 - Tighten hook execution and publish safety semantics before release
 
 - Priority: `P0`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `src/dbport/application/services/run.py`
   - `src/dbport/application/services/publish.py`
@@ -502,6 +504,17 @@ Theme: execution model and conceptual docs depth.
   - Ensure `exec`, `run`, `publish`, and `dry` mode semantics are stable enough to document as long-lived behavior
 - Acceptance criteria:
   - Execution and publish semantics are deliberate, safety-oriented, and stable enough to freeze for `0.1.0`
+
+### Items delivered
+
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-LOCK-001 | `P1` | Lock file page expanded into operator guide with mutation table and workflow guidance |
+| DBP-LOCK-002 | `P1` | Annotated TOML examples with code annotations; three diff walkthroughs |
+| DBP-LOCK-003 | `P1` | Recovery guidance for merge conflicts, stale files, manual edits, and regeneration |
+| DBP-IA-002 | `P1` | New `docs/concepts/hooks.md` with resolution order, dispatch, trust model; cross-links from API and example pages |
+| DBP-IA-003 | `P1` | All four section index pages strengthened with "start here" guidance |
+| DBP-RUN-001 | `P0` | Publish blocks on catalog connection failures; hook execution raises clear error on missing files |
 
 ---
 

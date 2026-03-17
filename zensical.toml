@@ -21,6 +21,7 @@ nav = [
         "concepts/outputs.md",
         "concepts/metadata.md",
         "concepts/lock-file.md",
+        "concepts/hooks.md",
         "concepts/versioning.md",
     ]},
     { "API Reference" = [

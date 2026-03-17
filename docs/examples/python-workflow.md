@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
 ## Key points
 
-- **`run(port)` function** — the CLI can call this directly via `dbp model run`, so it works both as a standalone script and as a CLI hook
+- **`run(port)` function** — the CLI can call this directly via `dbp model run`, so it works both as a standalone script and as a CLI hook (see [Hooks & Execution](../concepts/hooks.md) for details on hook resolution and dispatch)
 - **Schema first** — `port.schema()` is called early, before any loads or transforms
 - **Column metadata** — `.meta()` and `.attach()` configure codelist behavior per column
 - **Filters** — `filters={"wstatus": "EMP"}` pushes predicates down to the Iceberg scan

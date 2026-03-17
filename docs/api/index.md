@@ -4,6 +4,8 @@ Complete specification of every parameter, method, and command.
 
 DBPort provides two interfaces: a Python API and a CLI.
 
+Start with the [Python API](python.md) for the full method reference. Use the [CLI](cli.md) when you want to drive workflows from the terminal.
+
 - **[Python API](python.md)** — the `DBPort` class with `schema()`, `load()`, `execute()`, `publish()`, and column metadata configuration
 - **[CLI Reference](cli.md)** — the `dbp` command for initializing, configuring, running, and publishing models from the terminal
 

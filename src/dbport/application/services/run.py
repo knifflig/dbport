@@ -1,4 +1,10 @@
-"""RunService — execute the configured run hook for a model."""
+"""RunService — execute the configured run hook for a model.
+
+Hook files are treated as trusted code within the same trust boundary as the
+calling script.  The ``exec()`` call in ``_exec_python_hook`` is deliberate:
+hooks are authored by the model owner and run with the same permissions as any
+other user-authored Python module.
+"""
 
 from __future__ import annotations
 
@@ -60,6 +66,11 @@ def _exec_python_hook(port: Any, hook: str) -> None:
     path = Path(hook)
     if not path.is_absolute():
         path = Path(port._dataset.model_root) / path
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Run hook not found: {path}. "
+            f"Create the file or configure a different hook in dbport.lock."
+        )
     logger.info("Executing Python hook: %s", path)
     code = path.read_text(encoding="utf-8")
     namespace: dict[str, Any] = {

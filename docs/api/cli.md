@@ -302,7 +302,7 @@ dbp model exec --target sql/transform.sql --timing
 | `--target PATH` | Execute this `.sql` or `.py` file instead of the configured hook |
 | `--timing` | Show execution duration |
 
-See also: [`port.execute()`](python.md#execute) (Python API equivalent)
+See also: [`port.execute()`](python.md#execute) (Python API equivalent), [Hooks & Execution](../concepts/hooks.md) (hook resolution and dispatch)
 
 ### `dbp model publish [MODEL]`
 
@@ -345,7 +345,7 @@ dbp model run wifor.emp__regional_trends --dry-run
 
 **Version resolution** (when `--version` is omitted): first checks the configured `version` field in the lock (set via `dbp config model … version`), then falls back to the latest completed version.
 
-See also: [`port.run()`](python.md#run) (Python API equivalent)
+See also: [`port.run()`](python.md#run) (Python API equivalent), [Hooks & Execution](../concepts/hooks.md) (full execution model)
 
 ---
 
