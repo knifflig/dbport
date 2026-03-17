@@ -76,10 +76,9 @@ def get_cli_ctx(ctx: typer.Context) -> CliContext:
 
 # -- Register commands --------------------------------------------------------
 
-from .commands import config, init, model, project, status  # noqa: E402
+from .commands import config, init, model, status  # noqa: E402
 
 app.command(name="init")(init.init_cmd)
 app.add_typer(status.status_app, name="status")
 app.add_typer(model.model_app, name="model")
-app.add_typer(project.project_app, name="project")
 app.add_typer(config.config_app, name="config")

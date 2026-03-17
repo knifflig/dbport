@@ -14,7 +14,6 @@ class TestAppHelp:
         assert "init" in result.output
         assert "status" in result.output
         assert "model" in result.output
-        assert "project" in result.output
         assert "config" in result.output
 
     def test_no_args_shows_help(self):
@@ -58,15 +57,6 @@ class TestAppHelp:
 
     def test_model_help(self):
         result = runner.invoke(app, ["model", "--help"])
-        assert result.exit_code == 0
-        assert "sync" in result.output
-        assert "load" in result.output
-        assert "exec" in result.output
-        assert "publish" in result.output
-        assert "run" in result.output
-
-    def test_project_help(self):
-        result = runner.invoke(app, ["project", "--help"])
         assert result.exit_code == 0
         assert "sync" in result.output
         assert "load" in result.output
