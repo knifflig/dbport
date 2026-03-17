@@ -1,111 +1,82 @@
-# dbport
+# DBPort
 
-DuckDB-native runtime for building reproducible warehouse datasets. `DBPort` is the single entry point for loading Iceberg tables into DuckDB, running SQL transforms, and publishing outputs back to the warehouse with automatic metadata and codelist management.
+[![CI](https://github.com/knifflig/dbport/actions/workflows/ci.yml/badge.svg)](https://github.com/knifflig/dbport/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/dbport)](https://pypi.org/project/dbport/)
+[![Python 3.11–3.12](https://img.shields.io/pypi/pyversions/dbport)](https://pypi.org/project/dbport/)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-```python
-from dbport import DBPort
+The production layer for DuckDB data products.
 
-with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
-    port.schema("sql/create_output.sql")
-    port.columns.nuts2024.meta(codelist_id="NUTS2024", codelist_kind="hierarchical")
-    port.columns.nuts2024.attach(table="wifor.cl_nuts2024")
-    port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
-    port.load("wifor.cl_nuts2024")
-    port.execute("sql/staging.sql")
-    port.execute("sql/final_output.sql")
-    port.publish(version="2026-03-09", params={"wstatus": "EMP"})
-```
+Load governed warehouse inputs into DuckDB, run your own SQL or Python model logic, and publish datasets back to Iceberg — with schema contracts, version tracking, metadata, and codelists managed automatically.
 
----
+**You bring the model. DBPort manages the dataset lifecycle.**
 
-## Key Features
-
-- **One import** — `from dbport import DBPort`. No other public symbols.
-- **DuckDB-first** — all data operations (ingest + publish) go through the DuckDB `iceberg` extension. No pyarrow batch loops; tables up to 1 billion rows stream directly in SQL.
-- **Snapshot-cached ingest** — `port.load()` skips a table if its Iceberg snapshot is unchanged since the last run.
-- **Idempotent publish** — re-running the same version is safe; interrupted runs resume from a checkpoint.
-- **Schema drift protection** — `publish()` compares local schema to the warehouse before writing anything and raises a clear diff if they diverge.
-- **Automatic metadata** — `created_at`, `last_updated_at`, `last_fetched_at`, `inputs`, `codelists`, `versions` are all managed hands-free. No `metadata.json` to write manually.
-- **Committable lock file** — `dbport.lock` is TOML, credential-free, and tracks schema, ingest state, and version history. Safe to commit.
-- **Multi-model repos** — a single `dbport.lock` at the repo root handles multiple models in namespaced sections.
-
----
-
-## Requirements
-
-- Python 3.11 – 3.12
-- DuckDB `iceberg` extension (installed automatically at runtime)
-- Iceberg REST catalog with S3-compatible object store
-
----
-
-## Installation
+## Quickstart
 
 ```bash
 pip install dbport
 ```
 
-For development:
+```python
+from dbport import DBPort
 
-```bash
-uv sync
+with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
+    port.schema("sql/create_output.sql")           # declare output contract
+    port.load("estat.nama_10r_3empers",             # load warehouse inputs
+              filters={"wstatus": "EMP"})
+    port.execute("sql/transform.sql")               # run your model logic
+    port.publish(version="2026-03-09",              # publish to warehouse
+                 params={"wstatus": "EMP"})
 ```
 
----
+Or use the CLI:
 
-## Credentials
+```bash
+dbp init wifor emp__regional_trends
+dbp model load
+dbp model execute sql/transform.sql
+dbp model publish --version 2026-03-09
+```
 
-Set these environment variables (or pass as constructor kwargs):
+## Why DBPort
 
-| Variable | Required | Description |
-|---|---|---|
-| `ICEBERG_REST_URI` | Yes | Iceberg REST catalog URL |
-| `ICEBERG_CATALOG_TOKEN` | Yes | Bearer token |
-| `ICEBERG_WAREHOUSE` | Yes | Warehouse name |
-| `S3_ENDPOINT` | No | S3-compatible endpoint |
-| `AWS_ACCESS_KEY_ID` | No | S3 access key ID |
-| `AWS_SECRET_ACCESS_KEY` | No | S3 secret key |
+Teams want the speed of DuckDB for real analytical work, but productionizing those workflows is harder than it should be. The friction is not in the model logic — it is in everything around it: loading versioned inputs, enforcing output schemas, preserving metadata, making reruns reproducible, and keeping publishes safe.
 
-Credentials are never written to disk.
+DBPort solves that gap:
 
----
+- **DuckDB-native execution** — tables up to 1 billion rows stream through DuckDB's Iceberg extension. No batch loops, no memory copies.
+- **Governed inputs** — `port.load()` pulls from Iceberg with snapshot caching. Unchanged tables are skipped automatically.
+- **Output contracts** — `port.schema()` declares the output shape. `publish()` checks for schema drift before writing anything.
+- **Automatic metadata** — timestamps, input provenance, codelists, and version history are tracked without manual files.
+- **Idempotent publish** — interrupted runs resume from checkpoint. Re-running a completed version is a no-op.
+- **Committable state** — `dbport.lock` is TOML, credential-free, and safe to commit. It tracks schema, inputs, and version history.
+
+## Configuration
+
+DBPort reads credentials from environment variables or constructor kwargs:
+
+```bash
+export ICEBERG_REST_URI=https://catalog.example.com
+export ICEBERG_CATALOG_TOKEN=your-token
+export ICEBERG_WAREHOUSE=your-warehouse
+```
+
+See the [credentials guide](https://knifflig.github.io/dbport/latest/getting-started/credentials/) for all options.
 
 ## Documentation
 
-Full API reference and guides: [knifflig.github.io/dbport](https://knifflig.github.io/dbport)
+Full docs at **[knifflig.github.io/dbport](https://knifflig.github.io/dbport)**
 
+- [Getting Started](https://knifflig.github.io/dbport/latest/getting-started/) — installation, credentials, first run
+- [Concepts](https://knifflig.github.io/dbport/latest/concepts/) — inputs, outputs, metadata, lock file, versioning
 - [Python API](https://knifflig.github.io/dbport/latest/api/python/) — `DBPort` class reference
 - [CLI Reference](https://knifflig.github.io/dbport/latest/api/cli/) — `dbp` command reference
-- [Getting Started](https://knifflig.github.io/dbport/latest/getting-started/) — installation, credentials, quickstart
+- [Examples](https://knifflig.github.io/dbport/latest/examples/) — complete Python and CLI workflows
 
----
+## Contributing
 
-## The `dbport.lock` File
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
-`dbport.lock` lives at the repo root (next to `pyproject.toml`), is TOML-formatted, contains no secrets, and is safe to commit. It serves three purposes:
+## License
 
-1. **Schema registry** — stores the DDL and per-column codelist configuration
-2. **Ingest cache** — tracks Iceberg snapshot IDs so unchanged tables are skipped
-3. **Version history** — append-only log of completed publishes
-
-Multiple models in the same repo each get their own `[models."agency.dataset_id"]` section.
-
----
-
-## Project Structure
-
-```
-src/dbport/              # source (imported as dbport)
-  adapters/primary/      # DBPort, ColumnRegistry
-  adapters/secondary/    # DuckDB, Iceberg, TOML, metadata adapters
-  application/services/  # ingest, transform, schema, publish use cases
-  domain/                # value objects (frozen Pydantic) + port interfaces
-  infrastructure/        # credentials, logging
-
-examples/
-  minimal/               # minimal load → transform → publish
-  minimal_cli/           # CLI-driven workflow
-
-tests/test_dbport/       # tests mirroring src/ structure
-docs/                    # documentation source
-```
+Apache License 2.0 — see [LICENSE](LICENSE).
