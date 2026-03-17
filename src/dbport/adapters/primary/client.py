@@ -87,6 +87,7 @@ class DBPort:
         lock_path: str | None = None,
         model_root: str | None = None,
         load_inputs_on_init: bool = True,
+        config_only: bool = False,
     ) -> None:
         setup_logging()
 
@@ -119,26 +120,30 @@ class DBPort:
         else:
             _duckdb_path = Path(duckdb_path)
 
-        _duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+        if not config_only:
+            _duckdb_path.parent.mkdir(parents=True, exist_ok=True)
 
         # ------------------------------------------------------------------
-        # Credentials
+        # Credentials (skipped in config_only mode)
         # ------------------------------------------------------------------
-        creds_overrides: dict[str, Any] = {}
-        if catalog_uri:
-            creds_overrides["catalog_uri"] = catalog_uri
-        if catalog_token:
-            creds_overrides["catalog_token"] = catalog_token
-        if warehouse:
-            creds_overrides["warehouse"] = warehouse
-        if s3_endpoint:
-            creds_overrides["s3_endpoint"] = s3_endpoint
-        if s3_access_key:
-            creds_overrides["s3_access_key"] = s3_access_key
-        if s3_secret_key:
-            creds_overrides["s3_secret_key"] = s3_secret_key
+        if not config_only:
+            creds_overrides: dict[str, Any] = {}
+            if catalog_uri:
+                creds_overrides["catalog_uri"] = catalog_uri
+            if catalog_token:
+                creds_overrides["catalog_token"] = catalog_token
+            if warehouse:
+                creds_overrides["warehouse"] = warehouse
+            if s3_endpoint:
+                creds_overrides["s3_endpoint"] = s3_endpoint
+            if s3_access_key:
+                creds_overrides["s3_access_key"] = s3_access_key
+            if s3_secret_key:
+                creds_overrides["s3_secret_key"] = s3_secret_key
 
-        self._creds = WarehouseCreds(**creds_overrides)
+            self._creds = WarehouseCreds(**creds_overrides)
+        else:
+            self._creds = None  # type: ignore[assignment]
 
         # ------------------------------------------------------------------
         # Dataset identity
@@ -161,18 +166,27 @@ class DBPort:
             _duckdb_path_rel = str(_duckdb_path)
 
         model_key = self._dataset.table_address  # "agency.dataset_id"
+        self._config_only = config_only
         self._lock: ILockStore = self._make_lock(
             _lock_path,
             model_key=model_key,
             model_root=_model_root_rel,
             duckdb_path=_duckdb_path_rel,
         )
+
+        # Public column registry (only needs lock adapter)
+        self.columns = ColumnRegistry(self._lock)
+
+        if config_only:
+            # Lightweight mode: skip DuckDB, catalog, metadata, and all sync
+            self._compute = None  # type: ignore[assignment]
+            self._catalog = None  # type: ignore[assignment]
+            self._metadata = None  # type: ignore[assignment]
+            return
+
         self._compute: ICompute = self._make_compute(_duckdb_path)
         self._catalog: ICatalog = self._make_catalog(self._creds)
         self._metadata: IMetadataStore = self._make_metadata()
-
-        # Public column registry
-        self.columns = ColumnRegistry(self._lock)
 
         from ...infrastructure.progress import progress_phase
 
@@ -201,8 +215,16 @@ class DBPort:
     # Public API
     # ------------------------------------------------------------------
 
+    def _require_full_mode(self, method: str) -> None:
+        """Raise if called in config_only mode."""
+        if self._config_only:
+            raise RuntimeError(
+                f"DBPort.{method}() requires full mode (config_only=False)"
+            )
+
     def schema(self, ddl_or_path: str) -> None:
         """Declare the output table schema from a DDL string or .sql file path."""
+        self._require_full_mode("schema")
         from ...application.services.schema import DefineSchemaService
 
         svc = DefineSchemaService(self._compute, self._lock).with_catalog(
@@ -235,6 +257,7 @@ class DBPort:
         For tables without DBPort metadata (e.g. Eurostat inputs), version is
         ignored and the current Iceberg snapshot is used as before.
         """
+        self._require_full_mode("load")
         from ...application.services.ingest import IngestService
 
         svc = IngestService(self._catalog, self._compute, self._lock)
@@ -251,6 +274,7 @@ class DBPort:
         version: str | None = None,
     ) -> IngestRecord:
         """Validate and persist an input declaration without loading it."""
+        self._require_full_mode("configure_input")
         from ...application.services.ingest import IngestService
 
         svc = IngestService(self._catalog, self._compute, self._lock)
@@ -261,6 +285,7 @@ class DBPort:
 
     def execute(self, sql_or_path: str) -> None:
         """Run a SQL string or .sql file in DuckDB."""
+        self._require_full_mode("execute")
         from ...application.services.transform import TransformService
 
         svc = TransformService(self._compute)
@@ -278,6 +303,7 @@ class DBPort:
         file extension (``.sql`` or ``.py``).  If *version* is provided,
         ``publish()`` is called after the hook completes.
         """
+        self._require_full_mode("run")
         from ...application.services.run import RunService
 
         svc = RunService(self._compute, self._lock)
@@ -303,6 +329,7 @@ class DBPort:
         mode="dry": validate schemas only; no data is written.
         mode="refresh": overwrite an existing version unconditionally.
         """
+        self._require_full_mode("publish")
         from ...application.services.publish import PublishService
 
         svc = PublishService(
@@ -316,6 +343,8 @@ class DBPort:
 
     def close(self) -> None:
         """Release resources (DuckDB connection)."""
+        if self._config_only:
+            return
         try:
             self._compute.close()
         except Exception:

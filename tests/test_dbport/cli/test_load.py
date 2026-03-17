@@ -32,6 +32,155 @@ duckdb_path = "data/b.duckdb"
 """
 
 
+class TestModelSyncCommand:
+    """Tests for ``dbp model sync`` (model.py:model_sync_cmd)."""
+
+    def test_model_sync_success(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "model", "sync",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Synced" in result.output
+
+    def test_model_sync_json(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--json",
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "model", "sync",
+                ],
+            )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["synced"] == ["a.b"]
+        assert data["data"]["total"] == 1
+
+    def test_model_sync_with_model_arg(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            """
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+
+[models."c.d"]
+agency = "c"
+dataset_id = "d"
+model_root = "models/d"
+duckdb_path = "models/d/data/d.duckdb"
+""",
+        )
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+
+        with patch(_PATCH_TARGET, return_value=mock_port) as mock_cls:
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "model", "sync", "c.d",
+                ],
+            )
+        assert result.exit_code == 0
+        call_kwargs = mock_cls.call_args[1]
+        assert call_kwargs["agency"] == "c"
+        assert call_kwargs["dataset_id"] == "d"
+
+    def test_model_sync_no_model_fails(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        lock.write_text("# empty\n")
+        result = runner.invoke(
+            app,
+            ["--lockfile", str(lock), "model", "sync"],
+        )
+        assert result.exit_code != 0
+        assert "No models found" in result.output
+
+
+class TestModelLoadEdgeCases:
+    """Tests for ``dbp model load`` edge cases (model.py:model_load_cmd)."""
+
+    def test_model_load_no_inputs_human(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(lock, _MODEL_LOCK)
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "model", "load",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "No inputs configured" in result.output
+
+    def test_model_load_json_output(self, tmp_path: Path):
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            """
+[models."a.b"]
+agency = "a"
+dataset_id = "b"
+model_root = "."
+duckdb_path = "data/b.duckdb"
+
+[[models."a.b".inputs]]
+table_address = "ns.tbl1"
+""",
+        )
+        mock_port = MagicMock()
+        mock_port.__enter__ = MagicMock(return_value=mock_port)
+        mock_port.__exit__ = MagicMock(return_value=False)
+
+        with patch(_PATCH_TARGET, return_value=mock_port):
+            result = runner.invoke(
+                app,
+                [
+                    "--json",
+                    "--lockfile", str(lock),
+                    "--project", str(tmp_path),
+                    "model", "load",
+                ],
+            )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["loaded"] == ["ns.tbl1"]
+
+
 class TestLoadCommand:
     def test_input_show_no_model_fails(self, tmp_path: Path):
         lock = tmp_path / "dbport.lock"

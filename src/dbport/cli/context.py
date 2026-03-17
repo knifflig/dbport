@@ -9,7 +9,6 @@ via the ``--model`` flag.
 
 from __future__ import annotations
 
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,49 +74,38 @@ def resolve_context(
     )
 
 
-def _read_lock_doc(lockfile_path: Path) -> dict:
-    """Read the full lock document. Returns {} if file missing."""
-    if not lockfile_path.exists():
-        return {}
-    return tomllib.loads(lockfile_path.read_text(encoding="utf-8"))
+def _make_project_lock(lockfile_path: Path):
+    """Create a TomlLockAdapter for project-level (non-model-scoped) operations."""
+    from ..adapters.secondary.lock.toml import TomlLockAdapter
+
+    return TomlLockAdapter(lockfile_path)
 
 
 def read_lock_models(lockfile_path: Path) -> dict:
     """Read the models dict from dbport.lock. Returns {} if file missing."""
-    return _read_lock_doc(lockfile_path).get("models", {})
+    adapter = _make_project_lock(lockfile_path)
+    keys = adapter.list_model_keys()
+    return {k: adapter.read_model_data(k) for k in keys}
 
 
 def read_default_model(lockfile_path: Path) -> str | None:
     """Read the default_model key from dbport.lock. Returns None if unset."""
-    return _read_lock_doc(lockfile_path).get("default_model")
+    return _make_project_lock(lockfile_path).read_default_model_key()
 
 
 def write_default_model(lockfile_path: Path, model_key: str) -> None:
     """Set the default_model key in dbport.lock."""
-    from ..adapters.secondary.lock.toml import TomlLockAdapter
-
-    adapter = TomlLockAdapter(lockfile_path)
-    doc = adapter._load()
-    doc["default_model"] = model_key
-    adapter._save(doc)
-
-
-_DEFAULT_MODELS_FOLDER = "models"
+    _make_project_lock(lockfile_path).write_default_model_key(model_key)
 
 
 def read_models_folder(lockfile_path: Path) -> str:
     """Read models_folder from dbport.lock, defaulting to 'models'."""
-    return _read_lock_doc(lockfile_path).get("models_folder") or _DEFAULT_MODELS_FOLDER
+    return _make_project_lock(lockfile_path).read_models_folder()
 
 
 def write_models_folder(lockfile_path: Path, folder: str) -> None:
     """Set the models_folder key in dbport.lock."""
-    from ..adapters.secondary.lock.toml import TomlLockAdapter
-
-    adapter = TomlLockAdapter(lockfile_path)
-    doc = adapter._load()
-    doc["models_folder"] = folder
-    adapter._save(doc)
+    _make_project_lock(lockfile_path).write_models_folder(folder)
 
 
 def _cwd_model_root(project_path: Path) -> str:

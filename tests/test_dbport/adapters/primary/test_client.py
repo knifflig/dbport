@@ -395,6 +395,144 @@ class TestDBPortRunMethod:
             client.close()
 
 
+class TestDBPortConfigOnly:
+    """Tests for config_only lightweight mode."""
+
+    def test_config_only_no_credentials_required(self, tmp_path: Path):
+        """config_only=True skips credential validation."""
+        client = DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        )
+        client.close()  # should not raise
+
+    def test_config_only_columns_meta_works(self, tmp_path: Path):
+        """Column metadata can be set in config_only mode."""
+        lock_path = tmp_path / "dbport.lock"
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(lock_path),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            port.columns.geo.meta(codelist_id="NUTS2024", codelist_kind="hierarchical")
+
+        # Verify it was written to lock
+        from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+
+        lock = TomlLockAdapter(lock_path, model_key="wifor.emp")
+        entries = lock.read_codelist_entries()
+        assert "geo" in entries
+        assert entries["geo"].codelist_id == "NUTS2024"
+        assert entries["geo"].codelist_kind == "hierarchical"
+
+    def test_config_only_columns_attach_works(self, tmp_path: Path):
+        """Column attach can be set in config_only mode."""
+        lock_path = tmp_path / "dbport.lock"
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(lock_path),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            port.columns.geo.attach(table="wifor.cl_nuts2024")
+
+        from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+
+        lock = TomlLockAdapter(lock_path, model_key="wifor.emp")
+        entries = lock.read_codelist_entries()
+        assert entries["geo"].attach_table == "wifor.cl_nuts2024"
+
+    def test_config_only_schema_raises(self, tmp_path: Path):
+        """Data methods raise RuntimeError in config_only mode."""
+        import pytest
+
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            with pytest.raises(RuntimeError, match="config_only"):
+                port.schema("CREATE TABLE test (id INT)")
+
+    def test_config_only_load_raises(self, tmp_path: Path):
+        """load() raises RuntimeError in config_only mode."""
+        import pytest
+
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            with pytest.raises(RuntimeError, match="config_only"):
+                port.load("estat.foo")
+
+    def test_config_only_execute_raises(self, tmp_path: Path):
+        """execute() raises RuntimeError in config_only mode."""
+        import pytest
+
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            with pytest.raises(RuntimeError, match="config_only"):
+                port.execute("SELECT 1")
+
+    def test_config_only_publish_raises(self, tmp_path: Path):
+        """publish() raises RuntimeError in config_only mode."""
+        import pytest
+
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            with pytest.raises(RuntimeError, match="config_only"):
+                port.publish(version="v1")
+
+    def test_config_only_run_raises(self, tmp_path: Path):
+        """run() raises RuntimeError in config_only mode."""
+        import pytest
+
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(tmp_path / "dbport.duckdb"),
+            config_only=True,
+        ) as port:
+            with pytest.raises(RuntimeError, match="config_only"):
+                port.run(version="v1")
+
+    def test_config_only_no_duckdb_dir_created(self, tmp_path: Path):
+        """config_only=True does not create the data/ directory."""
+        data_dir = tmp_path / "data"
+        assert not data_dir.exists()
+        with DBPort(
+            agency="wifor",
+            dataset_id="emp",
+            lock_path=str(tmp_path / "dbport.lock"),
+            duckdb_path=str(data_dir / "emp.duckdb"),
+            config_only=True,
+        ):
+            pass
+        assert not data_dir.exists()
+
+
 class TestDBPortAutoSchema:
     def _make_auto_schema_client(self, tmp_path: Path, mock_catalog=None):
         """Helper to create a DBPort instance for auto-schema tests."""
@@ -578,4 +716,37 @@ class TestDBPortUpdateLastFetched:
 
         cb.started.assert_called_once_with("Updating warehouse timestamp")
         cb.finished.assert_called_once()
+        client._compute.close()
+
+
+class TestDBPortLoadInputs:
+    """Cover _load_inputs exception handling (client.py lines 440-441)."""
+
+    def test_load_inputs_exception_swallowed(self, tmp_path: Path):
+        """_load_inputs swallows exceptions and logs debug message."""
+        from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
+        from dbport.adapters.secondary.lock.toml import TomlLockAdapter
+        from dbport.domain.entities.dataset import Dataset
+
+        client = DBPort.__new__(DBPort)
+        client._compute = DuckDBComputeAdapter(tmp_path / "test.duckdb")
+        client._lock = TomlLockAdapter(
+            tmp_path / "dbport.lock",
+            model_key="wifor.emp",
+            model_root=".",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+        )
+        client._catalog = MagicMock()
+        client._dataset = Dataset(
+            agency="wifor",
+            dataset_id="emp",
+            duckdb_path=str(tmp_path / "test.duckdb"),
+            lock_path=str(tmp_path / "dbport.lock"),
+            model_root=str(tmp_path),
+        )
+
+        with patch("dbport.application.services.sync.SyncService") as mock_cls:
+            mock_cls.return_value.sync_inputs.side_effect = RuntimeError("sync failed")
+            client._load_inputs()  # should not raise
+
         client._compute.close()

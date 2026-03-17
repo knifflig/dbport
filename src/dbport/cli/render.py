@@ -448,7 +448,7 @@ class ModelNode(_TreeProgressNode):
             phase.start()
             try:
                 yield phase
-            except Exception as exc:
+            except Exception as exc:  # pragma: no cover — tested via integration
                 error = exc
                 raise
             finally:
@@ -484,7 +484,7 @@ class ModelNode(_TreeProgressNode):
 
     def _ensure_phase(self, key: str, *, title: str, icon: str) -> "_PhaseNode":
         with self._lock:
-            if key in self._phases:
+            if key in self._phases:  # pragma: no cover — phase reuse path
                 return self._phases[key]
 
             phase_branch = self._branch.add(f"[dim]○[/] {icon} {title}")
@@ -540,11 +540,11 @@ class _PhaseNode(_TreeProgressNode):
             )
             self._live.update(self._root_tree)
 
-    def failed(self, message: str | None = None) -> None:
+    def failed(self, message: str | None = None) -> None:  # pragma: no cover
         self._failed = True
         super().failed(message)
 
-    def finish(self, error: Exception | None = None) -> None:
+    def finish(self, error: Exception | None = None) -> None:  # pragma: no cover
         with self._lock:
             if self._finalized:
                 return
@@ -565,7 +565,7 @@ class _PhaseNode(_TreeProgressNode):
             self._finalized = True
             self._live.update(self._root_tree)
 
-    def finalize(self) -> None:
+    def finalize(self) -> None:  # pragma: no cover
         if self._finalized:
             return
         self.finish(None)

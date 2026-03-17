@@ -356,3 +356,104 @@ duckdb_path = "data/b.duckdb"
             )
         assert result.exit_code == 0
         mp.schema.assert_called_once_with("CREATE TABLE a.b (id VARCHAR)")
+
+
+class TestSelectedModelKeyTraversal:
+    """Cover _selected_model_key parent traversal returning None (lines 35-36)."""
+
+    def test_returns_none_when_no_config_model_key(self):
+        """_selected_model_key returns None when no context has config_model_key."""
+        import click
+
+        from dbport.cli.commands.schema import _selected_model_key
+
+        cmd = click.Command("test")
+        ctx = click.Context(cmd)
+        ctx.obj = {}
+        assert _selected_model_key(ctx) is None
+
+    def test_returns_none_with_parent_chain(self):
+        """_selected_model_key walks parent chain and returns None if not found."""
+        import click
+
+        from dbport.cli.commands.schema import _selected_model_key
+
+        cmd = click.Command("test")
+        parent_ctx = click.Context(cmd)
+        parent_ctx.obj = {}
+        child_ctx = click.Context(cmd, parent=parent_ctx)
+        child_ctx.obj = {}
+        assert _selected_model_key(child_ctx) is None
+
+    def test_returns_key_from_parent(self):
+        """_selected_model_key finds key in parent context."""
+        import click
+
+        from dbport.cli.commands.schema import _selected_model_key
+
+        cmd = click.Command("test")
+        parent_ctx = click.Context(cmd)
+        parent_ctx.obj = {"config_model_key": "a.b"}
+        child_ctx = click.Context(cmd, parent=parent_ctx)
+        child_ctx.obj = {}
+        assert _selected_model_key(child_ctx) == "a.b"
+
+
+class TestResolveSchemaTargetModelNotFound:
+    """Cover RuntimeError when explicit model key not found (line 57)."""
+
+    def test_explicit_model_not_in_lock_raises(self, tmp_path: Path):
+        """_resolve_schema_target raises RuntimeError for unknown model key."""
+        import click
+
+        from dbport.cli.commands.schema import _resolve_schema_target
+
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            '[models."a.b"]\nagency = "a"\ndataset_id = "b"\nmodel_root = "."\n',
+        )
+
+        # Create a context with config_model_key set to nonexistent model
+        cmd = click.Command("test")
+        parent_ctx = click.Context(cmd)
+        parent_ctx.obj = {"config_model_key": "nonexistent.model"}
+        child_ctx = click.Context(cmd, parent=parent_ctx)
+        child_ctx.obj = {}
+
+        cli_ctx = MagicMock()
+        cli_ctx.lockfile_path = lock
+
+        import pytest
+        with pytest.raises(RuntimeError, match="not found"):
+            _resolve_schema_target(child_ctx, cli_ctx)
+
+
+class TestResolveSchemaTargetFallback:
+    """Cover fallback model resolution in _resolve_schema_target (lines 63-65)."""
+
+    def test_fallback_to_resolve_model_data(self, tmp_path: Path):
+        """When no explicit model key, falls back to _resolve_model_data."""
+        import click
+
+        from dbport.cli.commands.schema import _resolve_schema_target
+
+        lock = tmp_path / "dbport.lock"
+        _create_lock(
+            lock,
+            '[models."a.b"]\nagency = "a"\ndataset_id = "b"\nmodel_root = "."\n',
+        )
+
+        # Context with no config_model_key — forces fallback
+        cmd = click.Command("test")
+        ctx = click.Context(cmd)
+        ctx.obj = {}
+
+        cli_ctx = MagicMock()
+        cli_ctx.lockfile_path = lock
+        cli_ctx.project_path = tmp_path
+        cli_ctx.model_dir = None
+
+        model_key, model_data = _resolve_schema_target(ctx, cli_ctx)
+        assert model_key == "a.b"
+        assert model_data["agency"] == "a"

@@ -149,3 +149,57 @@ class TestDefineSchemaServiceSchemaDrift:
 
         with pytest.raises(SchemaDriftError, match="Schema drift detected"):
             svc.execute(_DDL, base_dir="/tmp")
+
+
+class _FakeCatalogRaises:
+    """Catalog that raises a non-SchemaDriftError exception."""
+
+    def table_exists(self, _table_address: str) -> bool:
+        raise ConnectionError("network timeout")
+
+    def load_arrow_schema(self, _table_address: str) -> pa.Schema:
+        raise ConnectionError("network timeout")
+
+
+class TestDefineSchemaServiceDriftCheckWarning:
+    """Cover non-SchemaDriftError exception logged as warning (schema.py line 110)."""
+
+    def test_non_drift_error_logged_as_warning(self, compute, lock, caplog):
+        """Non-SchemaDriftError exceptions are caught and logged as warnings."""
+        import logging
+
+        svc = DefineSchemaService(compute, lock).with_catalog(
+            _FakeCatalogRaises(),
+            "inputs.emp",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            schema = svc.execute(_DDL, base_dir="/tmp")
+
+        # Schema should still be created despite the warning
+        assert schema is not None
+        assert len(schema.columns) == 3
+        assert any("Schema drift check skipped" in r.message for r in caplog.records)
+
+
+class _FakeCatalogTableNotExists:
+    """Catalog where the output table does not exist yet."""
+
+    def table_exists(self, _table_address: str) -> bool:
+        return False
+
+    def load_arrow_schema(self, _table_address: str) -> pa.Schema:
+        raise AssertionError("should not be called")
+
+
+class TestDefineSchemaServiceTableNotExists:
+    """Cover schema.py line 110: table_exists returns False, drift check skipped."""
+
+    def test_drift_check_skipped_when_table_not_exists(self, compute, lock):
+        svc = DefineSchemaService(compute, lock).with_catalog(
+            _FakeCatalogTableNotExists(),
+            "inputs.emp",
+        )
+        schema = svc.execute(_DDL, base_dir="/tmp")
+        assert schema is not None
+        assert len(schema.columns) == 3

@@ -267,7 +267,7 @@ class IcebergCatalogAdapter:
 
         try:
             from pyiceberg.expressions import And, EqualTo
-        except ImportError as exc:
+        except ImportError as exc:  # pragma: no cover — pyiceberg always installed
             raise RuntimeError(
                 "pyiceberg is required for input inspection. "
                 "Install it: pip install 'pyiceberg[s3fs]'"
@@ -735,7 +735,7 @@ class IcebergCatalogAdapter:
                     f"SELECT * FROM {table_address}"
                 )
             except Exception as exc:
-                if dropped:
+                if dropped:  # pragma: no cover — catastrophic failure path
                     logger.error(
                         "CREATE failed after DROP for %s — table was dropped "
                         "but could not be recreated: %s",

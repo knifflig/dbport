@@ -431,3 +431,41 @@ class TomlLockAdapter:
         self._ensure_model_header(m)
         m["version"] = version
         self._save(doc)
+
+    # ------------------------------------------------------------------
+    # Project-level operations (not model-scoped)
+    # ------------------------------------------------------------------
+
+    _DEFAULT_MODELS_FOLDER = "models"
+
+    def read_default_model_key(self) -> str | None:
+        doc = self._load()
+        return doc.get("default_model")
+
+    def write_default_model_key(self, model_key: str) -> None:
+        doc = self._load()
+        doc["default_model"] = model_key
+        self._save(doc)
+
+    def read_models_folder(self) -> str:
+        doc = self._load()
+        return doc.get("models_folder") or self._DEFAULT_MODELS_FOLDER
+
+    def write_models_folder(self, folder: str) -> None:
+        doc = self._load()
+        doc["models_folder"] = folder
+        self._save(doc)
+
+    def list_model_keys(self) -> list[str]:
+        doc = self._load()
+        return list(doc.get("models", {}).keys())
+
+    def read_model_data(self, model_key: str) -> dict | None:
+        doc = self._load()
+        return doc.get("models", {}).get(model_key)
+
+    def register_model(self) -> None:
+        doc = self._load()
+        m = self._model_doc(doc)
+        self._ensure_model_header(m)
+        self._save(doc)

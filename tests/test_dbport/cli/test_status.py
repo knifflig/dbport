@@ -414,6 +414,61 @@ version = "v1"
         assert "test.t2" in result.output
 
 
+class TestStatusRawJsonNoLock:
+    """Cover _handle_raw with --raw --json when no lock file exists (lines 77-78)."""
+
+    def test_raw_json_no_lock(self, tmp_path: Path):
+        repo = _setup_repo(tmp_path)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "status", "--raw",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert "No dbport.lock" in data["data"]["error"]
+
+
+class TestStatusJsonModelResolution:
+    """Cover _handle_json model resolution fallbacks (lines 101-103, 112)."""
+
+    def test_json_model_flag_resolves(self, tmp_path: Path):
+        """--model flag used in JSON mode resolves correctly (lines 101-103)."""
+        repo = _setup_repo(tmp_path)
+        _create_lock(repo / "dbport.lock", _RICH_LOCK)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "--model", "models/t2",
+            "status",
+        ])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["data"]["model_key"] == "test.t2"
+
+    def test_json_fallback_to_first_model(self, tmp_path: Path):
+        """When no default, no CWD match, no --model, falls to first model (line 112)."""
+        repo = _setup_repo(tmp_path)
+        lock_no_default = (
+            '[models."z.first"]\n'
+            'agency = "z"\n'
+            'dataset_id = "first"\n'
+            'model_root = "models/first"\n\n'
+            '[models."z.second"]\n'
+            'agency = "z"\n'
+            'dataset_id = "second"\n'
+            'model_root = "models/second"\n'
+        )
+        _create_lock(repo / "dbport.lock", lock_no_default)
+        result = runner.invoke(app, [
+            "--json", "--project", str(repo),
+            "status",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["data"]["model_key"] == "z.first"
+
+
 class TestStatusCombined:
     def test_combined_inputs_history(self, tmp_path: Path):
         repo = _setup_repo(tmp_path)

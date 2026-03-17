@@ -507,3 +507,66 @@ class TestRunCommand:
             )
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-04-01", mode=None)
+
+
+class TestRunExecuteStepCallbackFailed:
+    """Cover _run_execute_step callback.failed() path (lifecycle.py lines 28-32)."""
+
+    def test_callback_failed_called_on_exception(self):
+        """When execute_hook raises, callback.failed() is called and exception re-raised."""
+        import pytest
+
+        from dbport.cli.commands.lifecycle import _run_execute_step
+        from dbport.infrastructure.progress import progress_callback
+
+        mock_port = MagicMock()
+        cb = MagicMock()
+        token = progress_callback.set(cb)
+        try:
+            with patch(
+                "dbport.application.services.run.execute_hook",
+                side_effect=RuntimeError("hook failed"),
+            ):
+                with pytest.raises(RuntimeError, match="hook failed"):
+                    _run_execute_step(mock_port, "main.py")
+        finally:
+            progress_callback.reset(token)
+
+        cb.started.assert_called_once_with("Executing main.py")
+        cb.failed.assert_called_once_with("Failed executing main.py")
+
+    def test_callback_finished_on_success(self):
+        """When execute_hook succeeds, callback.finished() is called."""
+        from dbport.cli.commands.lifecycle import _run_execute_step
+        from dbport.infrastructure.progress import progress_callback
+
+        mock_port = MagicMock()
+        cb = MagicMock()
+        token = progress_callback.set(cb)
+        try:
+            with patch("dbport.application.services.run.execute_hook"):
+                _run_execute_step(mock_port, "main.py")
+        finally:
+            progress_callback.reset(token)
+
+        cb.started.assert_called_once_with("Executing main.py")
+        cb.finished.assert_called_once_with("Executed main.py")
+
+    def test_no_callback_exception_still_reraises(self):
+        """When no callback is set, _run_execute_step still re-raises."""
+        import pytest
+
+        from dbport.cli.commands.lifecycle import _run_execute_step
+        from dbport.infrastructure.progress import progress_callback
+
+        mock_port = MagicMock()
+        token = progress_callback.set(None)
+        try:
+            with patch(
+                "dbport.application.services.run.execute_hook",
+                side_effect=RuntimeError("hook failed"),
+            ):
+                with pytest.raises(RuntimeError, match="hook failed"):
+                    _run_execute_step(mock_port, "main.py")
+        finally:
+            progress_callback.reset(token)
