@@ -271,6 +271,24 @@ Tests use `_Fake*` doubles (not mocks) and `tmp_path` fixtures. Each adapter and
 
 ---
 
+## Docs Preview
+
+```bash
+./scripts/preview_docs.sh          # build + serve at localhost:8000
+./scripts/preview_docs.sh --serve  # serve only (skip build)
+```
+
+The script builds a real versioned docs tree in `_preview/` (git-ignored) matching the deployed GitHub Pages structure:
+
+- `_preview/<version>/` — versioned site
+- `_preview/latest/` — latest alias (full copy)
+- `_preview/versions.json` — mike-compatible version metadata
+- `_preview/index.html` — redirect to `latest/`
+
+The version selector navigates between real paths locally. The docs version label is derived from `pyproject.toml`. The deployment workflow validates that the git tag matches `pyproject.toml` before deploying.
+
+---
+
 ## See Also
 
 - `docs/client.md` — user-facing usage guide (no internals)

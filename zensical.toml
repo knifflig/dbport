@@ -74,9 +74,6 @@ toggle.name = "Switch to light mode"
 logo = "lucide/fishing-hook"
 repo = "fontawesome/brands/github"
 
-[project.extra]
-version.provider = "mike"
-
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
 link = "https://github.com/knifflig/dbport"

@@ -25,3 +25,15 @@ jobs:
         run: uv run ruff format --check src/ tests/
       - name: Test
         run: uv run pytest --tb=short -q
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync
+      - name: Verify docs build
+        run: uv run zensical build --clean
