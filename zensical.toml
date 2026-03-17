@@ -35,6 +35,7 @@ nav = [
     ]},
     { "Changelog" = "changelog.md" },
     { "Roadmap" = "roadmap.md" },
+    { "Release Versioning" = "release-versioning.md" },
 ]
 
 [project.theme]

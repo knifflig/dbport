@@ -159,52 +159,21 @@ Status: `done`
 
 Theme: version policy and release planning language.
 
-### DBP-VERS-005 - Document and enforce the project's release numbering policy
+Status: `done`
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `docs/changelog.md`
-  - release/versioning docs
-  - packaging/release workflow
-- Required changes:
-  - Document the project's chosen `x.x.x` policy
-  - Capture the project-specific convention:
-    - first number bump = major release step
-    - second number bump = normal release step
-    - third number bump = minor release step
-  - Use that policy consistently in changelog and release docs
-- Acceptance criteria:
-  - Contributors have one clear versioning policy to follow
+### What was implemented
 
-### DBP-VERS-006 - Encode the initial release milestones in docs and release workflow
+- **Release versioning policy** — added `docs/release-versioning.md` documenting the project's `X.Y.Z` numbering convention (major / normal / minor), the predevelopment milestone path from `0.0.1` to `0.1.0`, the single source of truth in `pyproject.toml`, and a per-version release checklist
+- **CLI version fallback fixed** — removed the hard-coded `"0.1.0"` fallback in `dbp --version`; now reports `"unknown"` when `importlib.metadata` cannot resolve the package version
+- **Version surfaces documented** — `pyproject.toml` is the declared single source of truth; `dbp --version`, docs deployment, git tags, and release automation all derive from it consistently
 
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - changelog and release/versioning docs
-  - packaging/release workflow
-- Required changes:
-  - Record that predevelopment starts at `0.0.1`
-  - Record that the first version published to PyPI and GitHub Pages will be `0.1.0`
-- Acceptance criteria:
-  - The initial release path is explicitly documented
+### Items delivered
 
-### DBP-VERS-009 - Make runtime and CLI version reporting follow the declared source of truth
-
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - `pyproject.toml`
-  - `src/dbport/cli/main.py`
-  - package/version tests
-- Required changes:
-  - Make runtime-facing version reporting derive from the same package version source used by release automation
-  - Remove hard-coded fallback behavior that can report a release version unrelated to the installed package
-  - Decide whether package-level runtime version metadata is part of the supported public contract and test it accordingly
-  - Ensure `dbp --version`, package metadata, docs version labels, and release automation all describe the same version coherently
-- Acceptance criteria:
-  - Runtime and CLI version reporting are consistent with the declared package version source of truth
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-VERS-005 | `P0` | Release numbering policy documented in `docs/release-versioning.md` |
+| DBP-VERS-006 | `P1` | Initial release milestones (`0.0.1` → `0.1.0`) encoded in versioning docs |
+| DBP-VERS-009 | `P1` | CLI version fallback fixed; all version surfaces derive from `pyproject.toml` |
 
 ---
 

@@ -28,13 +28,13 @@ class TestAppHelp:
         assert "dbp" in result.output
 
     def test_version_fallback_on_error(self):
-        """When importlib.metadata.version raises, fallback to 0.1.0."""
+        """When importlib.metadata.version raises, fallback to 'unknown'."""
         from unittest.mock import patch
 
         with patch("importlib.metadata.version", side_effect=Exception("not installed")):
             result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert "unknown" in result.output
 
     def test_config_subcommand_in_help(self):
         result = runner.invoke(app, ["--help"])

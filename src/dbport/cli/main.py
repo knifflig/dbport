@@ -31,7 +31,7 @@ def _version_callback(value: bool) -> None:
         try:
             v = version("dbport")
         except Exception:
-            v = "0.1.0"
+            v = "unknown"
         typer.echo(f"dbp {v}")
         raise typer.Exit()
 
