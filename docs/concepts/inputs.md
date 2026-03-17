@@ -7,10 +7,11 @@ DBPort loads Iceberg tables from the warehouse into a local DuckDB database. Onc
 === "CLI"
 
     ```bash
-    # Configure an input for the model
-    dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+    # Configure an input and load it immediately
+    dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers --load
 
-    # Load all configured inputs into DuckDB
+    # Or configure first, load later
+    dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
     dbp model load
     ```
 
@@ -29,9 +30,8 @@ Filters are equality predicates pushed down to the Iceberg scan. They reduce the
 === "CLI"
 
     ```bash
-    # Filters are configured as part of the input declaration
     dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers \
-        --filter wstatus=EMP --filter nace_r2=TOTAL
+        --filter wstatus=EMP --filter nace_r2=TOTAL --load
     ```
 
 === "Python"
