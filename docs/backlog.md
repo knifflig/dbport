@@ -107,7 +107,7 @@ Theme: versioning mechanism online.
 ### DBP-VERS-001 - Make version-specific docs browsing actually work end-to-end
 
 - Priority: `P0`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `zensical.toml`
   - `.github/workflows/docs.yml`
@@ -129,7 +129,7 @@ Theme: versioning mechanism online.
 ### DBP-VERS-002 - Define the project version source of truth for docs builds
 
 - Priority: `P0`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `pyproject.toml`
   - `.github/workflows/docs.yml`
@@ -145,7 +145,7 @@ Theme: versioning mechanism online.
 ### DBP-VERS-007 - Clarify local preview behavior for versioned docs
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - docs maintenance notes
   - local docs workflow
@@ -163,7 +163,7 @@ Theme: versioning mechanism online.
 ### DBP-FOUND-006 - Keep local docs build verification in the delivery workflow
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - local docs workflow
   - CI docs workflow

@@ -271,6 +271,19 @@ Tests use `_Fake*` doubles (not mocks) and `tmp_path` fixtures. Each adapter and
 
 ---
 
+## Docs Preview
+
+```bash
+./scripts/preview_docs.sh          # build + serve at localhost:8000
+./scripts/preview_docs.sh --serve  # serve only (skip build)
+```
+
+The script writes a mock `versions.json` into `site/` so the version selector is visible during local preview. Switching versions will 404 locally — only the current build is served. Full multi-version browsing works only on the deployed GitHub Pages site.
+
+The docs version label is derived from `pyproject.toml`. The deployment workflow validates that the git tag matches `pyproject.toml` before deploying.
+
+---
+
 ## See Also
 
 - `docs/client.md` — user-facing usage guide (no internals)

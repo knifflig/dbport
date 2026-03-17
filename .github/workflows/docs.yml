@@ -22,24 +22,45 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Extract version from pyproject.toml
+        id: pkg_version
+        run: |
+          PKG_VERSION=$(python3 -c "
+          import re, pathlib
+          text = pathlib.Path('pyproject.toml').read_text()
+          m = re.search(r'^version\s*=\s*\"([^\"]+)\"', text, re.MULTILINE)
+          print(m.group(1))
+          ")
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag matches pyproject.toml version
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+          PKG_VERSION: ${{ steps.pkg_version.outputs.version }}
+        run: |
+          EXPECTED="v${PKG_VERSION}"
+          if [ "$TAG_VERSION" != "$EXPECTED" ]; then
+            echo "::error::Tag '${TAG_VERSION}' does not match pyproject.toml version '${PKG_VERSION}' (expected tag '${EXPECTED}')"
+            exit 1
+          fi
+          echo "Version validated: ${PKG_VERSION}"
 
       - name: Build docs
         run: uv run zensical build --clean
 
       - name: Deploy versioned docs to gh-pages
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ steps.pkg_version.outputs.version }}
         run: |
           # Configure git for the bot
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Save built site
+          # Save built site and the versions script before switching branches
           BUILT_SITE=$(mktemp -d)
           cp -r site/* "$BUILT_SITE/"
+          VERSIONS_SCRIPT=$(mktemp)
+          cp scripts/update_versions.py "$VERSIONS_SCRIPT"
 
           # Fetch or create gh-pages branch
           if git fetch origin gh-pages 2>/dev/null; then
@@ -60,21 +81,21 @@ jobs:
           mkdir -p latest
           cp -r "$BUILT_SITE"/* latest/
 
-          # Update versions.json
-          python3 scripts/update_versions.py "$VERSION"
+          # Update versions.json (script saved before branch switch)
+          python3 "$VERSIONS_SCRIPT" "$VERSION"
 
-          # Ensure the versions script is available on gh-pages
+          # Keep the versions script on gh-pages for reference
           mkdir -p scripts
-          git checkout "${GITHUB_REF_NAME}" -- scripts/update_versions.py
+          cp "$VERSIONS_SCRIPT" scripts/update_versions.py
 
           # Create root index.html redirect to latest
-          cat > index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-            <head><meta http-equiv="refresh" content="0; url=latest/"></head>
-            <body><a href="latest/">Redirecting to latest docs...</a></body>
-          </html>
-          EOF
+          cat > index.html <<'REDIRECT'
+<!DOCTYPE html>
+<html>
+  <head><meta http-equiv="refresh" content="0; url=latest/"></head>
+  <body><a href="latest/">Redirecting to latest docs...</a></body>
+</html>
+REDIRECT
 
           # Ensure .nojekyll exists (GitHub Pages)
           touch .nojekyll
