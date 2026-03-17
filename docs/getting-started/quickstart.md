@@ -1,8 +1,32 @@
 # Quickstart
 
-This guide walks through a complete workflow: define an output schema, load inputs, transform data, and publish results.
+This guide walks through a complete workflow: initialize a project, configure the model, and run the full lifecycle.
+
+## CLI workflow
+
+```bash
+# Initialize a new model
+dbp init regional_trends --agency wifor --dataset emp__regional_trends
+cd regional_trends
+
+# Declare the output schema
+dbp config model wifor.emp__regional_trends schema sql/create_output.sql
+
+# Configure column metadata
+dbp config model wifor.emp__regional_trends columns set nuts2024 \
+    --id NUTS2024 --kind hierarchical
+
+# Configure inputs
+dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+dbp config model wifor.emp__regional_trends input wifor.cl_nuts2024
+
+# Run the full lifecycle (sync, execute, publish)
+dbp model run --version 2026-03-09 --timing
+```
 
 ## Python API
+
+The same workflow driven programmatically:
 
 ```python
 from dbport import DBPort
@@ -38,31 +62,6 @@ with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
     port.publish(version="2026-03-09", params={"wstatus": "EMP"})
 ```
 
-## CLI workflow
-
-The same workflow using the `dbp` command:
-
-```bash
-# Initialize a new model
-dbp init regional_trends --agency wifor --dataset emp__regional_trends
-
-cd regional_trends
-
-# Apply the output schema
-dbp config model wifor.emp__regional_trends schema sql/create_output.sql
-
-# Configure column metadata
-dbp config model wifor.emp__regional_trends columns set nuts2024 \
-    --id NUTS2024 --kind hierarchical
-
-# Configure inputs
-dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
-dbp config model wifor.emp__regional_trends input wifor.cl_nuts2024
-
-# Run the full lifecycle (sync, execute, publish)
-dbp model run --version 2026-03-09 --timing
-```
-
 ## What happened
 
 1. **Schema declared** — the output table was created in DuckDB and persisted to `dbport.lock`
@@ -74,5 +73,5 @@ dbp model run --version 2026-03-09 --timing
 ## Next steps
 
 - Learn about [inputs and loading](../concepts/inputs.md) in depth
-- Explore the full [Python API reference](../api/python.md)
 - See the [CLI reference](../api/cli.md) for all commands
+- Explore the full [Python API reference](../api/python.md)

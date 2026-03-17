@@ -2,10 +2,10 @@
 
 Copy-paste-ready workflows that demonstrate DBPort end to end.
 
-Both examples cover the same pipeline. Pick the [Python workflow](python-workflow.md) if you write model logic in Python, or the [CLI workflow](cli-workflow.md) if you prefer the terminal.
+Both examples cover the same pipeline. The CLI workflow is the default way to work with DBPort. The Python workflow shows programmatic control for custom model logic.
 
-- **[Python Workflow](python-workflow.md)** — full Python API example: load, transform, publish
 - **[CLI Workflow](cli-workflow.md)** — full CLI example: init, configure, run, publish
+- **[Python Workflow](python-workflow.md)** — full Python API example: load, transform, publish
 
 ---
 

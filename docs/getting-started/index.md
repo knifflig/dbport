@@ -1,16 +1,14 @@
 # Getting Started
 
-DBPort gives you a governed path from warehouse inputs to published outputs — without forcing a specific modeling framework.
+DBPort handles the lifecycle around periodic dataset recomputation — loading inputs, running your model, and publishing versioned outputs to a warehouse.
 
-You bring the model. DBPort manages the dataset lifecycle.
+The default interface is the `dbp` CLI. If you're new to DBPort, work through these pages in order.
 
 ## What you'll need
 
 - Python 3.11 or 3.12
 - An Iceberg REST catalog with S3-compatible object storage
 - Catalog credentials (URI, token, warehouse name)
-
-If you're new to DBPort, work through these pages in order.
 
 ## Next steps
 
@@ -36,7 +34,7 @@ If you're new to DBPort, work through these pages in order.
 
     ---
 
-    Build and publish your first dataset in 5 minutes.
+    Initialize a project and run your first model in 5 minutes.
 
     [:octicons-arrow-right-24: Quickstart](quickstart.md)
 
