@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
-# Local docs preview with a mock version selector.
+# Build and serve a real versioned docs preview locally.
 #
 # Usage:
 #   ./scripts/preview_docs.sh          # build + serve
 #   ./scripts/preview_docs.sh --serve  # serve only (skip build)
 #
-# This generates a local versions.json so the version selector renders
-# during local preview. The mock versions.json is written into site/ after
-# the build and is git-ignored.
+# This produces the same versioned directory structure used in deployment:
 #
-# Limitation: only the current build is available locally. Switching
-# versions in the selector will 404 — this is expected. The selector
-# itself is visible so you can verify its appearance and behavior.
+#   _preview/
+#     index.html          → redirect to latest/
+#     versions.json       → mike-compatible version metadata
+#     <version>/          → full built site
+#     latest/             → full built site (copy)
+#
+# The version selector reads versions.json and navigates between real
+# versioned paths. This matches what GitHub Pages serves in production.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
+
+PREVIEW_DIR="$PROJECT_ROOT/_preview"
 
 # Extract version from pyproject.toml
 VERSION=$(python3 -c "
@@ -32,17 +37,40 @@ if [ "${1:-}" != "--serve" ]; then
     uv run zensical build --clean
 fi
 
-# Write mock versions.json into the built site
-cat > site/versions.json <<EOF
+echo "Assembling versioned preview for $VERSION..."
+
+# Clean previous preview
+rm -rf "$PREVIEW_DIR"
+mkdir -p "$PREVIEW_DIR"
+
+# Deploy built site to versioned subdirectory
+cp -r site "$PREVIEW_DIR/$VERSION"
+
+# Create latest alias (full copy, matching GitHub Pages deployment)
+cp -r site "$PREVIEW_DIR/latest"
+
+# Write mike-compatible versions.json
+cat > "$PREVIEW_DIR/versions.json" <<EOF
 [
   {
     "version": "$VERSION",
-    "title": "$VERSION (local preview)",
+    "title": "$VERSION",
     "aliases": ["latest"]
   }
 ]
 EOF
 
-echo "Serving docs for version $VERSION at http://localhost:8000"
-echo "Note: version selector is visible but switching versions will 404 locally."
-cd site && python3 -m http.server 8000
+# Root redirect to latest
+cat > "$PREVIEW_DIR/index.html" <<'REDIRECT'
+<!DOCTYPE html>
+<html>
+  <head><meta http-equiv="refresh" content="0; url=latest/"></head>
+  <body><a href="latest/">Redirecting to latest docs...</a></body>
+</html>
+REDIRECT
+
+echo "Serving versioned docs at http://localhost:8000"
+echo "  /$VERSION/  — versioned path"
+echo "  /latest/    — latest alias"
+echo "  /           — redirects to /latest/"
+cd "$PREVIEW_DIR" && python3 -m http.server 8000

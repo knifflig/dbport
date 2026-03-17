@@ -37,6 +37,7 @@ nav = [
 
 [project.theme]
 language = "en"
+custom_dir = "overrides"
 
 features = [
     "content.code.copy",
@@ -74,8 +75,9 @@ toggle.name = "Switch to light mode"
 logo = "lucide/fishing-hook"
 repo = "fontawesome/brands/github"
 
-[project.extra]
-version.provider = "mike"
+[project.extra.version]
+provider = "mike"
+default = "latest"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"

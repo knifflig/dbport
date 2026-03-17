@@ -278,9 +278,16 @@ Tests use `_Fake*` doubles (not mocks) and `tmp_path` fixtures. Each adapter and
 ./scripts/preview_docs.sh --serve  # serve only (skip build)
 ```
 
-The script writes a mock `versions.json` into `site/` so the version selector is visible during local preview. Switching versions will 404 locally — only the current build is served. Full multi-version browsing works only on the deployed GitHub Pages site.
+The script builds a real versioned docs tree in `_preview/` (git-ignored) matching the deployed GitHub Pages structure:
 
-The docs version label is derived from `pyproject.toml`. The deployment workflow validates that the git tag matches `pyproject.toml` before deploying.
+- `_preview/<version>/` — versioned site
+- `_preview/latest/` — latest alias (full copy)
+- `_preview/versions.json` — mike-compatible version metadata
+- `_preview/index.html` — redirect to `latest/`
+
+The version selector navigates between real paths locally. The docs version label is derived from `pyproject.toml`. The deployment workflow validates that the git tag matches `pyproject.toml` before deploying.
+
+Zensical does not wire `extra.version` into the JS config by default. The `overrides/main.html` template override fixes this by passing `config.extra.version` into the `__config` JSON block so the version selector activates.
 
 ---
 

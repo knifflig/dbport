@@ -84,10 +84,6 @@ jobs:
           # Update versions.json (script saved before branch switch)
           python3 "$VERSIONS_SCRIPT" "$VERSION"
 
-          # Keep the versions script on gh-pages for reference
-          mkdir -p scripts
-          cp "$VERSIONS_SCRIPT" scripts/update_versions.py
-
           # Create root index.html redirect to latest
           cat > index.html <<'REDIRECT'
 <!DOCTYPE html>
