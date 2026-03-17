@@ -2,65 +2,65 @@
 
 This guide walks through a complete workflow: initialize a project, configure the model, and run the full lifecycle.
 
-## CLI workflow
+## Full workflow
 
-```bash
-# Initialize a new model
-dbp init regional_trends --agency wifor --dataset emp__regional_trends
-cd regional_trends
+=== "CLI"
 
-# Declare the output schema
-dbp config model wifor.emp__regional_trends schema sql/create_output.sql
+    ```bash
+    # Initialize a new model
+    dbp init regional_trends --agency wifor --dataset emp__regional_trends
+    cd regional_trends
 
-# Configure column metadata
-dbp config model wifor.emp__regional_trends columns set nuts2024 \
-    --id NUTS2024 --kind hierarchical
+    # Declare the output schema
+    dbp config model wifor.emp__regional_trends schema sql/create_output.sql
 
-# Configure inputs
-dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
-dbp config model wifor.emp__regional_trends input wifor.cl_nuts2024
+    # Configure column metadata
+    dbp config model wifor.emp__regional_trends columns set nuts2024 \
+        --id NUTS2024 --kind hierarchical
 
-# Run the full lifecycle (sync, execute, publish)
-dbp model run --version 2026-03-09 --timing
-```
+    # Configure inputs
+    dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+    dbp config model wifor.emp__regional_trends input wifor.cl_nuts2024
 
-## Python API
+    # Run the full lifecycle (sync, execute, publish)
+    dbp model run --version 2026-03-09 --timing
+    ```
 
-The same workflow driven programmatically:
+=== "Python"
 
-```python
-from dbport import DBPort
+    ```python
+    from dbport import DBPort
 
-with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
+    with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
 
-    # 1. Declare the output schema
-    port.schema("""
-        CREATE OR REPLACE TABLE wifor.emp__regional_trends (
-            freq     VARCHAR,
-            year     DATE,
-            nuts2024 VARCHAR,
-            value    DOUBLE
+        # 1. Declare the output schema
+        port.schema("""
+            CREATE OR REPLACE TABLE wifor.emp__regional_trends (
+                freq     VARCHAR,
+                year     DATE,
+                nuts2024 VARCHAR,
+                value    DOUBLE
+            )
+        """)
+
+        # 2. Configure column metadata
+        port.columns.nuts2024.meta(
+            codelist_id="NUTS2024",
+            codelist_kind="hierarchical",
         )
-    """)
+        port.columns.nuts2024.attach(table="wifor.cl_nuts2024")
 
-    # 2. Configure column metadata
-    port.columns.nuts2024.meta(
-        codelist_id="NUTS2024",
-        codelist_kind="hierarchical",
-    )
-    port.columns.nuts2024.attach(table="wifor.cl_nuts2024")
+        # 3. Load inputs from the warehouse
+        port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
+        port.load("wifor.cl_nuts2024")
 
-    # 3. Load inputs from the warehouse
-    port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
-    port.load("wifor.cl_nuts2024")
+        # 4. Run SQL transforms
+        port.execute("sql/staging.sql")
+        port.execute("sql/final_output.sql")
 
-    # 4. Run SQL transforms
-    port.execute("sql/staging.sql")
-    port.execute("sql/final_output.sql")
-
-    # 5. Publish to the warehouse
-    port.publish(version="2026-03-09", params={"wstatus": "EMP"})
-```
+        # 5. Publish to the warehouse
+        port.publish(version="2026-03-09", params={"wstatus": "EMP"})
+    ```
 
 ## What happened
 
