@@ -12,7 +12,7 @@ For completed work, see the [Changelog](changelog.md).
 |---|---|---|
 | 0.0.1 | Foundation: runtime, architecture, CLI, docs site, CI | Done |
 | 0.0.2 | Release history and roadmap foundations | Done |
-| 0.0.3 | Version policy and release planning language | Planned |
+| 0.0.3 | Version policy and release planning language | Done |
 | 0.0.4 | Python API reference correctness | Planned |
 | 0.0.5 | CLI reference and executable workflows | Planned |
 | 0.0.6 | Public package surface and repository trustworthiness | Planned |
@@ -25,9 +25,9 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.0.3 — Version policy and release planning language
 
-- Document and enforce the project's release numbering policy
-- Encode the initial release milestones (`0.0.1` → `0.1.0`) in docs and release workflow
-- Make runtime and CLI version reporting derive from `pyproject.toml` consistently
+- ~~Document and enforce the project's release numbering policy~~
+- ~~Encode the initial release milestones (`0.0.1` → `0.1.0`) in docs and release workflow~~
+- ~~Make runtime and CLI version reporting derive from `pyproject.toml` consistently~~
 
 ## 0.0.4 — Python API reference correctness
 

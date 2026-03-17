@@ -6,6 +6,21 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.3 — 2026-03-17
+
+Version policy and release planning language.
+
+### Added
+
+- **Release versioning policy** — new `docs/release-versioning.md` page documenting the project's `X.Y.Z` numbering convention (major / normal / minor), the predevelopment milestone path from `0.0.1` to `0.1.0`, the single source of truth in `pyproject.toml`, and the per-version release checklist
+- **Release Versioning** added to docs site navigation
+
+### Fixed
+
+- **CLI version fallback** — `dbp --version` no longer reports a hard-coded `"0.1.0"` when package metadata is unavailable; now reports `"unknown"` instead of a misleading future version
+
+---
+
 ## 0.0.2 — 2026-03-17
 
 Release history and roadmap foundations.
