@@ -14,7 +14,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.2 | Release history and roadmap foundations | Done |
 | 0.0.3 | Version policy and release planning language | Done |
 | 0.0.4 | Python API reference correctness | Done |
-| 0.0.5 | CLI reference and executable workflows | Planned |
+| 0.0.5 | CLI reference and executable workflows | Done |
 | 0.0.6 | Public package surface and repository trustworthiness | Planned |
 | 0.0.7 | Execution model and conceptual docs depth | Planned |
 | 0.0.8 | Zensical navigation model | Planned |
@@ -37,10 +37,10 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.0.5 — CLI reference and executable workflows
 
-- Rebuild CLI reference around the real command hierarchy (`status`, `config`, `model`)
-- Fix broken CLI example script
-- Remove stale command references from workflow pages
-- Freeze the CLI command taxonomy, model selection, and error behavior
+- ~~Rebuild CLI reference around the real command hierarchy (`status`, `config`, `model`)~~
+- ~~Fix broken CLI example script~~
+- ~~Remove stale command references from workflow pages~~
+- ~~Freeze the CLI command taxonomy, model selection, and error behavior~~
 
 ## 0.0.6 — Public package surface and repository trustworthiness
 

@@ -21,10 +21,32 @@ The `dbp` command is the default operational interface for DBPort. It covers pro
 When a command needs to resolve which model to operate on:
 
 1. **Positional MODEL argument** — explicit model key (`agency.dataset_id`)
-2. **`--model` flag** — explicit model directory
+2. **`--model` flag** — explicit model directory relative to project root
 3. **CWD matching** — current directory matched against `model_root` entries in the lock
-4. **`default_model`** — persisted in `dbport.lock`
+4. **`default_model`** — persisted in `dbport.lock` (set via `dbp config default model`)
 5. **First model** — fallback for single-model repos
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | User or validation error (bad input, missing config, schema drift) |
+| 2 | Internal or unexpected error |
+| 130 | Interrupted (Ctrl+C) |
+
+In `--json` mode, errors include an `error_type` field for automation:
+
+```json
+{
+  "ok": false,
+  "command": "model publish",
+  "data": {
+    "error": "No completed versions found in lock file. Specify --version explicitly.",
+    "error_type": "runtime_error"
+  }
+}
+```
 
 ---
 
@@ -57,30 +79,83 @@ dbp init regional_trends --agency wifor --dataset emp__regional_trends
 Show resolved project and runtime state.
 
 ```bash
-dbp status [--inputs] [--history] [--raw] [--json]
+dbp status [--inputs] [--history] [--raw]
 ```
 
+| Option | Description |
+|---|---|
+| `--inputs` | Show detailed input information |
+| `--history` | Show version publish history |
+| `--raw` | Show raw lock file content |
+
 Shows project root, lockfile path, and for each model: agency, dataset ID, schema state, loaded inputs, and published versions.
+
+### `dbp status check`
+
+Run health checks on the project.
+
+```bash
+dbp status check [--strict]
+```
+
+| Option | Description |
+|---|---|
+| `--strict` | Fail on warnings (not just failures) |
+
+Verifies: lockfile exists and is valid TOML, DuckDB is available, credentials are set, and Python dependencies are installed.
 
 ---
 
 ## `dbp config`
 
-Manage project configuration.
+Manage project configuration. Two sub-groups: `default` (repo-wide settings) and `model` (per-model settings).
 
-### `dbp config KEY [VALUE]`
+### `dbp config default model [MODEL_KEY]`
 
-Get or set a configuration value. Valid keys: `default`, `folder`, `run-hook`, `check`.
+Show or set the default model for the project.
 
 ```bash
-# Show current default model
-dbp config default
+# Show current default
+dbp config default model
 
 # Set the default model
-dbp config default wifor.emp__regional_trends
+dbp config default model wifor.emp__regional_trends
+```
 
-# Run health checks
-dbp config check
+### `dbp config default folder [FOLDER]`
+
+Show or set the models folder for new models created with `dbp init`.
+
+```bash
+# Show current folder
+dbp config default folder
+
+# Set the models folder
+dbp config default folder examples
+```
+
+### `dbp config default hook [HOOK_PATH]`
+
+Show or set the run hook for the resolved model.
+
+```bash
+# Show current hook
+dbp config default hook
+
+# Set the run hook
+dbp config default hook main.py
+```
+
+### `dbp config model MODEL_KEY version [VERSION]`
+
+Show or set the configured publish version for a model.
+
+```bash
+# Show current version
+dbp config model wifor.emp__regional_trends version
+
+# Set the version
+dbp config model wifor.emp__regional_trends version 2026-03-17
 ```
 
 ### `dbp config model MODEL_KEY schema [SOURCE]`
@@ -95,9 +170,13 @@ dbp config model wifor.emp__regional_trends schema
 dbp config model wifor.emp__regional_trends schema sql/create_output.sql
 ```
 
+| Option | Description |
+|---|---|
+| `--diff` | Show schema diff between lock and DuckDB |
+
 ### `dbp config model MODEL_KEY input [DATASET]`
 
-Show or configure model inputs.
+Show configured inputs or add one.
 
 ```bash
 # Show configured inputs
@@ -105,20 +184,47 @@ dbp config model wifor.emp__regional_trends input
 
 # Add an input
 dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+
+# Add an input with filters and load immediately
+dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers \
+    --filter wstatus=EMP --load
 ```
+
+| Option | Description |
+|---|---|
+| `--filter KEY=VALUE` | Equality filter (repeatable) |
+| `--version TEXT` | Pinned dataset version to load |
+| `--load` | Load the input immediately after configuring it |
 
 ### `dbp config model MODEL_KEY columns`
 
-Manage column metadata.
+Show all column metadata for a model.
 
 ```bash
-# Show all columns
 dbp config model wifor.emp__regional_trends columns
+```
 
-# Set codelist metadata
+### `dbp config model MODEL_KEY columns set COLUMN`
+
+Set codelist metadata for a column.
+
+```bash
 dbp config model wifor.emp__regional_trends columns set geo --id GEO --kind reference
+dbp config model wifor.emp__regional_trends columns set year --type categorical
+```
 
-# Attach a codelist table
+| Option | Description |
+|---|---|
+| `--id TEXT` | Codelist identifier |
+| `--type TEXT` | Codelist type |
+| `--kind TEXT` | Codelist kind |
+| `--labels JSON` | JSON labels |
+
+### `dbp config model MODEL_KEY columns attach COLUMN TABLE`
+
+Attach a DuckDB table as the codelist source for a column.
+
+```bash
 dbp config model wifor.emp__regional_trends columns attach geo wifor.cl_nuts2024
 ```
 
@@ -126,7 +232,7 @@ dbp config model wifor.emp__regional_trends columns attach geo wifor.cl_nuts2024
 
 ## `dbp model sync [MODEL]`
 
-Sync a model from the catalog. Opens the model via DBPort and performs init-time sync.
+Sync a model from the catalog. Opens the model via DBPort and performs init-time sync (schema auto-detection, local state sync, `last_fetched_at` update).
 
 ```bash
 dbp model sync
@@ -144,20 +250,25 @@ dbp model load
 dbp model load --update    # resolve newest snapshots
 ```
 
+| Option | Description |
+|---|---|
+| `--update` | Resolve the newest available snapshot for each configured input |
+
 ---
 
 ## `dbp model exec [MODEL]`
 
-Execute model transforms.
+Execute model transforms (the configured run hook or an explicit target).
 
 ```bash
+dbp model exec
 dbp model exec --target sql/transform.sql --timing
 ```
 
 | Option | Description |
 |---|---|
-| `--target PATH` | Override the default execution target |
-| `--timing` | Show execution timing |
+| `--target PATH` | Execute this `.sql` or `.py` file instead of the configured hook |
+| `--timing` | Show execution duration |
 
 ---
 
@@ -169,6 +280,7 @@ Publish the output to the warehouse.
 dbp model publish --version 2026-03-15
 dbp model publish --dry-run
 dbp model publish --refresh
+dbp model publish --version 2026-03-15 --message "Initial release"
 ```
 
 | Option | Description |
@@ -176,6 +288,9 @@ dbp model publish --refresh
 | `--version TEXT` | Version string for the publish |
 | `--dry-run` | Schema validation only, no data written |
 | `--refresh` | Overwrite existing version |
+| `--message, -m TEXT` | Publish note for history |
+
+**Version resolution** (when `--version` is omitted): uses the latest completed version from the lock file. Does not fall back to the configured `version` field — use `dbp model run` for that.
 
 ---
 
@@ -188,7 +303,15 @@ dbp model run --version 2026-03-15 --timing
 dbp model run wifor.emp__regional_trends --dry-run
 ```
 
-Combines `sync`, `exec`, and `publish` into a single operation with all their respective options.
+| Option | Description |
+|---|---|
+| `--version TEXT` | Version to publish after execution |
+| `--target PATH` | Execute this file instead of the configured hook |
+| `--timing` | Show execution duration |
+| `--dry-run` | Validate only, do not publish |
+| `--refresh` | Overwrite existing version |
+
+**Version resolution** (when `--version` is omitted): first checks the configured `version` field in the lock (set via `dbp config model … version`), then falls back to the latest completed version.
 
 ---
 

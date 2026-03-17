@@ -6,6 +6,33 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.5 — 2026-03-17
+
+CLI reference and executable workflows.
+
+### Added
+
+- **CLI contract tests** — 18 tests in `test_cli_contract.py` that lock the `dbp` command tree: top-level commands, global options, status/model/config subcommands, all command flags, and absence of stale references
+- **Model and version resolution contract tests** — 22 tests in `test_resolution_contract.py` that lock the 5-step model resolution precedence, 3-step version resolution for `run`, 2-step version resolution for `publish`, and the intentional difference between the two strategies
+- **Exit code contract** — exit code 0 for success, 1 for user/validation errors, 2 for internal/unexpected errors, 130 for interrupts; `CliUserError` exception class for explicit validation failures
+- **JSON error typing** — `--json` error output now includes an `error_type` field (`runtime_error`, `file_not_found`, `validation_error`, `internal_error`, `interrupted`) for automation
+- **Exit codes documented** — CLI reference now includes an exit code table
+
+### Changed
+
+- **Stale `dbp project sync` removed** — `dbp init` no longer references the removed `dbp project sync` command; guidance now points to `dbp model sync`
+- **Stale `dbp load` / `dbp run` removed** — `dbp init` output now shows correct `dbp model load` and `dbp model run` commands
+- **Generic errors now exit 2** — unexpected/internal errors now use exit code 2 instead of 1, distinguishing them from user errors
+
+### Fixed
+
+- **CLI reference rebuilt** — `docs/api/cli.md` now documents the actual nested `config default model/folder/hook` and `config model MODEL_KEY version/input/schema/columns` hierarchy; added missing `--message` flag on publish, `--timing` on exec/run, `dbp status check` section, version resolution documentation, and exit code table
+- **CLI example fixed** — `examples/minimal_cli/run.sh` removed stale `dbp project sync` and `dbp status --show-history`; all commands verified against the current CLI
+- **Stale `dbp config check` references fixed** — `docs/examples/cli-workflow.md` and `docs/getting-started/credentials.md` now correctly reference `dbp status check`
+- **Stale `dbp config default` reference fixed** — `docs/examples/cli-workflow.md` now uses the correct `dbp config default model` syntax
+
+---
+
 ## 0.0.4 — 2026-03-17
 
 Python API reference correctness.

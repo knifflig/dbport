@@ -630,4 +630,4 @@ class TestInitExistingModelValidation:
         )
         assert result.exit_code != 0
         assert "No model name specified" in result.output
-        assert "project sync" in result.output
+        assert "dbp model sync" in result.output

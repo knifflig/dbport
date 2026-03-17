@@ -42,7 +42,7 @@ export ICEBERG_WAREHOUSE="my_warehouse"
 Verify your credentials are configured correctly:
 
 ```bash
-dbp config check
+dbp status check
 ```
 
 This checks that all required environment variables are present, DuckDB is available, and dependencies are installed.

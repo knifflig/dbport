@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Minimal CLI example — demonstrates the full `dbp` command surface.
 #
-# Covers: init, config (default, schema, input, meta, attach),
-# status check, model exec/publish/run, project sync, and status.
+# Covers: init, config (default, folder, hook, schema, input, columns),
+# status check, model sync/load/exec/publish/run, and status.
 #
 # Uses CWD-based model resolution — no --model flag needed.
 #
@@ -27,10 +27,6 @@ dbp config default model test.cli_table1
 dbp config default hook main.py
 dbp config model test.cli_table1 version "$VERSION"
 dbp status
-
-echo ""
-echo "=== 2b. Project-wide sync ==="
-dbp project sync
 
 echo ""
 echo "=== 3. Check project health ==="
@@ -83,7 +79,7 @@ dbp model run test.cli_table1 --timing --refresh
 echo ""
 echo "=== 13. Status ==="
 dbp status
-dbp status --show-history
+dbp status --history
 
 echo ""
 echo "=== 14. JSON output mode ==="

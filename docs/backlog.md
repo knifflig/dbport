@@ -282,98 +282,29 @@ Status: `done`
 
 Theme: CLI reference and executable workflows.
 
-### DBP-DOC-002 - Rebuild CLI reference around real command hierarchy
+Status: `done`
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `docs/api/cli.md`
-- Required changes:
-  - Build on the implemented nested command tree under `status`, `config`, and `model`
-  - Replace stale flat config framing with the actual nested CLI structure
-  - Document `dbp status check`
-  - Correct flags and examples to match implementation
-  - Clarify configuration commands vs lifecycle commands
-- Acceptance criteria:
-  - The CLI reference matches the current CLI help output
+### What was implemented
 
-### DBP-DOC-003 - Fix broken runnable CLI example
+- **CLI contract tests** — 18 tests in `test_cli_contract.py` lock the full command tree: top-level commands (`init`, `status`, `model`, `config`), global options, subcommand names under `status`, `model`, and `config`, all command flags, and the absence of stale references
+- **Model and version resolution contract tests** — 22 tests in `test_resolution_contract.py` lock the 5-step model resolution precedence (positional → `--model` → CWD → `default_model` → first), the 3-step version resolution for `run` (flag → configured → latest completed), the 2-step version resolution for `publish` (flag → latest completed), and the intentional difference between the two strategies
+- **Exit code contract** — exit 0 (success), exit 1 (user/validation error), exit 2 (internal/unexpected error), exit 130 (interrupted); `CliUserError` exception class added for explicit validation failures; JSON errors now include `error_type` field for automation
+- **CLI reference rebuilt** — `docs/api/cli.md` rewritten to match the actual nested command hierarchy including `config default model/folder/hook`, `config model MODEL_KEY version/input/schema/columns`, `status check`, all command flags, version resolution rules, and exit codes
+- **CLI example fixed** — `examples/minimal_cli/run.sh` cleaned up: removed stale `dbp project sync`, fixed `dbp status --show-history` to `--history`, all commands verified against the current CLI
+- **Stale docs references fixed** — `docs/examples/cli-workflow.md`, `docs/getting-started/credentials.md` updated from `dbp config check` to `dbp status check`, from `dbp config default` to `dbp config default model`
+- **Stale init output fixed** — `dbp init` no longer references removed `dbp project sync`; next-steps output now shows correct `dbp model load` and `dbp model run`
+- **Version resolution documented** — both `resolve_publish_version` (for `run`) and `resolve_publish_version_for_publish` (for `publish`) have detailed docstrings explaining the intentional difference
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `examples/minimal_cli/run.sh`
-- Required changes:
-  - Remove stale commands that no longer exist, including `dbp project sync`
-  - Replace stale status flags
-  - Verify the full script against the current CLI
-- Acceptance criteria:
-  - The example script contains only valid commands and flags
+### Items delivered
 
-### DBP-DOC-004 - Remove stale command references from workflow pages
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `docs/examples/cli-workflow.md`
-  - `docs/getting-started/quickstart.md`
-  - `docs/getting-started/credentials.md`
-- Required changes:
-  - Replace stale config/check examples
-  - Align workflow snippets with the CLI reference
-- Acceptance criteria:
-  - Workflow pages no longer teach commands that do not exist
-
-### DBP-CLI-001 - Freeze the CLI command taxonomy before `0.1.0`
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `src/dbport/cli/main.py`
-  - `src/dbport/cli/commands/config.py`
-  - `src/dbport/cli/commands/model.py`
-  - `src/dbport/cli/commands/init.py`
-  - CLI contract tests
-- Required changes:
-  - Freeze the currently implemented top-level CLI shape and subcommand taxonomy for `0.1.0`
-  - Resolve naming and placement mismatches such as model-scoped behavior exposed under `config default ...`
-  - Remove stale command language from scaffold output, examples, help text, and user-facing error guidance
-  - Treat command names, core flags, and command grouping as a compatibility contract rather than a moving target
-- Acceptance criteria:
-  - The CLI tree is coherent enough to freeze without expecting renames or reshuffles immediately after release
-
-### DBP-CLI-002 - Make CLI model selection and version resolution deterministic
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `src/dbport/cli/context.py`
-  - `src/dbport/cli/commands/lifecycle.py`
-  - `src/dbport/cli/commands/config.py`
-  - CLI lifecycle tests
-- Required changes:
-  - Define and test the precedence between positional model key, `--model`, current working directory, and `default_model`
-  - Define and test the precedence for publish version resolution across explicit flags, configured model version, and version history
-  - Ensure CLI defaults are unsurprising enough to become part of the stable `0.1.0` UX contract
-  - Align JSON output and human-readable output around the same resolved behavior
-- Acceptance criteria:
-  - Model targeting and version selection behave predictably across CLI commands and are protected by tests
-
-### DBP-CLI-003 - Normalize CLI errors, exit codes, and machine-readable output
-
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - `src/dbport/cli/errors.py`
-  - `src/dbport/cli/commands/check.py`
-  - CLI error tests
-- Required changes:
-  - Replace broad or inconsistent error handling with an intentional CLI error contract
-  - Catch important user-facing validation failures explicitly instead of letting them surface as generic unexpected errors
-  - Define stable exit-code expectations for success, user error, interruption, and validation failure
-  - Keep JSON output consistent with human-readable failures so automation can rely on it
-- Acceptance criteria:
-  - The CLI has a stable operational contract for errors and exit behavior suitable for external users and scripts
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-DOC-002 | `P0` | CLI reference rebuilt to match actual nested command hierarchy |
+| DBP-DOC-003 | `P0` | CLI example script fixed; all commands valid |
+| DBP-DOC-004 | `P0` | Stale `dbp config check` and `dbp config default` references fixed in 3 docs |
+| DBP-CLI-001 | `P0` | CLI command tree frozen with 18 contract tests |
+| DBP-CLI-002 | `P0` | Model and version resolution locked with 22 precedence tests |
+| DBP-CLI-003 | `P1` | Exit codes normalized (1=user, 2=internal); JSON errors include `error_type` |
 
 ---
 

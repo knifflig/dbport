@@ -20,14 +20,16 @@ This creates a scaffold directory and registers the model in `dbport.lock`.
 ### 2. Configure defaults
 
 ```bash
-dbp config default test.cli_table1
+dbp config default model test.cli_table1
+dbp config default hook main.py
+dbp config model test.cli_table1 version 2026-03-16
 dbp status
 ```
 
 ### 3. Check project health
 
 ```bash
-dbp config check
+dbp status check
 ```
 
 Verifies lockfile, DuckDB, credentials, and dependencies.

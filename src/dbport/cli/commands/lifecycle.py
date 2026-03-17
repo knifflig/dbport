@@ -35,10 +35,15 @@ def _run_execute_step(port, target: str) -> None:
 
 
 def resolve_publish_version(cli_ctx, model_key: str, explicit_version: str | None) -> str:
-    """Resolve the publish version for a model.
+    """Resolve the publish version for ``dbp model run`` (full lifecycle).
 
-    Priority: explicit CLI flag, configured version in lock, latest completed
-    version in lock.
+    Resolution order:
+    1. Explicit ``--version`` CLI flag
+    2. Configured ``version`` field in the lock file (set via ``dbp config model … version``)
+    3. Latest completed version from the ``versions`` array in the lock file
+
+    This includes the configured version because ``run`` creates a new publish
+    from scratch and the configured version represents the intended next publish.
     """
     from ..context import read_lock_version_config
 
@@ -64,7 +69,17 @@ def resolve_publish_version_for_publish(
     model_key: str,
     explicit_version: str | None,
 ) -> str:
-    """Resolve the publish version for publish-only commands."""
+    """Resolve the publish version for ``dbp model publish`` (standalone).
+
+    Resolution order:
+    1. Explicit ``--version`` CLI flag
+    2. Latest completed version from the ``versions`` array in the lock file
+
+    Intentionally does NOT fall back to the configured ``version`` field,
+    because standalone ``publish`` re-publishes existing output data and
+    should default to the most recent completed version rather than a
+    configured future version.
+    """
     if explicit_version is not None:
         return explicit_version
 
