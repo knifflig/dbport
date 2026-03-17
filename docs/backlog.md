@@ -294,6 +294,7 @@ Status: `done`
 - **Stale docs references fixed** — `docs/examples/cli-workflow.md`, `docs/getting-started/credentials.md` updated from `dbp config check` to `dbp status check`, from `dbp config default` to `dbp config default model`
 - **Stale init output fixed** — `dbp init` no longer references removed `dbp project sync`; next-steps output now shows correct `dbp model load` and `dbp model run`
 - **Version resolution documented** — both `resolve_publish_version` (for `run`) and `resolve_publish_version_for_publish` (for `publish`) have detailed docstrings explaining the intentional difference
+- **CLI docs readability** — `docs/api/cli.md` restructured for usability: quick-reference table at top (matching the Python API page pattern), commands grouped into three logical sections (Project Setup, Configuration, Model Operations), Configuration split into Project Defaults and Model Settings sub-groups, heading hierarchy demoted so the right-side TOC has three scannable levels instead of a flat list, and "See also" cross-links added from each model operation to its Python API equivalent
 
 ### Items delivered
 
@@ -302,6 +303,7 @@ Status: `done`
 | DBP-DOC-002 | `P0` | CLI reference rebuilt to match actual nested command hierarchy |
 | DBP-DOC-003 | `P0` | CLI example script fixed; all commands valid |
 | DBP-DOC-004 | `P0` | Stale `dbp config check` and `dbp config default` references fixed in 3 docs |
+| DBP-DOC-005 | `P1` | CLI docs restructured with quick-reference table, logical groups, and Python API cross-links |
 | DBP-CLI-001 | `P0` | CLI command tree frozen with 18 contract tests |
 | DBP-CLI-002 | `P0` | Model and version resolution locked with 22 precedence tests |
 | DBP-CLI-003 | `P1` | Exit codes normalized (1=user, 2=internal); JSON errors include `error_type` |
