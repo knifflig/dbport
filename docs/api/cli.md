@@ -2,6 +2,24 @@
 
 The `dbp` command is the default operational interface for DBPort. It covers project initialization, configuration, execution, publication, and status inspection.
 
+## Quick reference
+
+| Command | Purpose |
+|---|---|
+| [`dbp init`](#dbp-init) | Scaffold a new model |
+| [`dbp status`](#dbp-status) | Inspect project and model state |
+| [`dbp status check`](#dbp-status-check) | Run health checks |
+| [`dbp config default ...`](#project-defaults) | Set default model, folder, or hook |
+| [`dbp config model ... version`](#dbp-config-model-model-key-version-version) | Set publish version |
+| [`dbp config model ... schema`](#dbp-config-model-model-key-schema-source) | Define output schema |
+| [`dbp config model ... input`](#dbp-config-model-model-key-input-dataset) | Manage inputs |
+| [`dbp config model ... columns`](#dbp-config-model-model-key-columns) | Manage column metadata |
+| [`dbp model sync`](#dbp-model-sync-model) | Sync model from catalog |
+| [`dbp model load`](#dbp-model-load-model) | Load inputs into DuckDB |
+| [`dbp model exec`](#dbp-model-exec-model) | Run transforms |
+| [`dbp model publish`](#dbp-model-publish-model) | Publish output to warehouse |
+| [`dbp model run`](#dbp-model-run-model) | Full lifecycle in one command |
+
 ## Global options
 
 ```
@@ -50,7 +68,9 @@ In `--json` mode, errors include an `error_type` field for automation:
 
 ---
 
-## `dbp init`
+## Project setup
+
+### `dbp init`
 
 Initialize a new model scaffold.
 
@@ -72,9 +92,9 @@ Creates a directory scaffold, registers the model in `dbport.lock`, and sets it 
 dbp init regional_trends --agency wifor --dataset emp__regional_trends
 ```
 
----
+See also: [`dbp status`](#dbp-status), [`dbp config default model`](#dbp-config-default-model-model-key)
 
-## `dbp status`
+### `dbp status`
 
 Show resolved project and runtime state.
 
@@ -106,11 +126,13 @@ Verifies: lockfile exists and is valid TOML, DuckDB is available, credentials ar
 
 ---
 
-## `dbp config`
+## Configuration
 
-Manage project configuration. Two sub-groups: `default` (repo-wide settings) and `model` (per-model settings).
+Manage project configuration via `dbp config`. Two sub-groups: `default` (repo-wide settings) and `model` (per-model settings).
 
-### `dbp config default model [MODEL_KEY]`
+### Project defaults
+
+#### `dbp config default model [MODEL_KEY]`
 
 Show or set the default model for the project.
 
@@ -122,7 +144,7 @@ dbp config default model
 dbp config default model wifor.emp__regional_trends
 ```
 
-### `dbp config default folder [FOLDER]`
+#### `dbp config default folder [FOLDER]`
 
 Show or set the models folder for new models created with `dbp init`.
 
@@ -134,7 +156,7 @@ dbp config default folder
 dbp config default folder examples
 ```
 
-### `dbp config default hook [HOOK_PATH]`
+#### `dbp config default hook [HOOK_PATH]`
 
 Show or set the run hook for the resolved model.
 
@@ -146,7 +168,9 @@ dbp config default hook
 dbp config default hook main.py
 ```
 
-### `dbp config model MODEL_KEY version [VERSION]`
+### Model settings
+
+#### `dbp config model MODEL_KEY version [VERSION]`
 
 Show or set the configured publish version for a model.
 
@@ -158,7 +182,7 @@ dbp config model wifor.emp__regional_trends version
 dbp config model wifor.emp__regional_trends version 2026-03-17
 ```
 
-### `dbp config model MODEL_KEY schema [SOURCE]`
+#### `dbp config model MODEL_KEY schema [SOURCE]`
 
 Show or apply the output schema for a model.
 
@@ -174,7 +198,9 @@ dbp config model wifor.emp__regional_trends schema sql/create_output.sql
 |---|---|
 | `--diff` | Show schema diff between lock and DuckDB |
 
-### `dbp config model MODEL_KEY input [DATASET]`
+See also: [`port.schema()`](python.md#schema) (Python API equivalent)
+
+#### `dbp config model MODEL_KEY input [DATASET]`
 
 Show configured inputs or add one.
 
@@ -196,7 +222,9 @@ dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers \
 | `--version TEXT` | Pinned dataset version to load |
 | `--load` | Load the input immediately after configuring it |
 
-### `dbp config model MODEL_KEY columns`
+See also: [`port.load()`](python.md#load) (Python API equivalent)
+
+#### `dbp config model MODEL_KEY columns`
 
 Show all column metadata for a model.
 
@@ -204,7 +232,7 @@ Show all column metadata for a model.
 dbp config model wifor.emp__regional_trends columns
 ```
 
-### `dbp config model MODEL_KEY columns set COLUMN`
+#### `dbp config model MODEL_KEY columns set COLUMN`
 
 Set codelist metadata for a column.
 
@@ -220,7 +248,9 @@ dbp config model wifor.emp__regional_trends columns set year --type categorical
 | `--kind TEXT` | Codelist kind |
 | `--labels JSON` | JSON labels |
 
-### `dbp config model MODEL_KEY columns attach COLUMN TABLE`
+See also: [`port.columns.<name>.meta()`](python.md#meta) (Python API equivalent)
+
+#### `dbp config model MODEL_KEY columns attach COLUMN TABLE`
 
 Attach a DuckDB table as the codelist source for a column.
 
@@ -228,9 +258,13 @@ Attach a DuckDB table as the codelist source for a column.
 dbp config model wifor.emp__regional_trends columns attach geo wifor.cl_nuts2024
 ```
 
+See also: [`port.columns.<name>.attach()`](python.md#attach) (Python API equivalent)
+
 ---
 
-## `dbp model sync [MODEL]`
+## Model operations
+
+### `dbp model sync [MODEL]`
 
 Sync a model from the catalog. Opens the model via DBPort and performs init-time sync (schema auto-detection, local state sync, `last_fetched_at` update).
 
@@ -239,9 +273,7 @@ dbp model sync
 dbp model sync wifor.emp__regional_trends
 ```
 
----
-
-## `dbp model load [MODEL]`
+### `dbp model load [MODEL]`
 
 Load configured inputs into DuckDB.
 
@@ -254,9 +286,9 @@ dbp model load --update    # resolve newest snapshots
 |---|---|
 | `--update` | Resolve the newest available snapshot for each configured input |
 
----
+See also: [`port.load()`](python.md#load) (Python API equivalent)
 
-## `dbp model exec [MODEL]`
+### `dbp model exec [MODEL]`
 
 Execute model transforms (the configured run hook or an explicit target).
 
@@ -270,9 +302,9 @@ dbp model exec --target sql/transform.sql --timing
 | `--target PATH` | Execute this `.sql` or `.py` file instead of the configured hook |
 | `--timing` | Show execution duration |
 
----
+See also: [`port.execute()`](python.md#execute) (Python API equivalent)
 
-## `dbp model publish [MODEL]`
+### `dbp model publish [MODEL]`
 
 Publish the output to the warehouse.
 
@@ -292,9 +324,9 @@ dbp model publish --version 2026-03-15 --message "Initial release"
 
 **Version resolution** (when `--version` is omitted): uses the latest completed version from the lock file. Does not fall back to the configured `version` field — use `dbp model run` for that.
 
----
+See also: [`port.publish()`](python.md#publish) (Python API equivalent)
 
-## `dbp model run [MODEL]`
+### `dbp model run [MODEL]`
 
 Full lifecycle: sync, execute, and publish in one command.
 
@@ -312,6 +344,8 @@ dbp model run wifor.emp__regional_trends --dry-run
 | `--refresh` | Overwrite existing version |
 
 **Version resolution** (when `--version` is omitted): first checks the configured `version` field in the lock (set via `dbp config model … version`), then falls back to the latest completed version.
+
+See also: [`port.run()`](python.md#run) (Python API equivalent)
 
 ---
 
