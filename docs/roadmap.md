@@ -13,7 +13,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.1 | Foundation: runtime, architecture, CLI, docs site, CI | Done |
 | 0.0.2 | Release history and roadmap foundations | Done |
 | 0.0.3 | Version policy and release planning language | Done |
-| 0.0.4 | Python API reference correctness | Planned |
+| 0.0.4 | Python API reference correctness | Done |
 | 0.0.5 | CLI reference and executable workflows | Planned |
 | 0.0.6 | Public package surface and repository trustworthiness | Planned |
 | 0.0.7 | Execution model and conceptual docs depth | Planned |
@@ -31,9 +31,9 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.0.4 — Python API reference correctness
 
-- Complete the Python API reference to match the full `DBPort` surface
-- Freeze the supported Python client contract for `0.1.0`
-- Make `DBPort(...)` startup semantics explicit and stable
+- ~~Complete the Python API reference to match the full `DBPort` surface~~
+- ~~Freeze the supported Python client contract for `0.1.0`~~
+- ~~Make `DBPort(...)` startup semantics explicit and stable~~
 
 ## 0.0.5 — CLI reference and executable workflows
 

@@ -6,6 +6,27 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.4 — 2026-03-17
+
+Python API reference correctness.
+
+### Added
+
+- **Complete Python API reference** — documented `model_root`, `load_inputs_on_init`, `config_only` constructor parameters; documented `port.configure_input()`, `port.run()`, and `port.run_hook`; added sections for initialization behavior, full mode vs. `config_only`, hook resolution, and the relationship between `load()` and `configure_input()`
+- **Python client contract tests** — 33 tests in `test_contract.py` that lock the public `DBPort` surface: module exports, constructor signature, public method/property inventory, method signatures, `config_only` guards, return types, and initialization behavior
+- **Initialization behavior documentation** — documented the four init phases (path resolution, credential resolution, adapter wiring, state sync) and the error resilience guarantees for each sync step
+
+### Changed
+
+- **Sync output warning level** — `_sync_output_state()` errors now log at warning level instead of debug, since a failed output table creation is user-relevant
+- **FetchService error logging** — `FetchService.execute()` now logs failed `last_fetched_at` updates at debug level instead of silently swallowing exceptions
+
+### Improved
+
+- **Init method docstrings** — added detailed docstrings to `__init__`, `_auto_detect_schema`, `_sync_output_state`, `_load_inputs`, and `_update_last_fetched` documenting their behavior, error handling, and guarantees
+
+---
+
 ## 0.0.3 — 2026-03-17
 
 Version policy and release planning language.

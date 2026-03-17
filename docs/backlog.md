@@ -181,10 +181,12 @@ Status: `done`
 
 Theme: Python API reference correctness.
 
+Status: `done`
+
 ### DBP-DOC-001 - Complete Python API reference
 
 - Priority: `P0`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/api/python.md`
 - Required changes:
@@ -199,7 +201,7 @@ Theme: Python API reference correctness.
 ### DBP-API-001 - Freeze the supported Python client contract before public release
 
 - Priority: `P0`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `src/dbport/__init__.py`
   - `src/dbport/adapters/primary/client.py`
@@ -216,7 +218,7 @@ Theme: Python API reference correctness.
 ### DBP-API-002 - Make `DBPort(...)` startup semantics explicit and stable
 
 - Priority: `P0`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `src/dbport/adapters/primary/client.py`
   - `src/dbport/application/services/sync.py`
@@ -231,6 +233,14 @@ Theme: Python API reference correctness.
   - Ensure constructor behavior is predictable enough to freeze as part of the public client contract
 - Acceptance criteria:
   - Creating a `DBPort` instance has deliberate, documented, and testable semantics suitable for a stable public release
+
+### Items delivered
+
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-DOC-001 | `P0` | Python API reference expanded to cover all 13 constructor parameters, `configure_input()`, `run()`, `run_hook`, initialization behavior, full mode vs. `config_only`, and hook resolution |
+| DBP-API-001 | `P0` | 33 contract tests lock the public surface: module exports, constructor signature, method/property inventory, method signatures, `config_only` guards, return types, and init behavior |
+| DBP-API-002 | `P0` | Init semantics documented and stabilized; `_sync_output_state` errors promoted to warning; `FetchService` exception handler now logs instead of silent pass; detailed docstrings on all init phases |
 
 ---
 
