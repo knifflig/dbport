@@ -67,6 +67,25 @@ No hard-coded version strings exist in source code. If `importlib.metadata` cann
 
 ---
 
+## Docs artifact policy
+
+Generated documentation (the `site/` directory) is **never committed to `main`**. It belongs exclusively on the `gh-pages` branch, deployed automatically by the docs workflow on tag push.
+
+| Path | Branch | Purpose |
+|---|---|---|
+| `site/` | `gh-pages` only | Built docs (deployed by CI) |
+| `_preview/` | never committed | Local preview (git-ignored) |
+| `docs/` | `main` | Source markdown (committed) |
+
+Enforcement:
+
+- `.gitignore` excludes `/site` and `/_preview`
+- CI (`ci.yml`) verifies the docs build on every push and PR but does not deploy
+- The docs workflow (`docs.yml`) builds and deploys to `gh-pages` only on tag push
+- The `gh-pages` branch is not merged back to `main`
+
+---
+
 ## Release checklist (per version)
 
 1. Update `version` in `pyproject.toml`

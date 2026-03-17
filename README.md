@@ -34,7 +34,7 @@ with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
 ## Requirements
 
 - Python 3.11 – 3.12
-- DuckDB `iceberg` extension (pre-installed by `setup.sh`)
+- DuckDB `iceberg` extension (installed automatically at runtime)
 - Iceberg REST catalog with S3-compatible object store
 
 ---
@@ -45,10 +45,10 @@ with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
 pip install dbport
 ```
 
-For development (sets up venv, installs extensions, verifies credentials):
+For development:
 
 ```bash
-bash .claude/setup.sh
+uv sync
 ```
 
 ---
@@ -70,57 +70,13 @@ Credentials are never written to disk.
 
 ---
 
-## API Overview
+## Documentation
 
-### `port.schema(ddl_or_path)`
+Full API reference and guides: [knifflig.github.io/dbport](https://knifflig.github.io/dbport)
 
-Declares the output table. Pass an inline `CREATE OR REPLACE TABLE` statement or a path to a `.sql` file. The table is created in DuckDB and the schema is persisted to `dbport.lock`.
-
-```python
-port.schema("sql/create_output.sql")
-```
-
-### `port.load(table_address, *, filters=None)`
-
-Loads an Iceberg table into DuckDB. Available in DuckDB under its original address (e.g. `estat.nama_10r_3empers`). Skipped automatically if the snapshot is unchanged.
-
-```python
-port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
-port.load("wifor.cl_nuts2024")
-```
-
-### `port.columns.<name>.meta(...).attach(table=...)`
-
-Configures codelist metadata per column. Persists to `dbport.lock` immediately.
-`.attach(table=...)` references a DuckDB table (loaded via `port.load()`).
-
-```python
-port.columns.nuts2024.meta(codelist_id="NUTS2024", codelist_kind="hierarchical")
-port.columns.nuts2024.attach(table="wifor.cl_nuts2024")  # must be loaded first
-```
-
-### `port.execute(sql_or_path)`
-
-Runs a SQL string or `.sql` file in DuckDB.
-
-```python
-port.execute("sql/staging.sql")
-port.execute("CREATE TABLE staging.foo AS SELECT ...")
-```
-
-### `port.publish(*, version, params=None, mode=None)`
-
-Writes `<agency>.<dataset_id>` from DuckDB to Iceberg. Runs schema drift checks first, then writes data, generates codelists, materializes and embeds `metadata.json`, and appends a `VersionRecord` to `dbport.lock`.
-
-```python
-port.publish(version="2026-03-09", params={"wstatus": "EMP"})
-
-# Schema validation only — no data written:
-port.publish(version="2026-03-09", mode="dry")
-
-# Overwrite an existing version:
-port.publish(version="2026-03-09", mode="refresh")
-```
+- [Python API](https://knifflig.github.io/dbport/latest/api/python/) — `DBPort` class reference
+- [CLI Reference](https://knifflig.github.io/dbport/latest/api/cli/) — `dbp` command reference
+- [Getting Started](https://knifflig.github.io/dbport/latest/getting-started/) — installation, credentials, quickstart
 
 ---
 
@@ -148,14 +104,8 @@ src/dbport/              # source (imported as dbport)
 
 examples/
   minimal/               # minimal load → transform → publish
-  regional_trends/       # full WiFOR employment model
+  minimal_cli/           # CLI-driven workflow
 
-tests/test_dbport/            # 418 tests mirroring src/ structure
-docs/client.md           # user guide
+tests/test_dbport/       # tests mirroring src/ structure
+docs/                    # documentation source
 ```
-
----
-
-## Documentation
-
-Full API reference: [`docs/client.md`](docs/client.md)

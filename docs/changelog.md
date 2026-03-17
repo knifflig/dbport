@@ -6,6 +6,25 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.6 — 2026-03-17
+
+Public package surface and repository trustworthiness.
+
+### Added
+
+- **Package surface contract tests** — `test_no_version_attribute`, `test_version_via_importlib`, and `test_no_internal_symbols_leak` in `test_contract.py` ensure only `DBPort` is exported and version is accessed via `importlib.metadata`
+- **PyPI-facing metadata** — `pyproject.toml` now includes `license`, `authors`, `keywords`, `classifiers`, and `[project.urls]` (Homepage, Documentation, Repository, Changelog)
+- **CONTRIBUTING.md** — development setup, code style, architecture overview, and PR guidelines
+- **SECURITY.md** — vulnerability reporting via GitHub Security Advisories, response timeline, and scope
+- **Docs artifact policy** — documented in `docs/release-versioning.md`: `site/` belongs on `gh-pages` only, `_preview/` is git-ignored, source markdown lives on `main`
+
+### Changed
+
+- **README.md rebuilt** — removed stale `setup.sh` reference, corrected DuckDB extension install description (automatic at runtime, not pre-installed), replaced inline API overview with links to the docs site, updated project structure to match current layout
+- **Section index pages** — each docs section (API, Concepts, Examples, Getting Started) now has a distinct lead sentence and cross-references to related sections
+
+---
+
 ## 0.0.5 — 2026-03-17
 
 CLI reference and executable workflows.

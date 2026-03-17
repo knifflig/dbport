@@ -1,5 +1,7 @@
 # Concepts
 
+Understand the design decisions behind DBPort before diving into the API.
+
 DBPort manages the dataset lifecycle around your model logic. It owns the edges — inputs, outputs, metadata, versioning, and publication — while leaving the middle flexible.
 
 ## Core ideas
@@ -20,3 +22,7 @@ Warehouse ──▶ port.load() ──▶ DuckDB ──▶ port.execute() ──
 ```
 
 The user brings the model. DBPort manages everything else.
+
+---
+
+See also: [API Reference](../api/index.md) for exact signatures · [Examples](../examples/index.md) for applied usage

@@ -1,9 +1,23 @@
 [project]
 name = "dbport"
-version = "0.0.5"
+version = "0.0.6"
 description = "DuckDB-native runtime for building reproducible warehouse datasets"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
+license = "Apache-2.0"
+authors = [
+    { name = "Henry Zehe", email = "knifflig.utopisch-0u@icloud.com" },
+]
+keywords = ["duckdb", "iceberg", "data-warehouse", "etl", "data-pipeline"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
 dependencies = [
     "duckdb>=1.1",
     "pyarrow>=17.0",
@@ -16,6 +30,12 @@ dependencies = [
 
 [project.scripts]
 dbp = "dbport.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/knifflig/dbport"
+Documentation = "https://knifflig.github.io/dbport"
+Repository = "https://github.com/knifflig/dbport"
+Changelog = "https://knifflig.github.io/dbport/latest/changelog/"
 
 [dependency-groups]
 dev = [
