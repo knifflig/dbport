@@ -89,6 +89,28 @@ class DBPort:
         load_inputs_on_init: bool = True,
         config_only: bool = False,
     ) -> None:
+        """Initialize a DBPort instance.
+
+        In **full mode** (default), initialization performs these phases:
+
+        1. **Path resolution** — discovers ``model_root`` (from the calling
+           script's directory or the explicit *model_root* kwarg), repo root
+           (walks up to ``pyproject.toml``), lock path, and DuckDB path.
+        2. **Credential resolution** — merges explicit kwargs with environment
+           variables via ``WarehouseCreds``.
+        3. **Adapter wiring** — creates lock, compute (DuckDB), catalog
+           (Iceberg REST), and metadata adapters.
+        4. **State sync** — auto-detects schema from warehouse, syncs the
+           output table in DuckDB, updates ``last_fetched_at``, and (when
+           *load_inputs_on_init* is True) reloads previously configured
+           inputs.  All sync errors are logged but never fail initialization.
+
+        In **config_only** mode, only the lock adapter and column registry
+        are created.  No credentials, DuckDB, or catalog connection are
+        required.  Data methods (``schema``, ``load``, ``execute``, ``run``,
+        ``configure_input``, ``publish``) raise ``RuntimeError`` if called.
+        Column metadata methods (``.meta()``, ``.attach()``) work normally.
+        """
         setup_logging()
 
         # ------------------------------------------------------------------
@@ -393,7 +415,14 @@ class DBPort:
         return MetadataAdapter()
 
     def _auto_detect_schema(self) -> None:
-        """Auto-detect output schema from warehouse table if it exists."""
+        """Auto-detect output schema from warehouse table if it exists.
+
+        Skipped when a user-declared schema (``source='local'``) is already
+        present in the lock file.  On success, the detected schema is
+        persisted to the lock with ``source='warehouse'`` and the column
+        registry is refreshed.  Errors are logged at debug level and never
+        fail initialization.
+        """
         from ...application.services.auto_schema import AutoSchemaService
         from ...infrastructure.progress import progress_callback
 
@@ -421,17 +450,27 @@ class DBPort:
             logger.debug("Auto-schema detection skipped: %s", exc)
 
     def _sync_output_state(self) -> None:
-        """Sync DuckDB output table with lock file state."""
+        """Create the output table in DuckDB from the lock file schema.
+
+        If the output table already exists in DuckDB (e.g. from a prior
+        run), DDL execution is skipped to preserve existing data.  Errors
+        are logged at warning level and never fail initialization.
+        """
         from ...application.services.sync import SyncService
 
         try:
             svc = SyncService(self._catalog, self._compute, self._lock)
             svc.sync_output_table(self._dataset.table_address)
         except Exception as exc:
-            logger.debug("Local sync skipped: %s", exc)
+            logger.warning("Local sync skipped: %s", exc)
 
     def _load_inputs(self) -> None:
-        """Load configured inputs into DuckDB."""
+        """Reload all inputs declared in the lock file into DuckDB.
+
+        Each input is loaded independently; a failure on one input is
+        logged at debug level and does not prevent other inputs from
+        loading.  Only called when ``load_inputs_on_init=True``.
+        """
         from ...application.services.sync import SyncService
 
         try:
@@ -441,6 +480,12 @@ class DBPort:
             logger.debug("Input sync skipped: %s", exc)
 
     def _update_last_fetched(self) -> None:
+        """Update ``dbport.last_fetched_at`` in the warehouse table properties.
+
+        Fire-and-forget: errors are logged at debug level inside
+        ``FetchService`` and never fail initialization.  No new Iceberg
+        snapshot is created.
+        """
         from ...application.services.fetch import FetchService
         from ...infrastructure.progress import progress_callback
 

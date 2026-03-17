@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
 
 from ...domain.entities.dataset import DatasetKey
 from ...domain.ports.catalog import ICatalog
@@ -32,6 +35,6 @@ class FetchService:
                     table_address,
                     {"dbport.last_fetched_at": ts_str},
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to update last_fetched_at: %s", exc)
         return now
