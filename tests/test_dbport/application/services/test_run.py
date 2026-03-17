@@ -70,6 +70,12 @@ class TestRunServiceNoHook:
         svc.execute(port)
         assert port.executed == ["SELECT 1"]
 
+    def test_raises_when_no_hook_file_exists(self, tmp_path: Path):
+        svc = RunService(_FakeCompute(), _FakeLock(run_hook=None))
+        port = _FakePort(str(tmp_path))
+        with pytest.raises(FileNotFoundError, match="Run hook not found"):
+            svc.execute(port)
+
     def test_falls_back_to_legacy_sql_main_when_main_py_missing(self, tmp_path: Path):
         sql_dir = tmp_path / "sql"
         sql_dir.mkdir()

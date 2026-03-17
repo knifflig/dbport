@@ -99,6 +99,11 @@ class PublishService:
                 check_schema_drift(local_arrow, warehouse_arrow)
             except SchemaDriftError:
                 raise
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Cannot verify warehouse schema: {exc}. "
+                    "Resolve the connection issue or use mode='refresh' to skip drift checks."
+                ) from exc
             except Exception as exc:
                 logger.warning("Schema drift check skipped: %s", exc)
 

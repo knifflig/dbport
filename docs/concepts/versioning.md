@@ -4,36 +4,66 @@ Publishing is the final step in the DBPort workflow. It writes data from DuckDB 
 
 ## Basic publish
 
-```python
-port.publish(
-    version="2026-03-09",
-    params={"wstatus": "EMP", "nace_r2": "TOTAL"},
-)
-```
+=== "CLI"
+
+    ```bash
+    dbp model publish --version 2026-03-09
+    ```
+
+=== "Python"
+
+    ```python
+    port.publish(
+        version="2026-03-09",
+        params={"wstatus": "EMP", "nace_r2": "TOTAL"},
+    )
+    ```
 
 ## Publish modes
 
 | Mode | Behavior |
 |---|---|
-| `None` (default) | Idempotent. Skips silently if the version is already completed. Resumes from checkpoint if interrupted. |
-| `"dry"` | Schema validation only. No data is written. Useful for CI checks. |
-| `"refresh"` | Overwrites an existing version unconditionally. |
+| Default | Idempotent. Skips silently if the version is already completed. Resumes from checkpoint if interrupted. |
+| Dry run | Schema validation only. No data is written. Useful for CI checks. |
+| Refresh | Overwrites an existing version unconditionally. |
 
-```python
-# Validate schemas without writing
-port.publish(version="2026-03-09", mode="dry")
+=== "CLI"
 
-# Overwrite a previously published version
-port.publish(version="2026-03-09", mode="refresh")
+    ```bash
+    # Validate schemas without writing
+    dbp model publish --version 2026-03-09 --dry-run
+
+    # Overwrite a previously published version
+    dbp model publish --version 2026-03-09 --refresh
+    ```
+
+=== "Python"
+
+    ```python
+    # Validate schemas without writing
+    port.publish(version="2026-03-09", mode="dry")
+
+    # Overwrite a previously published version
+    port.publish(version="2026-03-09", mode="refresh")
+    ```
+
+## Full lifecycle in one command
+
+The CLI provides `dbp model run` to execute the hook and publish in a single step:
+
+```bash
+dbp model run --version 2026-03-09 --timing
 ```
+
+This syncs state, executes the configured hook, and publishes — equivalent to calling `port.run(version="2026-03-09")` in Python. See [Hooks & Execution](hooks.md) for details.
 
 ## Pre-publish checks
 
-Before writing any data, `publish()` runs these checks in order:
+Before writing any data, publish runs these checks in order:
 
-1. **Schema defined** — raises `RuntimeError` if `port.schema()` has not been called
-2. **Version idempotency** — if the version already completed, returns immediately (skipped in `refresh` mode)
-3. **Schema drift** — compares local schema to warehouse schema; raises `SchemaDriftError` with a diff if incompatible
+1. **Schema defined** — fails if no schema has been declared
+2. **Version idempotency** — if the version already completed, returns immediately (skipped in refresh mode)
+3. **Schema drift** — compares local schema to warehouse schema; fails with a diff if incompatible. Catalog connection failures also block the publish.
 
 ## Idempotency and checkpoints
 
@@ -47,7 +77,7 @@ If a publish is interrupted, the next run detects the incomplete checkpoint and 
 ## What happens on success
 
 1. Data is written to the Iceberg table at `<agency>.<dataset_id>`
-2. Codelists are auto-generated (or fetched from `.attach()` tables)
+2. Codelists are auto-generated (or fetched from attached tables)
 3. `metadata.json` is materialized and embedded in Iceberg table properties
 4. A `VersionRecord` is appended to `dbport.lock`
 5. `created_at` is set on first publish only; `last_updated_at` is updated every time

@@ -6,6 +6,25 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.7 — 2026-03-17
+
+Execution model and conceptual docs depth.
+
+### Added
+
+- **Hooks concept page** — new `docs/concepts/hooks.md` documenting hook resolution order, Python vs SQL hooks, `exec` vs `run` vs `publish` semantics, and the trust model
+- **Lock file operator guide** — expanded `docs/concepts/lock-file.md` with annotated structure examples, a mutation table (which operation changes what), diff walkthroughs for schema changes / snapshot updates / new publishes, and recovery procedures for merge conflicts, stale files, and manual edits
+
+### Changed
+
+- **Publish safety** — catalog connection failures (`OSError` subclasses like `ConnectionError`, `TimeoutError`) during the pre-publish schema drift check now raise `RuntimeError` instead of being logged as warnings. Non-network errors continue to warn and proceed. The schema service's drift check remains advisory (warn-only) since it should not block local development
+- **Hook execution** — `_exec_python_hook` now raises a clear `FileNotFoundError` with remediation guidance when the resolved hook file does not exist, instead of deferring to a confusing `path.read_text()` error
+- **Hook trust model** — module docstring in `run.py` now explicitly documents that `exec()` is deliberate and hook files are trusted code
+- **Section index pages** — all four section landing pages (Getting Started, Concepts, API Reference, Examples) now include "start here" orientation guidance
+- **Cross-links** — Python API, CLI reference, and Python workflow example pages now link to the new hooks concept page
+
+---
+
 ## 0.0.6 — 2026-03-17
 
 Public package surface and repository trustworthiness.

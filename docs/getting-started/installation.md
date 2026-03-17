@@ -1,16 +1,18 @@
 # Installation
 
-## Install with pip
+## Install
 
-```bash
-pip install dbport
-```
+=== "uv"
 
-## Install with uv
+    ```bash
+    uv add dbport
+    ```
 
-```bash
-uv add dbport
-```
+=== "pip"
+
+    ```bash
+    pip install dbport
+    ```
 
 This installs DBPort and all runtime dependencies:
 
@@ -30,16 +32,16 @@ DBPort requires **Python 3.11 or 3.12**.
 
 ## Verify installation
 
-After installing, verify the CLI is available:
+=== "CLI"
 
-```bash
-dbp --help
-```
+    ```bash
+    dbp --help
+    ```
 
-You should see the `dbp` command help with subcommands like `init`, `status`, `model`, and `config`.
+    You should see the `dbp` command help with subcommands like `init`, `status`, `model`, and `config`.
 
-To verify the Python API:
+=== "Python"
 
-```python
-from dbport import DBPort
-```
+    ```python
+    from dbport import DBPort
+    ```

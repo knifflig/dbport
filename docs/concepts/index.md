@@ -2,7 +2,7 @@
 
 Understand the design decisions behind DBPort before diving into the API.
 
-DBPort manages the dataset lifecycle around your model logic. It owns the edges — inputs, outputs, metadata, versioning, and publication — while leaving the middle flexible.
+DBPort handles the edges of periodic dataset recomputation: loading versioned inputs, enforcing output schemas, tracking publish history, and managing metadata. The model logic in between is yours.
 
 ## Core ideas
 
@@ -10,18 +10,19 @@ DBPort manages the dataset lifecycle around your model logic. It owns the edges 
 - **[Outputs & Schemas](outputs.md)** — how output contracts are declared, enforced, and validated against the warehouse
 - **[Metadata & Codelists](metadata.md)** — automatic lifecycle fields, codelist generation, and column-level overrides
 - **[Lock File](lock-file.md)** — the committable TOML file that tracks schema, ingest state, and version history
+- **[Hooks & Execution](hooks.md)** — how run hooks are resolved, dispatched, and trusted
 - **[Versioning & Publish](versioning.md)** — idempotent publication, checkpoints, publish modes, and schema drift protection
+
+Start with [Inputs & Loading](inputs.md) if you want to understand data flow, or [Lock File](lock-file.md) if you want to understand project state.
 
 ## The mental model
 
-DBPort is the port where warehouse datasets come in, model logic runs, and governed outputs leave.
-
 ```
-Warehouse ──▶ port.load() ──▶ DuckDB ──▶ port.execute() ──▶ port.publish() ──▶ Warehouse
-              (inputs)        (your SQL)    (transforms)      (outputs)
+Warehouse ──▶ dbp model load ──▶ DuckDB ──▶ dbp model exec ──▶ dbp model publish ──▶ Warehouse
+              (inputs)           (your SQL/Python)                (versioned output)
 ```
 
-The user brings the model. DBPort manages everything else.
+You bring the model. DBPort manages the dataset lifecycle.
 
 ---
 

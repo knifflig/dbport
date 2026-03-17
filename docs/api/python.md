@@ -364,6 +364,8 @@ The run hook is resolved in this order:
 3. `sql/main.sql` in the model root (if it exists)
 4. Falls back to `main.py` (may not exist — will error on execution)
 
+See [Hooks & Execution](../concepts/hooks.md) for the full execution model, trust boundary, and `exec` vs `run` vs `publish` semantics.
+
 #### Hook dispatch by file extension
 
 | Extension | Behavior |

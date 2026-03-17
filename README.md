@@ -5,11 +5,9 @@
 [![Python 3.11–3.12](https://img.shields.io/pypi/pyversions/dbport)](https://pypi.org/project/dbport/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-The production layer for DuckDB data products.
+Versioned dataset recomputation on DuckDB, published to Iceberg.
 
-Load governed warehouse inputs into DuckDB, run your own SQL or Python model logic, and publish datasets back to Iceberg — with schema contracts, version tracking, metadata, and codelists managed automatically.
-
-**You bring the model. DBPort manages the dataset lifecycle.**
+Analytic workloads often recompute the same large dataset every few weeks or months to produce a new version. That workflow — download inputs, run model logic, upload the result — is simple in concept but tedious to productionize: schema contracts, snapshot caching, version tracking, metadata, and safe publication all need to work every time. DBPort handles that lifecycle so you can focus on the model.
 
 ## Quickstart
 
@@ -17,43 +15,45 @@ Load governed warehouse inputs into DuckDB, run your own SQL or Python model log
 pip install dbport
 ```
 
+```bash
+# Initialize a project
+dbp init regional_trends --agency wifor --dataset emp__regional_trends
+cd regional_trends
+
+# Configure schema, inputs, and columns
+dbp config model wifor.emp__regional_trends schema sql/create_output.sql
+dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+
+# Run the full lifecycle: load inputs → execute model → publish output
+dbp model run --version 2026-03-09 --timing
+```
+
+For programmatic control, the same workflow in Python:
+
 ```python
 from dbport import DBPort
 
 with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
-    port.schema("sql/create_output.sql")           # declare output contract
-    port.load("estat.nama_10r_3empers",             # load warehouse inputs
-              filters={"wstatus": "EMP"})
-    port.execute("sql/transform.sql")               # run your model logic
-    port.publish(version="2026-03-09",              # publish to warehouse
-                 params={"wstatus": "EMP"})
-```
-
-Or use the CLI:
-
-```bash
-dbp init wifor emp__regional_trends
-dbp model load
-dbp model execute sql/transform.sql
-dbp model publish --version 2026-03-09
+    port.schema("sql/create_output.sql")
+    port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
+    port.execute("sql/transform.sql")
+    port.publish(version="2026-03-09", params={"wstatus": "EMP"})
 ```
 
 ## Why DBPort
 
-Teams want the speed of DuckDB for real analytical work, but productionizing those workflows is harder than it should be. The friction is not in the model logic — it is in everything around it: loading versioned inputs, enforcing output schemas, preserving metadata, making reruns reproducible, and keeping publishes safe.
+The hard part of periodic dataset recomputation is not the model logic — it is everything around it:
 
-DBPort solves that gap:
-
-- **DuckDB-native execution** — tables up to 1 billion rows stream through DuckDB's Iceberg extension. No batch loops, no memory copies.
-- **Governed inputs** — `port.load()` pulls from Iceberg with snapshot caching. Unchanged tables are skipped automatically.
-- **Output contracts** — `port.schema()` declares the output shape. `publish()` checks for schema drift before writing anything.
-- **Automatic metadata** — timestamps, input provenance, codelists, and version history are tracked without manual files.
-- **Idempotent publish** — interrupted runs resume from checkpoint. Re-running a completed version is a no-op.
-- **Committable state** — `dbport.lock` is TOML, credential-free, and safe to commit. It tracks schema, inputs, and version history.
+- **Loading inputs** — `dbp model load` pulls Iceberg tables into DuckDB with snapshot caching. Unchanged tables are skipped automatically.
+- **Schema contracts** — `dbp config model ... schema` declares the output shape. Publishing checks for schema drift before writing anything.
+- **Version tracking** — each publish records version, timestamp, parameters, and row count. Re-running a completed version is a no-op.
+- **Metadata** — timestamps, input provenance, codelists, and version history are attached to the published table automatically.
+- **Safe publication** — interrupted runs resume from checkpoint. Schema drift blocks the publish rather than corrupting the warehouse.
+- **Committable state** — `dbport.lock` is TOML, credential-free, and safe to commit. It tracks schema, inputs, and version history for code review and CI.
 
 ## Configuration
 
-DBPort reads credentials from environment variables or constructor kwargs:
+DBPort reads credentials from environment variables:
 
 ```bash
 export ICEBERG_REST_URI=https://catalog.example.com
@@ -68,10 +68,10 @@ See the [credentials guide](https://knifflig.github.io/dbport/latest/getting-sta
 Full docs at **[knifflig.github.io/dbport](https://knifflig.github.io/dbport)**
 
 - [Getting Started](https://knifflig.github.io/dbport/latest/getting-started/) — installation, credentials, first run
-- [Concepts](https://knifflig.github.io/dbport/latest/concepts/) — inputs, outputs, metadata, lock file, versioning
-- [Python API](https://knifflig.github.io/dbport/latest/api/python/) — `DBPort` class reference
+- [Concepts](https://knifflig.github.io/dbport/latest/concepts/) — inputs, outputs, metadata, lock file, hooks, versioning
 - [CLI Reference](https://knifflig.github.io/dbport/latest/api/cli/) — `dbp` command reference
-- [Examples](https://knifflig.github.io/dbport/latest/examples/) — complete Python and CLI workflows
+- [Python API](https://knifflig.github.io/dbport/latest/api/python/) — `DBPort` class reference
+- [Examples](https://knifflig.github.io/dbport/latest/examples/) — complete CLI and Python workflows
 
 ## Contributing
 
