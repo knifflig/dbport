@@ -1,6 +1,6 @@
 # Lock File
 
-`dbport.lock` is the committable state file that tracks schemas, ingest state, and version history for all models in a repository.
+`dbport.lock` is the committable state file that tracks schemas, ingest state, and version history for all models in a repository. It is always written by DBPort — never by hand — but it appears in diffs, merge conflicts, and debugging sessions, so understanding its structure matters.
 
 ## Location
 
@@ -10,76 +10,8 @@ The lock file lives at the **repository root**, next to `pyproject.toml`. When `
 
 - **TOML format** — human-readable and diff-friendly
 - **No secrets** — credentials are never written to disk
-- **Multi-model** — each model gets a namespaced section
+- **Multi-model** — each model gets a namespaced section under `[models."agency.dataset_id"]`
 - **Safe to commit** — belongs in version control
-
-## Structure
-
-The lock file has a top-level `default_model` key and per-model sections.
-
-### Top-level
-
-```toml
-default_model = "wifor.emp__regional_trends" # (1)!
-```
-
-1. The model used when no explicit model is specified in the CLI. Set via `dbp config default model`.
-
-### Model header
-
-```toml
-[models."wifor.emp__regional_trends"]
-agency      = "wifor"           # (1)!
-dataset_id  = "emp__regional_trends"
-model_root  = "examples/regional_trends"  # (2)!
-duckdb_path = "examples/regional_trends/data/emp__regional_trends.duckdb"
-```
-
-1. Agency and dataset ID match the `DBPort(agency=..., dataset_id=...)` constructor.
-2. The directory containing the model's hook file, SQL scripts, and DuckDB file.
-
-### Schema
-
-```toml
-[models."wifor.emp__regional_trends".schema]
-ddl = "CREATE OR REPLACE TABLE wifor.emp__regional_trends (...)" # (1)!
-
-[[models."wifor.emp__regional_trends".schema.columns]]
-column_name     = "nuts2024"
-column_pos      = 2
-codelist_id     = "NUTS2024"          # (2)!
-codelist_kind   = "hierarchical"
-codelist_labels = {en = "NUTS 2024 Regions"}
-attach_table    = "wifor.cl_nuts2024" # (3)!
-```
-
-1. The full DDL statement, written by `port.schema()`.
-2. Codelist metadata, set via `port.columns.nuts2024.meta(...)`.
-3. The DuckDB table used as the codelist source, set via `port.columns.nuts2024.attach(...)`.
-
-### Inputs
-
-```toml
-[[models."wifor.emp__regional_trends".inputs]]
-table_address    = "estat.nama_10r_3empers"
-filters          = {wstatus = "EMP", nace_r2 = "TOTAL"}
-last_snapshot_id = 123456789  # (1)!
-```
-
-1. Iceberg snapshot ID from the last successful `port.load()`. When this matches the current warehouse snapshot, loading is skipped automatically.
-
-### Versions
-
-```toml
-[[models."wifor.emp__regional_trends".versions]]
-version      = "2026-03-09"
-published_at = "2026-03-09T14:33:12Z"
-params       = {wstatus = "EMP", nace_r2 = "TOTAL"}
-rows         = 1234567
-completed    = true  # (1)!
-```
-
-1. Marks the version as successfully published. `port.publish()` skips completed versions by default (idempotency).
 
 ## When does the lock file change?
 
@@ -96,11 +28,8 @@ Changes are written to disk immediately after each operation. There is no deferr
 
 ## Why commit the lock file
 
-The lock file belongs in version control for four reasons:
-
 - **Reproducibility** — snapshot IDs pin exact input data, so a checkout reproduces the same pipeline state
-- **Auditability** — the version history records every publish with timestamp, parameters, and row count
-- **Collaboration** — teammates see the same schema declarations, input filters, and codelist configuration
+- **Code review** — reviewers can see whether a schema changed, which inputs updated, and what was published
 - **CI integration** — automated pipelines can validate schemas and detect drift without running the full pipeline
 
 ## Recognizing diffs in pull requests
@@ -159,22 +88,17 @@ If the lock file is deleted or stale:
 3. Re-run `port.load()` for each input — snapshots will be fetched from the warehouse
 4. Version history is lost locally but the warehouse table properties retain the authoritative publish record
 
-### When manual edits are safe
+### Fields that matter for correctness
 
-**Safe to edit manually:**
+Most fields are informational, but three have behavioral consequences:
 
-- `default_model` — switch the active model for the CLI
-- Column metadata fields (`codelist_id`, `codelist_kind`, `codelist_labels`) — these are informational
-
-**Unsafe to edit manually:**
-
-- `last_snapshot_id` — incorrect values break the ingest cache (stale data or unnecessary reloads)
-- `completed` flag on versions — changing this breaks publish idempotency
-- `ddl` statement — must match what DuckDB actually has; use `port.schema()` instead
+- **`last_snapshot_id`** — drives the ingest cache; a wrong value causes stale data or unnecessary reloads
+- **`completed`** on versions — drives publish idempotency; flipping this causes skipped or duplicate publishes
+- **`ddl`** — must match what DuckDB actually has; use `port.schema()` to change it
 
 ### Regeneration
 
-Running the full pipeline again (`schema()` → `load()` → `publish()`) rebuilds all lock state from scratch. The warehouse is the source of truth for table existence and schema compatibility.
+Running the full pipeline (`schema()` → `load()` → `publish()`) rebuilds all lock state from scratch. The warehouse is the source of truth.
 
 ## Multi-model support
 
