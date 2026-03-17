@@ -1,17 +1,40 @@
 # Hooks & Execution
 
-DBPort supports hook-based execution for model logic. A hook is a Python or SQL file that `port.run()` and `dbp model run` execute as the model's main entry point.
+DBPort supports hook-based execution for model logic. A hook is a Python or SQL file that serves as the model's main entry point.
+
+## Running a model
+
+=== "CLI"
+
+    ```bash
+    # Execute the hook only (no publish)
+    dbp model exec
+
+    # Full lifecycle: execute hook + publish
+    dbp model run --version 2026-03-09 --timing
+
+    # Execute a specific file instead of the configured hook
+    dbp model exec --target sql/transform.sql
+    ```
+
+=== "Python"
+
+    ```python
+    # Execute the hook only
+    port.run()
+
+    # Execute hook + publish
+    port.run(version="2026-03-09")
+    ```
 
 ## Hook resolution order
 
-When `port.run()` or `dbp model exec` is called without an explicit target, DBPort resolves the hook in this order:
+When no explicit target is given, DBPort resolves the hook in this order:
 
-1. **Configured hook path** — set in `dbport.lock` via `dbp config default hook`
+1. **Configured hook path** — set via `dbp config default hook`
 2. **`main.py`** in the model root — auto-detected if it exists
 3. **`sql/main.sql`** in the model root — legacy fallback
 4. **Default `main.py`** — used when no model root is available; errors at execution if the file does not exist
-
-Once resolved, the hook path is visible via `port.run_hook`.
 
 ## Python hooks
 
@@ -60,25 +83,27 @@ FROM input.raw_data
 GROUP BY geo, year;
 ```
 
-## `execute` vs `run` vs `publish`
+## `exec` vs `run` vs `publish`
 
 These three operations are distinct and composable:
 
-| Operation | What it does | Publishes data? |
-|---|---|---|
-| `port.execute(sql_or_path)` | Run a single SQL statement or file in DuckDB | No |
-| `port.run(version=None)` | Resolve and execute the configured hook, then optionally publish | Only if `version` is provided |
-| `port.publish(version)` | Write the output table to the warehouse | Yes |
+=== "CLI"
 
-In the CLI, the equivalent commands are:
+    | Command | What it does | Publishes data? |
+    |---|---|---|
+    | `dbp model exec` | Execute the configured hook | No |
+    | `dbp model run --version V` | Execute hook, then publish | Yes |
+    | `dbp model publish --version V` | Publish only (no execution) | Yes |
 
-| CLI command | Equivalent to |
-|---|---|
-| `dbp model exec` | `port.run()` (hook only, no publish) |
-| `dbp model run --version V` | `port.run(version="V")` (hook + publish) |
-| `dbp model publish --version V` | `port.publish(version="V")` (publish only) |
+    `dbp model run` is the full lifecycle command: sync → execute → publish.
 
-`dbp model run` is the full lifecycle command: it syncs state, executes the hook, and publishes — all in one step.
+=== "Python"
+
+    | Method | What it does | Publishes data? |
+    |---|---|---|
+    | `port.execute(sql_or_path)` | Run a single SQL statement or file | No |
+    | `port.run(version="V")` | Resolve and execute the hook, then publish | Only if `version` given |
+    | `port.publish(version="V")` | Write the output table to the warehouse | Yes |
 
 ## Trust model
 

@@ -6,29 +6,38 @@ DBPort manages metadata automatically. You never write `metadata.json` or codeli
 
 | Field | Source | When set |
 |---|---|---|
-| `agency_id` | `DBPort(agency=...)` | Every init |
-| `dataset_id` | `DBPort(dataset_id=...)` | Every init |
-| `created_at` | Auto | First `publish()` only |
-| `last_updated_at` | Auto (publish time) | Every `publish()` |
-| `last_fetched_at` | Auto | Every `DBPort()` initialization |
-| `params` | `publish(params=...)` | Every `publish()` |
-| `inputs` | `port.load(...)` | Accumulated across all `load()` calls |
-| `versions` | Auto (append) | Every `publish()` |
+| `agency_id` | Constructor / `dbp init` | Every init |
+| `dataset_id` | Constructor / `dbp init` | Every init |
+| `created_at` | Auto | First publish only |
+| `last_updated_at` | Auto (publish time) | Every publish |
+| `last_fetched_at` | Auto | Every initialization |
+| `params` | Publish parameters | Every publish |
+| `inputs` | Load calls | Accumulated across all loads |
+| `versions` | Auto (append) | Every publish |
 
 ## Codelists
 
-On `publish()`, a codelist is auto-generated for each output column from its distinct values. You can customize this behavior per column.
+On publish, a codelist is auto-generated for each output column from its distinct values. You can customize this behavior per column.
 
-### `.meta()` — override codelist metadata
+### Overriding codelist metadata
 
-```python
-port.columns.nuts2024.meta(
-    codelist_id="NUTS2024",
-    codelist_kind="hierarchical",
-    codelist_type="string",
-    codelist_labels={"en": "NUTS 2024 Regions"},
-)
-```
+=== "CLI"
+
+    ```bash
+    dbp config model wifor.emp__regional_trends columns set nuts2024 \
+        --id NUTS2024 --kind hierarchical
+    ```
+
+=== "Python"
+
+    ```python
+    port.columns.nuts2024.meta(
+        codelist_id="NUTS2024",
+        codelist_kind="hierarchical",
+        codelist_type="string",
+        codelist_labels={"en": "NUTS 2024 Regions"},
+    )
+    ```
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -37,20 +46,30 @@ port.columns.nuts2024.meta(
 | `codelist_type` | inferred from SQL type | Value type hint |
 | `codelist_labels` | `null` | Human-readable labels per language |
 
-`.meta()` returns `self` for chaining:
+### Attaching an external codelist table
+
+=== "CLI"
+
+    ```bash
+    dbp config model wifor.emp__regional_trends columns attach nuts2024 wifor.cl_nuts2024
+    ```
+
+=== "Python"
+
+    ```python
+    port.columns.nuts2024.attach(table="wifor.cl_nuts2024")
+    ```
+
+The referenced table should already be loaded via `dbp model load` or `port.load()`. On publish, the full table is exported as the codelist instead of auto-generating from distinct output values.
+
+### Chaining in Python
+
+In the Python API, `.meta()` returns `self` for chaining:
 
 ```python
 port.columns.nuts2024.meta(codelist_id="NUTS2024").attach(table="wifor.cl_nuts2024")
 ```
 
-### `.attach()` — use a table as codelist source
-
-```python
-port.columns.nuts2024.attach(table="wifor.cl_nuts2024")
-```
-
-The referenced table should already be loaded via `port.load()`. On `publish()`, the full table is exported as the codelist instead of auto-generating from distinct output values.
-
 ## How metadata is stored
 
-On `publish()`, the finalized `metadata.json` is built in-memory and embedded directly in Iceberg table properties (gzip + base64 compressed). Codelist CSVs are generated in-memory from DuckDB and embedded in Iceberg column docs. No intermediate files are written to disk.
+On publish, the finalized `metadata.json` is built in-memory and embedded directly in Iceberg table properties (gzip + base64 compressed). Codelist CSVs are generated in-memory from DuckDB and embedded in Iceberg column docs. No intermediate files are written to disk.
