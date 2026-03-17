@@ -238,9 +238,43 @@ Status: `done`
 
 | Item | Priority | Summary |
 |---|---|---|
-| DBP-DOC-001 | `P0` | Python API reference expanded to cover all 13 constructor parameters, `configure_input()`, `run()`, `run_hook`, initialization behavior, full mode vs. `config_only`, and hook resolution |
-| DBP-API-001 | `P0` | 33 contract tests lock the public surface: module exports, constructor signature, method/property inventory, method signatures, `config_only` guards, return types, and init behavior |
-| DBP-API-002 | `P0` | Init semantics documented and stabilized; `_sync_output_state` errors promoted to warning; `FetchService` exception handler now logs instead of silent pass; detailed docstrings on all init phases |
+| DBP-DOC-001 | `P0` | Python API reference rewritten for completeness and readability |
+| DBP-API-001 | `P0` | 33 contract tests lock the public `DBPort` surface |
+| DBP-API-002 | `P0` | Init semantics documented and stabilized; silent fallbacks tightened |
+
+#### DBP-DOC-001 — Python API reference
+
+- Documented all 13 constructor parameters including `model_root`, `load_inputs_on_init`, and `config_only`
+- Documented `configure_input()`, `run()`, and `run_hook` property
+- Added "Initialization behavior" section with sync phase table and error guarantees
+- Added "Full mode vs. config_only" comparison table
+- Added `load()` vs. `configure_input()` comparison table
+- Documented hook resolution order and dispatch-by-extension rules
+- Restructured page for readability: Quick Reference table at top, H2 for Constructor/Methods/Example/Errors, H3 for individual methods (TOC from 13 flat entries to 5 top-level)
+- Standardized every method section to consistent template: signature → parameters → returns → raises → example
+- Merged `run_hook` property into `run()` section (reduces visual noise)
+- Added "Complete example" section at the bottom showing full workflow
+- Added anchor IDs on all method headings for cross-linking from Quick Reference
+
+#### DBP-API-001 — Contract tests
+
+- Created `tests/test_dbport/adapters/primary/test_contract.py` (33 tests)
+- `TestModuleExports` — `__all__ == ["DBPort"]`, importability
+- `TestConstructorSignature` — 2 positional + 11 keyword-only params with correct defaults, total count
+- `TestPublicSurface` — 7 methods, 1 property, context manager protocol, `columns` attribute
+- `TestMethodSignatures` — parameter names and defaults for all 6 public methods
+- `TestConfigOnlyContract` — 6 guarded methods raise `RuntimeError`; `columns.meta()`, `columns.attach()`, `close()`, context manager, and `run_hook` work
+- `TestReturnTypes` — `load()` and `configure_input()` return `IngestRecord`
+- `TestInitBehavior` — full mode calls all 4 sync phases; `load_inputs_on_init=False` skips input loading; `config_only` skips all sync; sync errors do not fail init
+
+#### DBP-API-002 — Init semantics
+
+- Added detailed docstring to `__init__` documenting all 4 initialization phases and `config_only` behavior
+- Added detailed docstrings to `_auto_detect_schema`, `_sync_output_state`, `_load_inputs`, `_update_last_fetched`
+- Promoted `_sync_output_state` error logging from `debug` to `warning` (user-relevant failure)
+- Added `logger` import to `FetchService` and replaced bare `pass` with `logger.debug(...)` in exception handler
+- Version bumped to `0.0.4` in `pyproject.toml`
+- Updated `docs/changelog.md`, `docs/roadmap.md`
 
 ---
 
