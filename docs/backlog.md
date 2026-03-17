@@ -104,77 +104,32 @@ Use these facts as context when working the remaining backlog items.
 
 Theme: versioning mechanism online.
 
-### DBP-VERS-001 - Make version-specific docs browsing actually work end-to-end
+Status: `done`
 
-- Priority: `P0`
-- Status: `done`
-- Files:
-  - `zensical.toml`
-  - `.github/workflows/docs.yml`
-  - `scripts/update_versions.py`
-  - deployed `gh-pages` output
-- Required changes:
-  - Build on the existing docs deployment workflow and `update_versions.py` script rather than replacing them
-  - Ensure `versions.json` is reliably generated during deployment
-  - Ensure the version selector is visible in deployed docs
-  - Ensure `latest/` always points to the newest published docs
-  - Ensure specific published versions remain browsable under stable version paths
-  - Fix workflow ordering issues that can break version metadata generation
-- Relevant Zensical docs:
-  - [Basics](https://zensical.org/docs/setup/basics/)
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-- Acceptance criteria:
-  - Users can browse `latest` and switch to specific published versions from the docs UI
+### What was implemented
 
-### DBP-VERS-002 - Define the project version source of truth for docs builds
+- **Real versioned docs structure** — both local preview and deployment produce the same mike-compatible layout: `/<version>/`, `/latest/`, root `versions.json`, and root `index.html` redirect to `/latest/`
+- **pyproject.toml as version source of truth** — the docs deployment workflow extracts the version from `pyproject.toml` and validates it against the git tag; a mismatch fails the workflow
+- **Fixed deployment ordering bug** — the original workflow ran `update_versions.py` on the `gh-pages` branch before the script existed there (it was checked out from the tag *after* execution); now both the built site and the script are saved before the branch switch
+- **Fixed malformed root redirect** — the original heredoc produced indented HTML due to shell indentation; replaced with a properly formatted heredoc
+- **Local preview with real versioned paths** — `scripts/preview_docs.sh` builds a versioned tree in `_preview/` (git-ignored) with real `/<version>/` and `/latest/` directories that the version selector can navigate between
+- **Docs build verification in CI** — added a `docs` job to `.github/workflows/ci.yml` that runs `uv run zensical build --clean` on every push and PR to main
+- **`scripts/update_versions.py` retained** — it manages multi-version history in `versions.json` during deployment (adding versions, moving the `latest` alias, handling re-deploys)
 
-- Priority: `P0`
-- Status: `done`
-- Files:
-  - `pyproject.toml`
-  - `.github/workflows/docs.yml`
-  - versioning scripts and docs build workflow
-- Required changes:
-  - Treat this backlog as the source of truth for the pre-release milestone plan and `pyproject.toml` as the package version source used by automation
-  - Make docs versioning derive primarily from `pyproject.toml`
-  - Treat Git tags as deployment triggers, not the sole version source
-  - Validate consistency between the declared package version and the release trigger
-- Acceptance criteria:
-  - Docs version labels and versioned output are driven primarily by `pyproject.toml`
+### Challenges encountered
 
-### DBP-VERS-007 - Clarify local preview behavior for versioned docs
+- **mike cannot be used directly with Zensical** — mike's `deploy` command calls `mkdocs build` internally and expects `mkdocs.yml`; since Zensical uses its own build system and `zensical.toml`, there is no bridge; the versioned directory structure is mike-compatible but assembled manually
+- **Zensical does not wire `extra.version` into the JS config** — the base template reads `config.extra.version` for the outdated-version banner but never assigns it to the `_.version` namespace variable that the `__config` JSON block uses; a template override (`overrides/main.html`) was created to fix this, but the resulting version selector rendered as broken unstyled text in the header and nav tabs because Zensical does not include the CSS for the mike version selector dropdown
+- **Version selector UI removed** — the client-side version selector was removed entirely because Zensical cannot render it correctly; versioned browsing works through real directory paths and `versions.json`, not through the client-side widget; the selector can be re-evaluated when Zensical adds proper support
 
-- Priority: `P1`
-- Status: `done`
-- Files:
-  - docs maintenance notes
-  - local docs workflow
-  - optional dev helper scripts
-- Required changes:
-  - Decide whether local preview should support a mock/generated `versions.json`
-  - If not, document the limitation clearly for maintainers
-  - Optionally add a helper for local preview of version-selector behavior
-- Relevant Zensical docs:
-  - [Basics](https://zensical.org/docs/setup/basics/)
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-- Acceptance criteria:
-  - Maintainers know how to test version browsing before release
+### Items delivered
 
-### DBP-FOUND-006 - Keep local docs build verification in the delivery workflow
-
-- Priority: `P1`
-- Status: `done`
-- Files:
-  - local docs workflow
-  - CI docs workflow
-- Required changes:
-  - Keep the already-working local build path lightweight; do not turn docs verification into a fragile custom toolchain
-  - Keep `uv run zensical build --clean` as a required verification step for substantial docs changes
-  - Optionally enforce docs build validation in CI
-- Relevant Zensical docs:
-  - [Basics](https://zensical.org/docs/setup/basics/)
-- Acceptance criteria:
-  - Docs work includes an explicit build verification step
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-VERS-001 | `P0` | Versioned docs structure works end-to-end for deployment; client-side selector deferred (Zensical limitation) |
+| DBP-VERS-002 | `P0` | `pyproject.toml` is the version source of truth; tag validation enforced in workflow |
+| DBP-VERS-007 | `P1` | Local preview builds a real versioned tree; documented in `CLAUDE.md` |
+| DBP-FOUND-006 | `P1` | Docs build verification added to CI as a separate job |
 
 ---
 
