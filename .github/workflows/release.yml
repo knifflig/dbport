@@ -52,11 +52,11 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --python ${{ matrix.python-version }}
       - name: Lint
-        run: uv run ruff check src/ tests/
+        run: uv run --python ${{ matrix.python-version }} ruff check src/ tests/
       - name: Test with coverage
-        run: uv run pytest --cov --cov-report=term-missing --tb=short -q
+        run: uv run --python ${{ matrix.python-version }} pytest --cov --cov-report=term-missing --tb=short -q
 
   build:
     needs: test
