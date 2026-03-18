@@ -1,56 +1,101 @@
 # Roadmap
 
-This roadmap tracks planned work beyond the current release (`0.1.0`). For completed work, see the [Changelog](changelog.md).
+This roadmap tracks planned work beyond the current release. Items are ordered by impact and likelihood of implementation. For completed work, see the [Changelog](changelog.md).
 
 ---
 
-## Docs UX and navigation
+## Extension system
 
-### Progress feedback for instant navigation
+**Impact:** very high | **Effort:** medium | **Timeline:** next up
 
-- Add progress indicator for Zensical instant navigation
-- Priority: `P2`
+The extension system is the foundation for most items below. It introduces a plugin architecture that lets DBPort integrate with external tools without growing the core. Three extension types are planned:
 
-### Section orientation with breadcrumbs and tabs
+- **Model extensions** — integrate model builders (dbt, sqlmesh) into the lifecycle
+- **Runtime extensions** — integrate orchestrators (Prefect, Airflow) into execution
+- **Input extensions** — prebuilt import channels for common data sources
 
-- Improve section orientation with breadcrumbs and content tabs
-- Priority: `P2`
-
-### Repository content actions
-
-- Enable "edit this page" and source links via Zensical repository integration
-- Priority: `P1`
-
-### Repository integration polish
-
-- Review data privacy settings and repository link presentation
-- Priority: `P2`
-
-### Header autohide
-
-- Consider autohide behavior for the header on scroll
-- Priority: `P2`
-
-### Search experience and exclusions
-
-- Review search result quality, exclusion rules, and tagging
-- Priority: `P2`
+The extension system will ship first because it unblocks everything else on this roadmap.
 
 ---
 
-## Brand and visual identity
+## Input extensions
 
-### Palette review
+**Impact:** high | **Effort:** low (once the extension system exists) | **Timeline:** after extension system
 
-- Review palette choices against product tone using `docs/brand.md` as source of truth
-- Priority: `P2`
+Prebuilt import channels that let you declare external sources as inputs without writing custom ingestion code.
 
-### Icon and brand consistency
+Planned sources, in priority order:
 
-- Review logo, icon usage, typography, and brand consistency against `docs/brand.md`
-- Priority: `P2`
+1. **SDMX** — the primary target; statistical data from Eurostat, ECB, OECD, and other agencies via standardised APIs
+2. **Generic HTTP/REST** — fetch and ingest from any URL returning CSV, JSON, or Parquet
+3. **Public cloud storage** — direct reads from S3, GCS, or Azure Blob (outside the Iceberg catalog)
+4. **Open data portals** — CKAN, Socrata, and similar APIs used by government open data platforms
 
-### Zensical capability boundary
+---
 
-- Ensure all UI changes stay within documented Zensical capabilities
-- Priority: `P1`
+## Model builder integrations
+
+**Impact:** medium | **Effort:** medium | **Timeline:** planned, sooner rather than later
+
+Deeper integration with transformation frameworks via model extensions. This is already possible today — you can run dbt or sqlmesh and publish the result through DBPort — but a native integration would remove the custom glue code.
+
+Planned integrations:
+
+- **dbt** — run dbt models as the transform step, with DBPort managing inputs and publication
+- **sqlmesh** — same pattern, leveraging sqlmesh's incremental model support
+
+---
+
+## Orchestrator integrations
+
+**Impact:** medium | **Effort:** medium | **Timeline:** planned
+
+Runtime extensions that embed DBPort into orchestration platforms. Since orchestrators already provide scheduling, retries, and DAG execution, the integration mostly maps DBPort primitives onto their building blocks — which may actually simplify execution compared to standalone use.
+
+Planned integrations:
+
+- **Prefect** — DBPort tasks and flows as native Prefect components
+- **Airflow** — DBPort operators for Airflow DAGs
+
+---
+
+## Additional warehouse backends
+
+**Impact:** high | **Effort:** high | **Timeline:** not soon
+
+DBPort currently targets Iceberg REST catalogs exclusively. Extending to other warehouse backends would broaden adoption significantly but requires substantial adapter work.
+
+Candidates, roughly ordered by market adoption:
+
+1. **AWS Glue Catalog** (Iceberg) — most common managed Iceberg catalog
+2. **Hive Metastore** (Iceberg) — widely deployed in on-premise Hadoop environments
+3. **Unity Catalog** (Databricks) — growing Iceberg support, large user base
+4. **Snowflake Iceberg Tables** — Snowflake-managed Iceberg with proprietary catalog
+5. **Google BigLake** — GCP-native Iceberg integration
+6. **Delta Lake** — different table format, similar lifecycle needs
+7. **Apache Hudi** — another open table format with its own catalog model
+
+---
+
+## Additional compute engines
+
+**Impact:** high | **Effort:** very high | **Timeline:** not soon
+
+DuckDB is deeply embedded as DBPort's execution engine. Supporting alternative compute engines would require abstracting the SQL layer, connection management, and data exchange paths.
+
+Candidates, in order of priority:
+
+1. **PostgreSQL** — most widely deployed relational database; natural fit for teams already running Postgres
+2. **MongoDB** — document-oriented; would require rethinking the SQL-based transform model
+3. **ClickHouse** — column-oriented analytics engine; strong fit for large-scale aggregation workloads
+4. **Apache Spark** — distributed compute; relevant for datasets that exceed single-node scale
+
+---
+
+## SDMX Fusion Registry as warehouse backend
+
+**Impact:** unclear | **Effort:** high | **Timeline:** to be determined
+
+An alternative to classical Iceberg warehouses: using an [SDMX Fusion Registry](https://www.sdmx.io/) as both catalog and storage backend. This is an interesting perspective because SDMX brings much stronger contracts than Iceberg table properties — data structure definitions, codelists, concept schemes, and content constraints are first-class citizens.
+
+The trade-off: stronger governance out of the box, but less flexibility to integrate with the broader data ecosystem. DBPort's current strength is that it layers governance onto whatever warehouse you already use. An SDMX backend would deliver deeper contracts at the cost of that flexibility.
