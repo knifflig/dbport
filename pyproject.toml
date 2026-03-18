@@ -1,6 +1,6 @@
 [project]
 name = "dbport"
-version = "0.0.9"
+version = "0.1.0"
 description = "DuckDB-native runtime for building reproducible warehouse datasets"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["duckdb", "iceberg", "data-warehouse", "etl", "data-pipeline"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

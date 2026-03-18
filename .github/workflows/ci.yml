@@ -23,8 +23,8 @@ jobs:
         run: uv run ruff check src/ tests/
       - name: Format check
         run: uv run ruff format --check src/ tests/
-      - name: Test
-        run: uv run pytest --tb=short -q
+      - name: Test with coverage
+        run: uv run pytest --cov --cov-report=term-missing --tb=short -q
 
   docs:
     runs-on: ubuntu-latest
@@ -37,3 +37,43 @@ jobs:
         run: uv sync
       - name: Verify docs build
         run: uv run zensical build --clean
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Verify artifact exists
+        run: ls -la dist/ && test -f dist/*.whl && test -f dist/*.tar.gz
+      - name: Smoke-test installed package
+        run: |
+          uv venv .venv-smoke --python 3.12
+          .venv-smoke/bin/pip install dist/*.whl
+          .venv-smoke/bin/python -c "from dbport import DBPort; print('import ok')"
+          .venv-smoke/bin/dbp --version
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync
+      - name: Validate Python example syntax
+        run: uv run python -m py_compile examples/minimal/main.py
+      - name: Validate CLI example syntax
+        run: bash -n examples/minimal_cli/run.sh
+      - name: Verify CLI help commands
+        run: |
+          uv run dbp --help
+          uv run dbp status --help
+          uv run dbp model --help
+          uv run dbp config --help

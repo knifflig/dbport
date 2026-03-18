@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
 import typer
 import typer.testing
 
 from dbport.cli.main import app
-
 
 # ---------------------------------------------------------------------------
 # Helpers

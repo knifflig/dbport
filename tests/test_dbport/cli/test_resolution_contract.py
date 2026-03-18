@@ -7,23 +7,19 @@ stable for 0.1.0.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from dbport.cli.context import (
-    CliContext,
-    read_lock_version_config,
-    read_lock_versions,
-    resolve_model_key,
-)
 from dbport.cli.commands.lifecycle import (
     resolve_publish_mode,
     resolve_publish_version,
     resolve_publish_version_for_publish,
 )
-
+from dbport.cli.context import (
+    CliContext,
+    resolve_model_key,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -69,7 +65,7 @@ def _write_versioned_lock(
     if configured_version:
         lines.append(f'version = "{configured_version}"\n')
     for v in completed_versions or []:
-        lines.append(f'\n[[models."a.x".versions]]\n')
+        lines.append('\n[[models."a.x".versions]]\n')
         lines.append(f'version = "{v}"\n')
         lines.append("completed = true\n")
     lock.write_text("".join(lines))

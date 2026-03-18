@@ -8,8 +8,31 @@ from pydantic_settings import BaseSettings
 
 from dbport.infrastructure.credentials import WarehouseCreds
 
+# All env vars that WarehouseCreds reads via pydantic-settings.
+_CREDENTIAL_ENV_VARS = (
+    "ICEBERG_REST_URI",
+    "ICEBERG_CATALOG_TOKEN",
+    "ICEBERG_WAREHOUSE",
+    "S3_ENDPOINT",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_DEFAULT_REGION",
+)
+
 
 class TestWarehouseCreds:
+    @pytest.fixture(autouse=True)
+    def _isolate_credentials(self, monkeypatch, tmp_path):
+        """Ensure no ambient credentials leak into tests.
+
+        - Clears all credential env vars so tests start clean.
+        - Changes to tmp_path so the repo-root .env file is not discovered.
+        Each test that needs env vars or a .env file sets them explicitly.
+        """
+        monkeypatch.chdir(tmp_path)
+        for var in _CREDENTIAL_ENV_VARS:
+            monkeypatch.delenv(var, raising=False)
+
     def test_construction_explicit(self):
         creds = WarehouseCreds(
             catalog_uri="https://catalog.example.com",
@@ -20,10 +43,7 @@ class TestWarehouseCreds:
         assert creds.catalog_token == "tok-secret"
         assert creds.warehouse == "my_warehouse"
 
-    def test_optional_s3_fields_default_none(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)  # escape repo-root .env file
-        for var in ("S3_ENDPOINT", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
-            monkeypatch.delenv(var, raising=False)
+    def test_optional_s3_fields_default_none(self):
         creds = WarehouseCreds(
             catalog_uri="https://catalog.example.com",
             catalog_token="tok",
@@ -100,17 +120,12 @@ class TestWarehouseCreds:
         creds = WarehouseCreds(catalog_uri="https://explicit.example.com")
         assert creds.catalog_uri == "https://explicit.example.com"
 
-    def test_missing_required_fields_raises(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)  # escape repo-root .env file
-        monkeypatch.delenv("ICEBERG_REST_URI", raising=False)
-        monkeypatch.delenv("ICEBERG_CATALOG_TOKEN", raising=False)
-        monkeypatch.delenv("ICEBERG_WAREHOUSE", raising=False)
+    def test_missing_required_fields_raises(self):
         with pytest.raises((ValidationError, Exception)):
             WarehouseCreds()
 
     def test_dotenv_overrides_env_var(self, monkeypatch, tmp_path):
         """A .env file should take priority over shell env vars."""
-        monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("ICEBERG_REST_URI", "https://from-shell.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "shell-token")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "shell_wh")
@@ -129,11 +144,6 @@ class TestWarehouseCreds:
 
     def test_explicit_overrides_dotenv(self, monkeypatch, tmp_path):
         """Constructor kwargs should take priority over .env file."""
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("ICEBERG_REST_URI", raising=False)
-        monkeypatch.delenv("ICEBERG_CATALOG_TOKEN", raising=False)
-        monkeypatch.delenv("ICEBERG_WAREHOUSE", raising=False)
-
         dotenv = tmp_path / ".env"
         dotenv.write_text(
             "ICEBERG_REST_URI=https://from-dotenv.example.com\n"
@@ -145,9 +155,8 @@ class TestWarehouseCreds:
         assert creds.catalog_uri == "https://explicit.example.com"
         assert creds.catalog_token == "dotenv-token"  # from .env
 
-    def test_env_var_fallback_when_no_dotenv(self, monkeypatch, tmp_path):
+    def test_env_var_fallback_when_no_dotenv(self, monkeypatch):
         """Shell env vars are used when no .env file is present."""
-        monkeypatch.chdir(tmp_path)  # no .env here
         monkeypatch.setenv("ICEBERG_REST_URI", "https://from-shell.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "shell-token")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "shell_wh")

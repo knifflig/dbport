@@ -193,7 +193,7 @@ class TestEnsureExtensionsFallback:
 
     def test_python_download_fallback(self, tmp_path: Path, monkeypatch):
         """When DuckDB INSTALL also fails, falls back to Python urllib download."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
         mock_con = MagicMock()

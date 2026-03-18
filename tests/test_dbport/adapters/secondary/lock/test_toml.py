@@ -662,7 +662,6 @@ class TestProjectLevelOperations:
 class TestAtomicWriteErrorHandling:
     def test_original_file_preserved_on_write_failure(self, tmp_path: Path):
         """If os.replace fails, the original lock file is not corrupted."""
-        import os
         from unittest.mock import patch
 
         lock_path = tmp_path / "dbport.lock"

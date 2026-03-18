@@ -6,6 +6,29 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.1.0 — 2026-03-18
+
+First public release. Published to PyPI and GitHub Pages.
+
+### Added
+
+- **PyPI publishing workflow** — new `release.yml` workflow triggered on version tags; builds sdist and wheel, smoke-tests the installed package, and publishes to PyPI via trusted publishing (OIDC)
+- **Package artifact verification in CI** — new `package` job in `ci.yml` builds the distributable, installs it in a clean venv, and verifies `from dbport import DBPort` and `dbp --version` work from the packaged artifact
+- **Example smoke tests in CI** — new `examples` job validates Python example syntax (`py_compile`), CLI example syntax (`bash -n`), and all `dbp` help commands
+- **Comprehensive release checklist** — `docs/versions/release-versioning.md` expanded with pre-release, build verification, publish, and post-release verification steps
+
+### Changed
+
+- **CI coverage enforcement** — test job now runs `pytest --cov --cov-report=term-missing`, enforcing the `fail_under = 95` gate declared in `pyproject.toml`
+- **Development status classifier** — updated from `2 - Pre-Alpha` to `3 - Alpha` in `pyproject.toml`
+
+### Fixed
+
+- **Deterministic credential resolution** — added `autouse` fixture to credential tests that clears all credential env vars (`ICEBERG_*`, `AWS_*`, `S3_*`) and escapes the repo-root `.env` file before each test; credential tests now pass reliably regardless of ambient environment
+- **`dbp status check` credential reporting** — removed manual `os.environ` fallback in the except branch; now reports a single clear message when `WarehouseCreds` validation fails instead of re-inspecting env vars independently
+
+---
+
 ## 0.0.9 — 2026-03-18
 
 Homepage UX and publication-facing docs polish.

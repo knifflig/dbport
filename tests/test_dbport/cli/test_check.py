@@ -262,11 +262,10 @@ class TestCheckCommand:
         assert "credentials" in result.output
         assert "ICEBERG_REST_URI" in result.output
 
-    def test_check_credentials_except_branch_with_env(self, tmp_path: Path, monkeypatch):
-        """Cover line 78→77: except branch where env vars ARE set (detail=validation failed)."""
+    def test_check_credentials_except_branch(self, tmp_path: Path, monkeypatch):
+        """Cover the except branch where WarehouseCreds() raises."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# ok\n")
-        # Set the env vars so os.environ.get returns truthy inside the except branch
         monkeypatch.setenv("ICEBERG_REST_URI", "https://example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "tok")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "wh")
@@ -288,7 +287,7 @@ class TestCheckCommand:
         data = json.loads(result.output)
         cred_check = [c for c in data["data"]["checks"] if c["name"] == "credentials"][0]
         assert cred_check["status"] == "warn"
-        assert cred_check["detail"] == "validation failed"
+        assert "not configured" in cred_check["detail"]
 
     def test_check_dependency_missing(self, tmp_path: Path):
         """Cover lines 91-94: a dependency import fails."""

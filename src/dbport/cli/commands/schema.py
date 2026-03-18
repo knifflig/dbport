@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from ..context import read_lock_models, resolve_model_paths, resolve_model_paths_from_data
+from ..context import read_lock_models, resolve_model_paths_from_data
 from ..errors import cli_error_handler
 from ..render import print_info, print_json, print_success, print_table, print_warning
 

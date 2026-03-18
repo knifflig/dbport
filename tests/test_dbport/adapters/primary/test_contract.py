@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Module-level exports
 # ---------------------------------------------------------------------------
@@ -45,8 +44,9 @@ class TestModuleExports:
 
     def test_no_internal_symbols_leak(self):
         """Only DBPort should be exported via __all__."""
-        import dbport
         import types
+
+        import dbport
 
         # Filter out submodules and __future__ imports
         public = [
