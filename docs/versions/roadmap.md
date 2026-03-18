@@ -59,6 +59,16 @@ Planned integrations:
 
 ---
 
+## S3 + Parquet as standalone warehouse
+
+**Impact:** high (usability) | **Effort:** high | **Timeline:** worth exploring before other backends
+
+Not every team runs an Iceberg catalog. A plain S3 bucket with Parquet files is the lowest barrier to entry — no catalog server, no REST API, just files on object storage. Supporting this as a first-class backend would make DBPort accessible to teams that don't have (or don't want) a full Iceberg setup.
+
+The trade-off is significant: without Iceberg's native table versioning, snapshot semantics, and schema evolution, DBPort would need to reimplement those guarantees in its own domain layer. Contracts and codelists would be stored as sidecar files next to the Parquet data rather than embedded in table properties. That's a substantial amount of new domain logic — but the usability gain for smaller teams and simpler setups makes this worth investigating even before extending to other catalog backends.
+
+---
+
 ## Additional warehouse backends
 
 **Impact:** high | **Effort:** high | **Timeline:** not soon
