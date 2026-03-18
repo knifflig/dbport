@@ -17,38 +17,48 @@ from dbport.adapters.secondary.metadata.codelists import (
 
 @pytest.fixture
 def duckdb(tmp_path: Path) -> DuckDBComputeAdapter:
+    """Duckdb."""
     ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
     ad.execute("CREATE TABLE outputs.data (geo VARCHAR, year INT, value DOUBLE)")
-    ad.execute("INSERT INTO outputs.data VALUES ('DE', 2020, 1.0), ('FR', 2021, 2.0), ('DE', 2022, 3.0)")
+    ad.execute(
+        "INSERT INTO outputs.data VALUES ('DE', 2020, 1.0), ('FR', 2021, 2.0), ('DE', 2022, 3.0)"
+    )
     yield ad
     ad.close()
 
 
 class TestGenerateCsvForColumn:
-    def test_returns_bytes(self, duckdb):
+    """Tests for Generate Csv For Column."""
+
+    def test_returns_bytes(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Returns bytes."""
         result = generate_csv_for_column(duckdb, "outputs.data", "geo")
         assert isinstance(result, bytes)
 
-    def test_csv_has_header(self, duckdb):
+    def test_csv_has_header(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Csv has header."""
         result = generate_csv_for_column(duckdb, "outputs.data", "geo")
         lines = result.decode("utf-8").splitlines()
         assert lines[0] == "code,name"
 
-    def test_distinct_values_written(self, duckdb):
+    def test_distinct_values_written(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Distinct values written."""
         result = generate_csv_for_column(duckdb, "outputs.data", "geo")
         reader = csv.reader(io.StringIO(result.decode("utf-8")))
         next(reader)  # skip header
         codes = sorted(row[0] for row in reader)
         assert codes == ["DE", "FR"]
 
-    def test_code_and_name_are_same(self, duckdb):
+    def test_code_and_name_are_same(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Code and name are same."""
         result = generate_csv_for_column(duckdb, "outputs.data", "geo")
         reader = csv.reader(io.StringIO(result.decode("utf-8")))
         next(reader)  # skip header
         for row in reader:
             assert row[0] == row[1]
 
-    def test_sorted_output(self, duckdb):
+    def test_sorted_output(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Sorted output."""
         result = generate_csv_for_column(duckdb, "outputs.data", "geo")
         reader = csv.reader(io.StringIO(result.decode("utf-8")))
         next(reader)
@@ -57,11 +67,15 @@ class TestGenerateCsvForColumn:
 
 
 class TestGenerateCsvForAttached:
-    def test_returns_bytes(self, duckdb):
+    """Tests for Generate Csv For Attached."""
+
+    def test_returns_bytes(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Returns bytes."""
         result = generate_csv_for_attached(duckdb, "outputs.data")
         assert isinstance(result, bytes)
 
-    def test_full_table_exported(self, duckdb):
+    def test_full_table_exported(self, duckdb: DuckDBComputeAdapter) -> None:
+        """Full table exported."""
         result = generate_csv_for_attached(duckdb, "outputs.data")
         reader = csv.reader(io.StringIO(result.decode("utf-8")))
         header = next(reader)
@@ -69,7 +83,8 @@ class TestGenerateCsvForAttached:
         rows = list(reader)
         assert len(rows) == 3
 
-    def test_all_columns_present(self, duckdb):
+    def test_all_columns_present(self, duckdb: DuckDBComputeAdapter) -> None:
+        """All columns present."""
         result = generate_csv_for_attached(duckdb, "outputs.data")
         lines = result.decode("utf-8").splitlines()
         assert lines[0] == "geo,year,value"

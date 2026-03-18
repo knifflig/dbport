@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..adapters.secondary.lock.toml import TomlLockAdapter
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -74,7 +78,7 @@ def resolve_context(
     )
 
 
-def _make_project_lock(lockfile_path: Path):
+def _make_project_lock(lockfile_path: Path) -> TomlLockAdapter:
     """Create a TomlLockAdapter for project-level (non-model-scoped) operations."""
     from ..adapters.secondary.lock.toml import TomlLockAdapter
 
@@ -142,8 +146,7 @@ def resolve_dataset(ctx: CliContext) -> tuple[str, str]:
     models = read_lock_models(ctx.lockfile_path)
     if not models:
         raise RuntimeError(
-            f"No models found in {ctx.lockfile_path}. "
-            "Run 'dbp init' to create a project first."
+            f"No models found in {ctx.lockfile_path}. Run 'dbp init' to create a project first."
         )
 
     model_data = _resolve_model_data(ctx, models)
@@ -198,8 +201,7 @@ def resolve_model_paths(ctx: CliContext) -> ModelPaths:
     models = read_lock_models(ctx.lockfile_path)
     if not models:
         raise RuntimeError(
-            f"No models found in {ctx.lockfile_path}. "
-            "Run 'dbp init' to create a project first."
+            f"No models found in {ctx.lockfile_path}. Run 'dbp init' to create a project first."
         )
 
     model_data = _resolve_model_data(ctx, models)
@@ -241,8 +243,7 @@ def resolve_model_key(ctx: CliContext, model_arg: str | None = None) -> tuple[st
     models = read_lock_models(ctx.lockfile_path)
     if not models:
         raise RuntimeError(
-            f"No models found in {ctx.lockfile_path}. "
-            "Run 'dbp init' to create a project first."
+            f"No models found in {ctx.lockfile_path}. Run 'dbp init' to create a project first."
         )
 
     # 1. Explicit model key passed as positional arg

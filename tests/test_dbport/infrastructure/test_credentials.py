@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
@@ -21,19 +23,21 @@ _CREDENTIAL_ENV_VARS = (
 
 
 class TestWarehouseCreds:
-    @pytest.fixture(autouse=True)
-    def _isolate_credentials(self, monkeypatch, tmp_path):
-        """Ensure no ambient credentials leak into tests.
+    """Tests for WarehouseCreds."""
 
-        - Clears all credential env vars so tests start clean.
-        - Changes to tmp_path so the repo-root .env file is not discovered.
-        Each test that needs env vars or a .env file sets them explicitly.
-        """
+    @pytest.fixture(autouse=True)
+    def _isolate_credentials(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Ensure no ambient credentials leak into tests."""
         monkeypatch.chdir(tmp_path)
         for var in _CREDENTIAL_ENV_VARS:
             monkeypatch.delenv(var, raising=False)
 
-    def test_construction_explicit(self):
+    def test_construction_explicit(self) -> None:
+        """Test explicit construction."""
         creds = WarehouseCreds(
             catalog_uri="https://catalog.example.com",
             catalog_token="tok-secret",
@@ -43,7 +47,8 @@ class TestWarehouseCreds:
         assert creds.catalog_token == "tok-secret"
         assert creds.warehouse == "my_warehouse"
 
-    def test_optional_s3_fields_default_none(self):
+    def test_optional_s3_fields_default_none(self) -> None:
+        """Test that optional S3 fields default to None."""
         creds = WarehouseCreds(
             catalog_uri="https://catalog.example.com",
             catalog_token="tok",
@@ -53,7 +58,8 @@ class TestWarehouseCreds:
         assert creds.s3_access_key is None
         assert creds.s3_secret_key is None
 
-    def test_s3_region_default(self):
+    def test_s3_region_default(self) -> None:
+        """Test that s3_region defaults to us-east-1."""
         creds = WarehouseCreds(
             catalog_uri="https://catalog.example.com",
             catalog_token="tok",
@@ -61,7 +67,8 @@ class TestWarehouseCreds:
         )
         assert creds.s3_region == "us-east-1"
 
-    def test_s3_endpoint_set_explicit(self):
+    def test_s3_endpoint_set_explicit(self) -> None:
+        """Test explicit s3_endpoint."""
         creds = WarehouseCreds(
             catalog_uri="https://catalog.example.com",
             catalog_token="tok",
@@ -70,19 +77,25 @@ class TestWarehouseCreds:
         )
         assert creds.s3_endpoint == "https://s3.example.com"
 
-    def test_s3_access_key_field_exists(self):
+    def test_s3_access_key_field_exists(self) -> None:
+        """Test that s3_access_key field exists."""
         assert "s3_access_key" in WarehouseCreds.model_fields
         # No alias — env var must be AWS_ACCESS_KEY_ID (not AWS_ACCESS_KEY_ID_ID)
         field_info = WarehouseCreds.model_fields["s3_access_key"]
         assert field_info.alias is None
 
-    def test_s3_secret_key_field_exists(self):
+    def test_s3_secret_key_field_exists(self) -> None:
+        """Test that s3_secret_key field exists."""
         assert "s3_secret_key" in WarehouseCreds.model_fields
         # Field has validation_alias for AWS_SECRET_ACCESS_KEY
         field_info = WarehouseCreds.model_fields["s3_secret_key"]
         assert field_info.alias is None
 
-    def test_s3_access_key_from_env(self, monkeypatch):
+    def test_s3_access_key_from_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test s3_access_key loaded from env."""
         monkeypatch.setenv("ICEBERG_REST_URI", "https://catalog.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "tok")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "wh")
@@ -90,21 +103,34 @@ class TestWarehouseCreds:
         creds = WarehouseCreds()
         assert creds.s3_access_key == "AKIAIOSFODNN7EXAMPLE"
 
-    def test_s3_secret_key_from_env(self, monkeypatch):
+    def test_s3_secret_key_from_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test s3_secret_key loaded from env."""
         monkeypatch.setenv("ICEBERG_REST_URI", "https://catalog.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "tok")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "wh")
-        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+        monkeypatch.setenv(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        )
         creds = WarehouseCreds()
         assert creds.s3_secret_key == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 
-    def test_is_base_settings(self):
+    def test_is_base_settings(self) -> None:
+        """Test that WarehouseCreds is a BaseSettings subclass."""
         assert issubclass(WarehouseCreds, BaseSettings)
 
-    def test_populate_by_name(self):
+    def test_populate_by_name(self) -> None:
+        """Test that populate_by_name is enabled."""
         assert WarehouseCreds.model_config.get("populate_by_name") is True
 
-    def test_from_env_vars(self, monkeypatch):
+    def test_from_env_vars(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test construction from env vars."""
         monkeypatch.setenv("ICEBERG_REST_URI", "https://env-catalog.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "env-token")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "env_warehouse")
@@ -113,18 +139,27 @@ class TestWarehouseCreds:
         assert creds.catalog_token == "env-token"
         assert creds.warehouse == "env_warehouse"
 
-    def test_explicit_overrides_env(self, monkeypatch):
+    def test_explicit_overrides_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that explicit kwargs override env vars."""
         monkeypatch.setenv("ICEBERG_REST_URI", "https://env.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "env-token")
         monkeypatch.setenv("ICEBERG_WAREHOUSE", "env_wh")
         creds = WarehouseCreds(catalog_uri="https://explicit.example.com")
         assert creds.catalog_uri == "https://explicit.example.com"
 
-    def test_missing_required_fields_raises(self):
+    def test_missing_required_fields_raises(self) -> None:
+        """Test that missing required fields raise."""
         with pytest.raises((ValidationError, Exception)):
             WarehouseCreds()
 
-    def test_dotenv_overrides_env_var(self, monkeypatch, tmp_path):
+    def test_dotenv_overrides_env_var(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
         """A .env file should take priority over shell env vars."""
         monkeypatch.setenv("ICEBERG_REST_URI", "https://from-shell.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "shell-token")
@@ -142,7 +177,11 @@ class TestWarehouseCreds:
         assert creds.catalog_token == "dotenv-token"
         assert creds.warehouse == "dotenv_wh"
 
-    def test_explicit_overrides_dotenv(self, monkeypatch, tmp_path):
+    def test_explicit_overrides_dotenv(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
         """Constructor kwargs should take priority over .env file."""
         dotenv = tmp_path / ".env"
         dotenv.write_text(
@@ -155,7 +194,10 @@ class TestWarehouseCreds:
         assert creds.catalog_uri == "https://explicit.example.com"
         assert creds.catalog_token == "dotenv-token"  # from .env
 
-    def test_env_var_fallback_when_no_dotenv(self, monkeypatch):
+    def test_env_var_fallback_when_no_dotenv(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Shell env vars are used when no .env file is present."""
         monkeypatch.setenv("ICEBERG_REST_URI", "https://from-shell.example.com")
         monkeypatch.setenv("ICEBERG_CATALOG_TOKEN", "shell-token")

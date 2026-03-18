@@ -5,13 +5,16 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ....domain.ports.compute import ICompute
 
 logger = logging.getLogger(__name__)
 
 
 def generate_csv_for_column(
-    compute: Any,
+    compute: ICompute,
     output_table: str,
     column_name: str,
 ) -> bytes:
@@ -36,7 +39,7 @@ def generate_csv_for_column(
 
 
 def generate_csv_for_attached(
-    compute: Any,
+    compute: ICompute,
     table_address: str,
 ) -> bytes:
     """Export an entire DuckDB table as CSV bytes.

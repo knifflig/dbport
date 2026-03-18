@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...domain.entities.dataset import Dataset
-from ...domain.entities.input import InputDeclaration
+from ...domain.entities.input import IngestRecord, InputDeclaration
 from ...domain.entities.version import DatasetVersion
 from ...infrastructure.credentials import WarehouseCreds
 from ...infrastructure.logging import setup_logging
@@ -149,7 +149,7 @@ class DBPort:
         # Credentials (skipped in config_only mode)
         # ------------------------------------------------------------------
         if not config_only:
-            creds_overrides: dict[str, Any] = {}
+            creds_overrides: dict[str, str] = {}
             if catalog_uri:
                 creds_overrides["catalog_uri"] = catalog_uri
             if catalog_token:
@@ -240,9 +240,7 @@ class DBPort:
     def _require_full_mode(self, method: str) -> None:
         """Raise if called in config_only mode."""
         if self._config_only:
-            raise RuntimeError(
-                f"DBPort.{method}() requires full mode (config_only=False)"
-            )
+            raise RuntimeError(f"DBPort.{method}() requires full mode (config_only=False)")
 
     def schema(self, ddl_or_path: str) -> None:
         """Declare the output table schema from a DDL string or .sql file path."""
@@ -377,9 +375,11 @@ class DBPort:
     # ------------------------------------------------------------------
 
     def __enter__(self) -> DBPort:
+        """Enter the context manager."""
         return self
 
     def __exit__(self, *_: object) -> None:
+        """Exit the context manager and release resources."""
         self.close()
 
     # ------------------------------------------------------------------

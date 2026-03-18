@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from typing import Never
 from unittest.mock import MagicMock
 
 import pyarrow as pa
@@ -14,7 +16,7 @@ from dbport.infrastructure.credentials import WarehouseCreds
 _SIMPLE_SCHEMA = pa.schema([("x", pa.int64())])
 
 
-def _make_creds(**overrides) -> WarehouseCreds:
+def _make_creds(**overrides: object) -> WarehouseCreds:
     defaults = dict(
         catalog_uri="https://catalog.example.com",
         catalog_token="tok",
@@ -25,58 +27,68 @@ def _make_creds(**overrides) -> WarehouseCreds:
 
 
 class _FakeTransaction:
-    def __init__(self, table):
+    def __init__(self, table: object) -> None:
         self._table = table
         self._appended = []
         self._props_to_set = {}
 
-    def append(self, arrow_table):
+    def append(self, arrow_table: object) -> None:
+        """Append."""
         self._appended.append(arrow_table)
 
-    def set_properties(self, props):
+    def set_properties(self, props: object) -> None:
+        """set_properties."""
         self._props_to_set.update(props)
 
-    def commit_transaction(self):
+    def commit_transaction(self) -> None:
+        """commit_transaction."""
         self._table._props.update(self._props_to_set)
         self._table._appended.extend(self._appended)
 
 
 class _FakeIcebergTable:
-    def __init__(self, props=None):
+    def __init__(self, props: object = None) -> None:
         self._props = dict(props or {})
         self._appended = []  # Track appended data
 
     @property
-    def properties(self):
+    def properties(self) -> object:
+        """Properties."""
         return dict(self._props)
 
-    def transaction(self):
+    def transaction(self) -> object:
+        """Transaction."""
         return _FakeTransaction(self)
 
-    def current_snapshot(self):
+    def current_snapshot(self) -> None:
+        """current_snapshot."""
         return None
 
 
 class _FakePyicebergCatalog:
-    def __init__(self, table=None):
+    def __init__(self, table: object = None) -> None:
         self._table = table
         self._created_table = None
         self._dropped = False
 
-    def load_table(self, ident):
+    def load_table(self, ident: object) -> object:
+        """load_table."""
         if self._table is None:
             raise LookupError(f"Table {ident} not found")
         return self._table
 
-    def table_exists(self, ident):
+    def table_exists(self, ident: object) -> object:
+        """table_exists."""
         return self._table is not None
 
-    def create_table(self, name, schema=None):
+    def create_table(self, name: str, schema: pa.Schema = None) -> object:
+        """create_table."""
         self._created_table = _FakeIcebergTable()
         self._table = self._created_table
         return self._created_table
 
-    def drop_table(self, ident, purge_requested=False):
+    def drop_table(self, ident: object, purge_requested: bool = False) -> None:
+        """drop_table."""
         self._dropped = True
         self._table = None
 
@@ -86,7 +98,7 @@ class _FakePyicebergCatalog:
 # ---------------------------------------------------------------------------
 
 
-def _make_commit_404_error():
+def _make_commit_404_error() -> object:
     """Simulate the DuckDB iceberg 'transactions/commit' 404 error."""
     return Exception(
         "TransactionContext Error: Failed to commit: Failed to commit "
@@ -104,14 +116,14 @@ def _make_batch(num_rows: int) -> pa.RecordBatch:
 class _FakeRecordBatchReader:
     """Minimal Arrow RecordBatchReader stand-in."""
 
-    def __init__(self, batches, schema=None):
+    def __init__(self, batches: object, schema: pa.Schema = None) -> None:
         self._batches = list(batches)
         self.schema = schema or _SIMPLE_SCHEMA
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return iter(self._batches)
 
-    def __next__(self):
+    def __next__(self) -> None:
         return next(iter(self._batches))
 
 
@@ -121,17 +133,20 @@ class _FakeRecordBatchReader:
 
 
 class TestDuckDBWritePath:
-    def _make_adapter(self, iceberg_table=None):
+    """Tests for Duck DBWrite Path."""
+
+    def _make_adapter(self, iceberg_table: object = None) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         adapter._catalog = _FakePyicebergCatalog(iceberg_table)
         return adapter
 
-    def _mock_compute(self, row_count=5, insert_fails=False):
+    def _mock_compute(self, row_count: object = 5, insert_fails: bool = False) -> None:
         compute = MagicMock()
         sql_log: list[str] = []
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             sql_log.append(sql)
             if insert_fails and sql.strip().upper().startswith("INSERT INTO"):
                 raise Exception("Table does not exist")
@@ -143,7 +158,8 @@ class TestDuckDBWritePath:
         compute._sql_log = sql_log
         return compute
 
-    def test_writes_via_duckdb_insert(self):
+    def test_writes_via_duckdb_insert(self) -> None:
+        """Writes via duckdb insert."""
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
         compute = self._mock_compute(row_count=100)
@@ -159,7 +175,8 @@ class TestDuckDBWritePath:
         assert len(insert_calls) == 1
         assert "dbport_warehouse.wifor.emp" in insert_calls[0]
 
-    def test_creates_table_on_first_publish(self):
+    def test_creates_table_on_first_publish(self) -> None:
+        """Creates table on first publish."""
         adapter = self._make_adapter()
         compute = self._mock_compute(row_count=10, insert_fails=True)
         version = DatasetVersion(version="2026-03-13")
@@ -170,19 +187,22 @@ class TestDuckDBWritePath:
         create_calls = [s for s in compute._sql_log if "CREATE TABLE dbport_warehouse" in s]
         assert len(create_calls) == 1
 
-    def test_overwrite_uses_streaming_fallback(self):
+    def test_overwrite_uses_streaming_fallback(self) -> None:
+        """Overwrite uses streaming fallback."""
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
         compute = MagicMock()
         sql_log: list[str] = []
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             sql_log.append(sql)
             result = MagicMock()
             result.fetchone.return_value = (50,)
             return result
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(50)])
@@ -198,7 +218,8 @@ class TestDuckDBWritePath:
         assert not any("CREATE TABLE dbport_warehouse" in s for s in sql_log)
         assert adapter._catalog._dropped is True
 
-    def test_skips_when_already_completed(self):
+    def test_skips_when_already_completed(self) -> None:
+        """Skips when already completed."""
         props = {
             "dbport.upload.v2.2026-03-13.completed": "1",
             "dbport.upload.v2.2026-03-13.rows_appended": "42",
@@ -219,7 +240,8 @@ class TestDuckDBWritePath:
         ]
         assert len(write_calls) == 0
 
-    def test_overwrite_ignores_completed_checkpoint(self):
+    def test_overwrite_ignores_completed_checkpoint(self) -> None:
+        """Overwrite ignores completed checkpoint."""
         props = {
             "dbport.upload.v2.2026-03-13.completed": "1",
             "dbport.upload.v2.2026-03-13.rows_appended": "42",
@@ -233,7 +255,8 @@ class TestDuckDBWritePath:
 
         assert result.rows == 77
 
-    def test_returns_version_record(self):
+    def test_returns_version_record(self) -> None:
+        """Returns version record."""
         adapter = self._make_adapter()
         compute = self._mock_compute(row_count=99, insert_fails=True)
         version = DatasetVersion(version="2026-03-13", params={"src": "test"})
@@ -246,7 +269,8 @@ class TestDuckDBWritePath:
         assert result.completed is True
         assert result.rows == 99
 
-    def test_marks_completed_in_table_properties(self):
+    def test_marks_completed_in_table_properties(self) -> None:
+        """Marks completed in table properties."""
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
         compute = self._mock_compute(row_count=10)
@@ -264,18 +288,21 @@ class TestDuckDBWritePath:
 
 
 class TestStreamingArrowFallback:
-    def _make_adapter(self, iceberg_table=None):
+    """Tests for Streaming Arrow Fallback."""
+
+    def _make_adapter(self, iceberg_table: object = None) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         adapter._catalog = _FakePyicebergCatalog(iceberg_table)
         return adapter
 
-    def _mock_compute_with_fallback(self, row_count=100, num_batches=2):
+    def _mock_compute_with_fallback(self, row_count: object = 100, num_batches: int = 2) -> None:
         """Build compute that triggers DuckDB 404 and provides Arrow batches."""
         compute = MagicMock()
         rows_per_batch = row_count // num_batches if num_batches else row_count
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             upper = sql.strip().upper()
             # DuckDB writes trigger the 404 error
             if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith(
@@ -290,7 +317,8 @@ class TestStreamingArrowFallback:
 
         compute.execute.side_effect = execute_side_effect
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             batches = [_make_batch(rows_per_batch) for _ in range(num_batches)]
@@ -299,16 +327,13 @@ class TestStreamingArrowFallback:
         compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         return compute
 
-    def test_fallback_triggered_on_commit_404(self):
+    def test_fallback_triggered_on_commit_404(self) -> None:
         """DuckDB 404 → fallback streams batches through pyiceberg."""
         adapter = self._make_adapter()
         compute = self._mock_compute_with_fallback(row_count=100, num_batches=2)
         version = DatasetVersion(version="2026-03-14")
 
         # Patch pa.Table.from_batches for the fallback
-        import pyarrow as pa
-
-        orig = pa.Table.from_batches
 
         result = adapter.write_versioned("wifor.emp", version, compute)
 
@@ -320,7 +345,7 @@ class TestStreamingArrowFallback:
         # Batches were appended
         assert len(adapter._catalog._table._appended) == 2
 
-    def test_fallback_caches_session_decision(self):
+    def test_fallback_caches_session_decision(self) -> None:
         """Second write_versioned skips DuckDB attempt."""
         adapter = self._make_adapter()
         compute = self._mock_compute_with_fallback(row_count=50, num_batches=1)
@@ -346,7 +371,7 @@ class TestStreamingArrowFallback:
         ]
         assert len(duckdb_calls_after) == len(duckdb_calls_before)
 
-    def test_fallback_resumes_from_checkpoint(self):
+    def test_fallback_resumes_from_checkpoint(self) -> None:
         """Partial write: 2 batches committed → skips those, appends rest."""
         # Table with checkpoint showing 2 batches already committed
         props = {
@@ -363,7 +388,8 @@ class TestStreamingArrowFallback:
             fetchone=MagicMock(return_value=(200,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader(
@@ -381,7 +407,7 @@ class TestStreamingArrowFallback:
         # Checkpoint updated
         assert iceberg_table._props.get("dbport.upload.v2.2026-03-14.completed") == "1"
 
-    def test_fallback_overwrite_drops_and_recreates(self):
+    def test_fallback_overwrite_drops_and_recreates(self) -> None:
         """Overwrite mode: pyiceberg drop + create + stream."""
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
@@ -392,7 +418,8 @@ class TestStreamingArrowFallback:
             fetchone=MagicMock(return_value=(30,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader(
@@ -413,14 +440,15 @@ class TestStreamingArrowFallback:
         assert adapter._catalog._dropped is True
         assert adapter._catalog._created_table is not None
 
-    def test_duckdb_success_no_fallback(self):
+    def test_duckdb_success_no_fallback(self) -> None:
         """DuckDB write succeeds → no pyiceberg fallback."""
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
         compute = MagicMock()
         sql_log = []
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             sql_log.append(sql)
             result = MagicMock()
             result.fetchone.return_value = (10,)
@@ -436,7 +464,7 @@ class TestStreamingArrowFallback:
         # No to_arrow_batches calls (no fallback)
         compute.to_arrow_batches.assert_not_called()
 
-    def test_fallback_marks_completed_in_properties(self):
+    def test_fallback_marks_completed_in_properties(self) -> None:
         """Fallback writes completion checkpoint in table properties."""
         adapter = self._make_adapter()
         adapter._duckdb_writes_supported = False
@@ -446,7 +474,8 @@ class TestStreamingArrowFallback:
             fetchone=MagicMock(return_value=(25,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader(
@@ -469,18 +498,23 @@ class TestStreamingArrowFallback:
 
 
 class TestDuckDBWriteUnsupportedDetection:
-    def test_detects_404_transactions_commit(self):
+    """Tests for Duck DBWrite Unsupported Detection."""
+
+    def test_detects_404_transactions_commit(self) -> None:
+        """Detects 404 transactions commit."""
         exc = _make_commit_404_error()
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is True
 
-    def test_detects_s3_authorization_mechanism_failure(self):
+    def test_detects_s3_authorization_mechanism_failure(self) -> None:
+        """Detects s3 authorization mechanism failure."""
         exc = Exception(
             "Failed to commit Iceberg transaction: the authorization mechanism "
             "you have provided is not supported"
         )
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is True
 
-    def test_detects_s3_invalid_access_key(self):
+    def test_detects_s3_invalid_access_key(self) -> None:
+        """Detects s3 invalid access key."""
         exc = Exception(
             "TransactionContext Error: Failed to commit: Failed to commit "
             "Iceberg transaction: HTTP GET error reading "
@@ -491,34 +525,40 @@ class TestDuckDBWriteUnsupportedDetection:
         )
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is True
 
-    def test_detects_s3_403_forbidden_during_commit(self):
+    def test_detects_s3_403_forbidden_during_commit(self) -> None:
+        """Detects s3 403 forbidden during commit."""
         exc = Exception("Failed to commit Iceberg transaction: HTTP 403 Forbidden")
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is True
 
-    def test_non_matching_errors_return_false(self):
+    def test_non_matching_errors_return_false(self) -> None:
+        """Non matching errors return false."""
         exc = Exception("Table not found: wifor.emp")
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is False
 
-    def test_generic_disk_error_not_treated_as_unsupported(self):
+    def test_generic_disk_error_not_treated_as_unsupported(self) -> None:
+        """Generic disk error not treated as unsupported."""
         exc = Exception("disk full — cannot write")
         assert IcebergCatalogAdapter._is_duckdb_write_unsupported(exc) is False
 
 
 class TestStreamingArrowCommitConflict:
-    def _make_adapter(self, iceberg_table=None):
+    """Tests for Streaming Arrow Commit Conflict."""
+
+    def _make_adapter(self, iceberg_table: object = None) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         adapter._duckdb_writes_supported = False  # Force Arrow path
         adapter._catalog = _FakePyicebergCatalog(iceberg_table)
         return adapter
 
-    def _mock_compute(self, row_count=50, num_batches=1):
+    def _mock_compute(self, row_count: object = 50, num_batches: int = 1) -> None:
         compute = MagicMock()
         compute.execute.side_effect = lambda sql, *a, **k: MagicMock(
             fetchone=MagicMock(return_value=(row_count,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader(
@@ -528,57 +568,67 @@ class TestStreamingArrowCommitConflict:
         compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         return compute
 
-    def test_commit_conflict_exhausts_max_retries(self):
+    def test_commit_conflict_exhausts_max_retries(self) -> None:
         """5 consecutive commit conflicts -> RuntimeError."""
 
         class _ConflictTable:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._props = {}
                 self._appended = []
 
             @property
-            def properties(self):
+            def properties(self) -> object:
+                """Properties."""
                 return dict(self._props)
 
-            def transaction(self):
+            def transaction(self) -> object:
+                """Transaction."""
                 return _ConflictTransaction(self)
 
-            def current_snapshot(self):
+            def current_snapshot(self) -> None:
+                """current_snapshot."""
                 return None
 
         class _ConflictTransaction:
-            def __init__(self, table):
+            def __init__(self, table: object) -> None:
                 self._table = table
 
-            def append(self, data):
+            def append(self, data: object) -> None:
+                """Append."""
                 pass
 
-            def set_properties(self, props):
+            def set_properties(self, props: object) -> None:
+                """set_properties."""
                 pass
 
-            def commit_transaction(self):
+            def commit_transaction(self) -> None:
+                """commit_transaction."""
                 try:
                     from pyiceberg.exceptions import CommitFailedException
 
                     raise CommitFailedException("branch main has changed")
-                except ImportError:
-                    raise Exception("branch main has changed")
+                except ImportError as err:
+                    raise Exception("branch main has changed") from err
 
         class _ConflictCatalog:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._table = _ConflictTable()
                 self._created_table = None
 
-            def load_table(self, ident):
+            def load_table(self, ident: object) -> object:
+                """load_table."""
                 return self._table
 
-            def table_exists(self, ident):
+            def table_exists(self, ident: object) -> bool:
+                """table_exists."""
                 return True
 
-            def create_table(self, name, schema=None):
+            def create_table(self, name: str, schema: pa.Schema = None) -> object:
+                """create_table."""
                 return self._table
 
-            def drop_table(self, ident, purge_requested=False):
+            def drop_table(self, ident: object, purge_requested: bool = False) -> None:
+                """drop_table."""
                 pass
 
         adapter = IcebergCatalogAdapter(_make_creds())
@@ -592,7 +642,7 @@ class TestStreamingArrowCommitConflict:
         with pytest.raises(RuntimeError, match="Commit conflicts not resolved"):
             adapter.write_versioned("wifor.emp", version, compute)
 
-    def test_empty_batches_skipped(self):
+    def test_empty_batches_skipped(self) -> None:
         """Batches with num_rows == 0 don't trigger transactions."""
         import pyarrow as pa
 
@@ -605,66 +655,76 @@ class TestStreamingArrowCommitConflict:
             fetchone=MagicMock(return_value=(10,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([empty_batch, real_batch])
 
         compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         version = DatasetVersion(version="v1")
-        result = adapter.write_versioned("wifor.emp", version, compute)
+        adapter.write_versioned("wifor.emp", version, compute)
 
         # Only 1 batch appended (the empty one was skipped)
         table = adapter._catalog._table
         assert len(table._appended) == 1
 
-    def test_non_conflict_commit_failure_propagates(self):
+    def test_non_conflict_commit_failure_propagates(self) -> None:
         """CommitFailedException without 'branch main' message raises immediately."""
 
         class _OtherFailTable:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._props = {}
                 self._appended = []
 
             @property
-            def properties(self):
+            def properties(self) -> object:
+                """Properties."""
                 return dict(self._props)
 
-            def transaction(self):
+            def transaction(self) -> object:
+                """Transaction."""
                 return _OtherFailTx(self)
 
-            def current_snapshot(self):
+            def current_snapshot(self) -> None:
+                """current_snapshot."""
                 return None
 
         class _OtherFailTx:
-            def __init__(self, table):
+            def __init__(self, table: object) -> None:
                 pass
 
-            def append(self, data):
+            def append(self, data: object) -> None:
+                """Append."""
                 pass
 
-            def set_properties(self, props):
+            def set_properties(self, props: object) -> None:
+                """set_properties."""
                 pass
 
-            def commit_transaction(self):
+            def commit_transaction(self) -> None:
+                """commit_transaction."""
                 try:
                     from pyiceberg.exceptions import CommitFailedException
 
                     raise CommitFailedException("permission denied")
-                except ImportError:
-                    raise Exception("permission denied")
+                except ImportError as err:
+                    raise Exception("permission denied") from err
 
         class _OtherFailCatalog:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._table = _OtherFailTable()
 
-            def load_table(self, ident):
+            def load_table(self, ident: object) -> object:
+                """load_table."""
                 return self._table
 
-            def table_exists(self, ident):
+            def table_exists(self, ident: object) -> bool:
+                """table_exists."""
                 return True
 
-            def create_table(self, name, schema=None):
+            def create_table(self, name: str, schema: pa.Schema = None) -> object:
+                """create_table."""
                 return self._table
 
         adapter = IcebergCatalogAdapter(_make_creds())
@@ -680,21 +740,24 @@ class TestStreamingArrowCommitConflict:
 
 
 class TestStreamingArrowEdgeCases:
-    def _make_adapter(self, iceberg_table=None):
+    """Tests for Streaming Arrow Edge Cases."""
+
+    def _make_adapter(self, iceberg_table: object = None) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         adapter._duckdb_writes_supported = False
         adapter._catalog = _FakePyicebergCatalog(iceberg_table)
         return adapter
 
-    def _mock_compute(self, row_count=10, num_batches=1):
+    def _mock_compute(self, row_count: object = 10, num_batches: int = 1) -> None:
         compute = MagicMock()
         compute.execute.side_effect = lambda sql, *a, **k: MagicMock(
             fetchone=MagicMock(return_value=(row_count,))
         )
         rows_per_batch = row_count // num_batches if num_batches else row_count
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader(
@@ -704,7 +767,7 @@ class TestStreamingArrowEdgeCases:
         compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
         return compute
 
-    def test_zero_row_table_still_marks_completed(self):
+    def test_zero_row_table_still_marks_completed(self) -> None:
         """Publishing an empty table still marks the version as completed."""
         adapter = self._make_adapter()
         compute = MagicMock()
@@ -712,7 +775,8 @@ class TestStreamingArrowEdgeCases:
             fetchone=MagicMock(return_value=(0,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             return _FakeRecordBatchReader([])
 
         compute.to_arrow_batches.side_effect = to_arrow_batches_side_effect
@@ -723,7 +787,9 @@ class TestStreamingArrowEdgeCases:
 
 
 class TestWriteVersionedCheckpointRecovery:
-    def test_duckdb_path_checkpoint_write_failure_logged(self):
+    """Tests for Write Versioned Checkpoint Recovery."""
+
+    def test_duckdb_path_checkpoint_write_failure_logged(self) -> None:
         """When marking completion fails after DuckDB write, the error is logged, not raised."""
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
@@ -738,7 +804,8 @@ class TestWriteVersionedCheckpointRecovery:
         compute = MagicMock()
         sql_log = []
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             sql_log.append(sql)
             result = MagicMock()
             result.fetchone.return_value = (5,)
@@ -752,7 +819,7 @@ class TestWriteVersionedCheckpointRecovery:
         assert result.completed is True
         assert result.rows == 5
 
-    def test_s3_auth_fallback_triggers_on_write(self):
+    def test_s3_auth_fallback_triggers_on_write(self) -> None:
         """S3 authorization failure triggers Arrow fallback."""
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
@@ -760,7 +827,8 @@ class TestWriteVersionedCheckpointRecovery:
 
         compute = MagicMock()
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             upper = sql.strip().upper()
             if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith(
                 "CREATE TABLE DBPORT_WAREHOUSE"
@@ -775,7 +843,8 @@ class TestWriteVersionedCheckpointRecovery:
 
         compute.execute.side_effect = execute_side_effect
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(20)])
@@ -791,25 +860,27 @@ class TestWriteVersionedCheckpointRecovery:
 class TestWriteVersionedEdgeCases:
     """Cover remaining edge cases in write_versioned and _write_via_duckdb."""
 
-    def _make_adapter(self, iceberg_table=None):
+    def _make_adapter(self, iceberg_table: object = None) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         adapter._catalog = _FakePyicebergCatalog(iceberg_table)
         return adapter
 
-    def test_overwrite_skips_duckdb_drop_path(self):
+    def test_overwrite_skips_duckdb_drop_path(self) -> None:
         """Overwrite writes bypass the DuckDB DROP/CREATE path."""
         adapter = self._make_adapter()
         compute = MagicMock()
         sql_log = []
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             sql_log.append(sql)
             result = MagicMock()
             result.fetchone.return_value = (5,)
             return result
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(5)])
@@ -822,17 +893,19 @@ class TestWriteVersionedEdgeCases:
         assert not any("DROP TABLE" in s for s in sql_log)
         assert not any("CREATE TABLE dbport_warehouse" in s for s in sql_log)
 
-    def test_overwrite_fallback_error_propagates(self):
+    def test_overwrite_fallback_error_propagates(self) -> None:
         """Overwrite mode still propagates fallback writer errors."""
         adapter = self._make_adapter()
         compute = MagicMock()
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             result = MagicMock()
             result.fetchone.return_value = (5,)
             return result
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 raise RuntimeError("S3 auth failed")
             return _FakeRecordBatchReader([_make_batch(5)])
@@ -843,12 +916,13 @@ class TestWriteVersionedEdgeCases:
         with pytest.raises(RuntimeError, match="S3 auth failed"):
             adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
 
-    def test_non_unsupported_duckdb_error_propagates(self):
+    def test_non_unsupported_duckdb_error_propagates(self) -> None:
         """DuckDB write error that is NOT unsupported raises immediately."""
         adapter = self._make_adapter()
         compute = MagicMock()
 
-        def execute_side_effect(sql, *args, **kwargs):
+        def execute_side_effect(sql: object, *args: object, **kwargs: object) -> object:
+            """execute_side_effect."""
             upper = sql.strip().upper()
             if upper.startswith("INSERT INTO DBPORT_WAREHOUSE") or upper.startswith(
                 "CREATE TABLE DBPORT_WAREHOUSE"
@@ -863,7 +937,7 @@ class TestWriteVersionedEdgeCases:
         with pytest.raises(RuntimeError, match="disk full"):
             adapter.write_versioned("wifor.emp", version, compute, overwrite=False)
 
-    def test_snapshot_timestamp_converted_when_present(self):
+    def test_snapshot_timestamp_converted_when_present(self) -> None:
         """write_versioned converts snap_ts_ms to datetime when not None."""
         iceberg_table = _FakeIcebergTable()
         adapter = self._make_adapter(iceberg_table)
@@ -884,13 +958,13 @@ class TestWriteVersionedEdgeCases:
 class TestStreamingArrowDeepPaths:
     """Cover deep paths in _write_via_streaming_arrow."""
 
-    def _make_adapter(self):
+    def _make_adapter(self) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         adapter._duckdb_writes_supported = False
         return adapter
 
-    def test_batch_skip_handles_early_exhaustion(self):
+    def test_batch_skip_handles_early_exhaustion(self) -> None:
         """When committed batches > actual batches, skip loop exits via StopIteration."""
         props = {
             "dbport.upload.v2.v1.batches_appended": "5",
@@ -906,7 +980,8 @@ class TestStreamingArrowDeepPaths:
         )
 
         # Only provide 3 batches but checkpoint says 5 committed
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(20) for _ in range(3)])
@@ -917,29 +992,33 @@ class TestStreamingArrowDeepPaths:
         # All batches were skipped (3 < 5 committed), no new appends
         assert result.completed is True
 
-    def test_streaming_drop_table_exception_swallowed(self):
+    def test_streaming_drop_table_exception_swallowed(self) -> None:
         """In streaming fallback overwrite, drop_table exception is swallowed."""
         adapter = self._make_adapter()
 
         class _DropFailCatalog:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._table = None
                 self._created_table = None
 
-            def drop_table(self, ident, purge_requested=False):
+            def drop_table(self, ident: object, purge_requested: bool = False) -> Never:
+                """drop_table."""
                 raise Exception("table doesn't exist")
 
-            def load_table(self, ident):
+            def load_table(self, ident: object) -> object:
+                """load_table."""
                 if self._table is None:
                     raise LookupError("not found")
                 return self._table
 
-            def create_table(self, name, schema=None):
+            def create_table(self, name: str, schema: pa.Schema = None) -> object:
+                """create_table."""
                 self._created_table = _FakeIcebergTable()
                 self._table = self._created_table
                 return self._created_table
 
-            def table_exists(self, ident):
+            def table_exists(self, ident: object) -> object:
+                """table_exists."""
                 return self._table is not None
 
         adapter._catalog = _DropFailCatalog()
@@ -948,7 +1027,8 @@ class TestStreamingArrowDeepPaths:
             fetchone=MagicMock(return_value=(10,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(10)])
@@ -958,54 +1038,63 @@ class TestStreamingArrowDeepPaths:
         result = adapter.write_versioned("wifor.emp", version, compute, overwrite=True)
         assert result.completed is True
 
-    def test_completion_checkpoint_failure_in_streaming_logged(self):
+    def test_completion_checkpoint_failure_in_streaming_logged(self) -> None:
         """When final _write_table_properties fails in streaming, warning is logged."""
         adapter = self._make_adapter()
 
         class _CompletionFailTable:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._props = {}
                 self._appended = []
 
             @property
-            def properties(self):
+            def properties(self) -> object:
+                """Properties."""
                 return dict(self._props)
 
-            def transaction(self):
+            def transaction(self) -> object:
+                """Transaction."""
                 return _CompletionFailTx(self)
 
-            def current_snapshot(self):
+            def current_snapshot(self) -> None:
+                """current_snapshot."""
                 return None
 
         class _CompletionFailTx:
-            def __init__(self, table):
+            def __init__(self, table: object) -> None:
                 self._table = table
 
-            def append(self, data):
+            def append(self, data: object) -> None:
+                """Append."""
                 pass
 
-            def set_properties(self, props):
+            def set_properties(self, props: object) -> None:
+                """set_properties."""
                 self._table._props.update(props)
 
-            def commit_transaction(self):
+            def commit_transaction(self) -> None:
+                """commit_transaction."""
                 self._table._appended.append(1)
 
         class _CompletionFailCatalog:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._table = _CompletionFailTable()
                 self._load_count = 0
 
-            def load_table(self, ident):
+            def load_table(self, ident: object) -> object:
+                """load_table."""
                 self._load_count += 1
                 # Fail on the final load (for completion checkpoint)
                 if self._load_count > 1:
                     raise Exception("catalog down for completion")
                 return self._table
 
-            def table_exists(self, ident):
+            def table_exists(self, ident: object) -> bool:
+                """table_exists."""
                 return True
 
-            def create_table(self, name, schema=None):
+            def create_table(self, name: str, schema: pa.Schema = None) -> object:
+                """create_table."""
                 return self._table
 
         adapter._catalog = _CompletionFailCatalog()
@@ -1014,7 +1103,8 @@ class TestStreamingArrowDeepPaths:
             fetchone=MagicMock(return_value=(10,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(10)])
@@ -1025,7 +1115,7 @@ class TestStreamingArrowDeepPaths:
         result = adapter.write_versioned("wifor.emp", version, compute)
         assert result.completed is True
 
-    def test_progress_logging_at_batch_20_intervals(self):
+    def test_progress_logging_at_batch_20_intervals(self) -> None:
         """Progress is logged every 20 batches during streaming write."""
         adapter = self._make_adapter()
         adapter._catalog = _FakePyicebergCatalog()
@@ -1036,7 +1126,8 @@ class TestStreamingArrowDeepPaths:
             fetchone=MagicMock(return_value=(total_rows,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(25) for _ in range(20)])
@@ -1048,7 +1139,7 @@ class TestStreamingArrowDeepPaths:
         assert result.completed is True
         assert result.rows == total_rows
 
-    def test_commit_failed_import_error_fallback(self):
+    def test_commit_failed_import_error_fallback(self) -> None:
         """When pyiceberg.exceptions is not importable, CommitFailedException = Exception."""
         # This test exercises lines 440-441 indirectly — the fallback is already used
         # by _ConflictTable tests. Here we verify the streaming path works even when
@@ -1061,7 +1152,8 @@ class TestStreamingArrowDeepPaths:
             fetchone=MagicMock(return_value=(10,))
         )
 
-        def to_arrow_batches_side_effect(sql, batch_size=10_000):
+        def to_arrow_batches_side_effect(sql: object, batch_size: int = 10_000) -> object:
+            """to_arrow_batches_side_effect."""
             if "LIMIT 0" in sql:
                 return _FakeRecordBatchReader([])
             return _FakeRecordBatchReader([_make_batch(10)])

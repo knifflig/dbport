@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-
 # ---------------------------------------------------------------------------
 # Fixtures will be added here as features are implemented.
 # Example placeholders:

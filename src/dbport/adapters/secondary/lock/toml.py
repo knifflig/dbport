@@ -46,11 +46,14 @@ if TYPE_CHECKING:
 # Minimal TOML serialiser (stdlib-only; handles the lock file schema)
 # ---------------------------------------------------------------------------
 
+
 def _toml_str(v: str) -> str:
-    return '"' + v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
+    escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+    escaped = escaped.replace("\n", "\\n").replace("\r", "\\r")
+    return '"' + escaped + '"'
 
 
-def _toml_value(v: Any) -> str:
+def _toml_value(v: str | int | float | bool | datetime | dict[str, object]) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, int):
@@ -62,9 +65,7 @@ def _toml_value(v: Any) -> str:
     if isinstance(v, datetime):
         return v.isoformat().replace("+00:00", "Z")
     if isinstance(v, dict):
-        pairs = ", ".join(
-            f"{k} = {_toml_value(val)}" for k, val in v.items() if val is not None
-        )
+        pairs = ", ".join(f"{k} = {_toml_value(val)}" for k, val in v.items() if val is not None)
         return "{" + pairs + "}"
     return _toml_str(str(v))
 
@@ -98,6 +99,7 @@ def _model_prefix(model_key: str) -> str:
 # ---------------------------------------------------------------------------
 # Adapter
 # ---------------------------------------------------------------------------
+
 
 class TomlLockAdapter:
     """Reads and writes dbport.lock as a TOML file.
@@ -172,15 +174,18 @@ class TomlLockAdapter:
 
                 # [models."key"] — model identity
                 header_data = {
-                    k: v for k, v in model_data.items()
-                    if k not in ("schema", "inputs", "versions")
+                    k: v for k, v in model_data.items() if k not in ("schema", "inputs", "versions")
                 }
                 _write_section(lines, prefix, header_data)
 
                 # [models."key".schema]
                 schema = model_data.get("schema")
                 if schema:
-                    _write_section(lines, f"{prefix}.schema", {"ddl": schema.get("ddl"), "source": schema.get("source", "local")})
+                    schema_data = {
+                        "ddl": schema.get("ddl"),
+                        "source": schema.get("source", "local"),
+                    }
+                    _write_section(lines, f"{prefix}.schema", schema_data)
                     for col in schema.get("columns", []):
                         _write_array_item(lines, f"{prefix}.schema.columns", col)
 
@@ -195,7 +200,11 @@ class TomlLockAdapter:
             # Legacy / test mode: flat structure (no model_key)
             schema = doc.get("schema")
             if schema:
-                _write_section(lines, "schema", {"ddl": schema.get("ddl"), "source": schema.get("source", "local")})
+                schema_data = {
+                    "ddl": schema.get("ddl"),
+                    "source": schema.get("source", "local"),
+                }
+                _write_section(lines, "schema", schema_data)
                 for col in schema.get("columns", []):
                     _write_array_item(lines, "schema.columns", col)
             for inp in doc.get("inputs", []):
@@ -204,9 +213,7 @@ class TomlLockAdapter:
                 _write_array_item(lines, "versions", ver)
 
         content = "\n".join(lines)
-        fd, tmp_name = tempfile.mkstemp(
-            dir=str(self._path.parent), suffix=".dbport.tmp"
-        )
+        fd, tmp_name = tempfile.mkstemp(dir=str(self._path.parent), suffix=".dbport.tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -223,6 +230,7 @@ class TomlLockAdapter:
     # ------------------------------------------------------------------
 
     def read_schema(self) -> DatasetSchema | None:
+        """Return the persisted output schema, or None if not yet defined."""
         from ....domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 
         doc = self._load()
@@ -239,6 +247,7 @@ class TomlLockAdapter:
         return DatasetSchema(ddl=ddl, columns=columns, source=source)
 
     def write_schema(self, schema: DatasetSchema) -> None:
+        """Persist the output schema (DDL + parsed columns)."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)
@@ -262,6 +271,7 @@ class TomlLockAdapter:
     # ------------------------------------------------------------------
 
     def read_codelist_entries(self) -> dict[str, CodelistEntry]:
+        """Return all persisted codelist entries keyed by column name."""
         from ....domain.entities.codelist import CodelistEntry
 
         doc = self._load()
@@ -281,6 +291,7 @@ class TomlLockAdapter:
         return entries
 
     def write_codelist_entry(self, entry: CodelistEntry) -> None:
+        """Upsert a single codelist entry matched by column name."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)
@@ -313,6 +324,7 @@ class TomlLockAdapter:
     # ------------------------------------------------------------------
 
     def read_ingest_records(self) -> list[IngestRecord]:
+        """Return all persisted input ingest records."""
         from ....domain.entities.input import IngestRecord
 
         doc = self._load()
@@ -330,6 +342,7 @@ class TomlLockAdapter:
         ]
 
     def write_ingest_record(self, record: IngestRecord) -> None:
+        """Upsert an ingest record matched by table address."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)
@@ -355,6 +368,7 @@ class TomlLockAdapter:
     # ------------------------------------------------------------------
 
     def read_versions(self) -> list[VersionRecord]:
+        """Return all persisted version records, oldest first."""
         from ....domain.entities.version import VersionRecord
 
         doc = self._load()
@@ -367,18 +381,21 @@ class TomlLockAdapter:
             snapshot_ts = v.get("iceberg_snapshot_timestamp")
             if isinstance(snapshot_ts, str):
                 snapshot_ts = datetime.fromisoformat(snapshot_ts)
-            records.append(VersionRecord(
-                version=v["version"],
-                published_at=published_at,
-                iceberg_snapshot_id=v.get("iceberg_snapshot_id"),
-                iceberg_snapshot_timestamp=snapshot_ts,
-                params=v.get("params"),
-                rows=v.get("rows"),
-                completed=v.get("completed", False),
-            ))
+            records.append(
+                VersionRecord(
+                    version=v["version"],
+                    published_at=published_at,
+                    iceberg_snapshot_id=v.get("iceberg_snapshot_id"),
+                    iceberg_snapshot_timestamp=snapshot_ts,
+                    params=v.get("params"),
+                    rows=v.get("rows"),
+                    completed=v.get("completed", False),
+                )
+            )
         return records
 
     def append_version(self, record: VersionRecord) -> None:
+        """Append or update a version record matched by version string."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)
@@ -405,11 +422,13 @@ class TomlLockAdapter:
     # ------------------------------------------------------------------
 
     def read_run_hook(self) -> str | None:
+        """Return the configured run hook path, or None if not set."""
         doc = self._load()
         m = self._model_doc(doc)
         return m.get("run_hook")
 
     def write_run_hook(self, hook: str) -> None:
+        """Persist the run hook path for this model."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)
@@ -421,11 +440,13 @@ class TomlLockAdapter:
     # ------------------------------------------------------------------
 
     def read_version(self) -> str | None:
+        """Return the configured default publish version, or None."""
         doc = self._load()
         m = self._model_doc(doc)
         return m.get("version")
 
     def write_version(self, version: str) -> None:
+        """Set the default publish version for this model."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)
@@ -439,32 +460,39 @@ class TomlLockAdapter:
     _DEFAULT_MODELS_FOLDER = "models"
 
     def read_default_model_key(self) -> str | None:
+        """Return the default_model key from the lock file, or None."""
         doc = self._load()
         return doc.get("default_model")
 
     def write_default_model_key(self, model_key: str) -> None:
+        """Set the default_model key in the lock file."""
         doc = self._load()
         doc["default_model"] = model_key
         self._save(doc)
 
     def read_models_folder(self) -> str:
+        """Return the models_folder setting, defaulting to 'models'."""
         doc = self._load()
         return doc.get("models_folder") or self._DEFAULT_MODELS_FOLDER
 
     def write_models_folder(self, folder: str) -> None:
+        """Set the models_folder key in the lock file."""
         doc = self._load()
         doc["models_folder"] = folder
         self._save(doc)
 
     def list_model_keys(self) -> list[str]:
+        """Return all model keys present in the lock file."""
         doc = self._load()
         return list(doc.get("models", {}).keys())
 
     def read_model_data(self, model_key: str) -> dict | None:
+        """Return raw model data dict for the given key, or None."""
         doc = self._load()
         return doc.get("models", {}).get(model_key)
 
     def register_model(self) -> None:
+        """Ensure this model's header exists in the lock file."""
         doc = self._load()
         m = self._model_doc(doc)
         self._ensure_model_header(m)

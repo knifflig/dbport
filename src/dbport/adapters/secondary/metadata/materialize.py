@@ -12,10 +12,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ....domain.entities.codelist import ColumnCodelist
+    from ....domain.entities.codelist import CodelistEntry, ColumnCodelist
     from ....domain.entities.dataset import DatasetKey
     from ....domain.entities.input import IngestRecord
     from ....domain.entities.version import DatasetVersion
+    from ....domain.ports.catalog import ICatalog
+    from ....domain.ports.compute import ICompute
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +71,7 @@ class MetadataAdapter:
         if version.params:
             new_version_entry["params"] = version.params
 
-        updated_versions = [
-            v for v in existing_versions if v.get("version") != version.version
-        ]
+        updated_versions = [v for v in existing_versions if v.get("version") != version.version]
         updated_versions.append(new_version_entry)
 
         # Build inputs payload
@@ -88,8 +88,8 @@ class MetadataAdapter:
 
         # Build codelists payload
         codelists_payload = []
-        for col_name, entry in codelists.entries.items():
-            cl_item: dict[str, Any] = {
+        for _col_name, entry in codelists.entries.items():
+            cl_item: dict[str, str | int | None] = {
                 "column_name": entry.column_name,
                 "column_pos": entry.column_pos,
                 "codelist_id": entry.codelist_id,
@@ -118,14 +118,15 @@ class MetadataAdapter:
             "versions": updated_versions,
         }
 
-        data = (json.dumps(metadata_obj, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        json_str = json.dumps(metadata_obj, ensure_ascii=False, separators=(",", ":"))
+        data = (json_str + "\n").encode("utf-8")
         logger.debug("MetadataAdapter.build_metadata_json: built %d bytes", len(data))
         return data
 
     def generate_codelist_bytes(
         self,
         codelists: ColumnCodelist,
-        compute: Any,
+        compute: ICompute,
         output_table: str,
     ) -> dict[str, bytes]:
         """Generate in-memory CSV bytes for each column's codelist.
@@ -145,14 +146,13 @@ class MetadataAdapter:
                     result[col_name] = generate_csv_for_column(compute, output_table, col_name)
             except Exception as exc:
                 failed.append(col_name)
-                logger.error(
-                    "generate_codelist_bytes: failed for column %s: %s", col_name, exc
-                )
+                logger.error("generate_codelist_bytes: failed for column %s: %s", col_name, exc)
 
         if failed:
             logger.warning(
                 "Codelist generation failed for %d column(s): %s",
-                len(failed), ", ".join(failed),
+                len(failed),
+                ", ".join(failed),
             )
 
         return result
@@ -162,8 +162,8 @@ class MetadataAdapter:
         table_address: str,
         metadata_bytes: bytes,
         codelist_bytes: dict[str, bytes],
-        codelist_entries: dict[str, Any],
-        catalog: Any,
+        codelist_entries: dict[str, CodelistEntry],
+        catalog: ICatalog,
     ) -> None:
         """Embed metadata and codelist payloads in Iceberg table properties."""
         from .attach import attach_codelist_csv, attach_metadata_json

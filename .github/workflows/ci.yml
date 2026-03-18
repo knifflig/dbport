@@ -13,24 +13,24 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --python ${{ matrix.python-version }}
       - name: Lint
-        run: uv run ruff check src/ tests/
+        run: uv run --python ${{ matrix.python-version }} ruff check src/ tests/
       - name: Format check
-        run: uv run ruff format --check src/ tests/
+        run: uv run --python ${{ matrix.python-version }} ruff format --check src/ tests/
       - name: Test with coverage
-        run: uv run pytest --cov --cov-report=term-missing --tb=short -q
+        run: uv run --python ${{ matrix.python-version }} pytest --cov --cov-report=term-missing --tb=short -q
 
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Set up Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -41,8 +41,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Set up Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -54,15 +54,15 @@ jobs:
       - name: Smoke-test installed package
         run: |
           uv venv .venv-smoke --python 3.12
-          .venv-smoke/bin/pip install dist/*.whl
+          VIRTUAL_ENV=.venv-smoke uv pip install dist/*.whl
           .venv-smoke/bin/python -c "from dbport import DBPort; print('import ok')"
           .venv-smoke/bin/dbp --version
 
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Set up Python
         run: uv python install 3.12
       - name: Install dependencies

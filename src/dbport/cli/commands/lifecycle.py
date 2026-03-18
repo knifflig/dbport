@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ...adapters.primary.client import DBPort
+    from ..context import CliContext
 
 from ..context import read_lock_versions, resolve_model_paths_from_data
 
 
 @contextmanager
-def _phase(key: str, *, title: str, icon: str):
+def _phase(key: str, *, title: str, icon: str) -> Generator[None]:
     from ...infrastructure.progress import progress_phase
 
     with progress_phase(key, title=title, icon=icon):
         yield
 
 
-def _run_execute_step(port, target: str) -> None:
+def _run_execute_step(port: DBPort, target: str) -> None:
     from ...application.services.run import execute_hook
     from ...infrastructure.progress import progress_callback
 
@@ -34,7 +40,9 @@ def _run_execute_step(port, target: str) -> None:
         callback.finished(f"Executed {target}")
 
 
-def resolve_publish_version(cli_ctx, model_key: str, explicit_version: str | None) -> str:
+def resolve_publish_version(
+    cli_ctx: CliContext, model_key: str, explicit_version: str | None
+) -> str:
     """Resolve the publish version for ``dbp model run`` (full lifecycle).
 
     Resolution order:
@@ -65,7 +73,7 @@ def resolve_publish_version(cli_ctx, model_key: str, explicit_version: str | Non
 
 
 def resolve_publish_version_for_publish(
-    cli_ctx,
+    cli_ctx: CliContext,
     model_key: str,
     explicit_version: str | None,
 ) -> str:
@@ -100,7 +108,7 @@ def resolve_publish_mode(*, dry_run: bool, refresh: bool) -> str | None:
     return None
 
 
-def sync_model(cli_ctx, model_data: dict) -> dict:
+def sync_model(cli_ctx: CliContext, model_data: dict) -> dict:
     """Sync one model by opening DBPort, which runs sync in __init__."""
     from ...adapters.primary.client import DBPort
 
@@ -122,7 +130,7 @@ def sync_model(cli_ctx, model_data: dict) -> dict:
 
 
 def load_model(
-    cli_ctx,
+    cli_ctx: CliContext,
     model_key: str,
     model_data: dict,
     *,
@@ -166,7 +174,9 @@ def load_model(
     }
 
 
-def exec_model(cli_ctx, model_key: str, model_data: dict, *, target: str | None = None) -> dict:
+def exec_model(
+    cli_ctx: CliContext, model_key: str, model_data: dict, *, target: str | None = None
+) -> dict:
     """Execute a model hook or an explicit override target."""
     from ...adapters.primary.client import DBPort
 
@@ -191,7 +201,7 @@ def exec_model(cli_ctx, model_key: str, model_data: dict, *, target: str | None 
 
 
 def publish_model(
-    cli_ctx,
+    cli_ctx: CliContext,
     model_key: str,
     model_data: dict,
     *,
@@ -224,7 +234,7 @@ def publish_model(
 
 
 def run_model(
-    cli_ctx,
+    cli_ctx: CliContext,
     model_key: str,
     model_data: dict,
     *,

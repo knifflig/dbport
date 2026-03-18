@@ -26,6 +26,7 @@ _NOW = datetime(2026, 3, 9, 14, 32, 0, tzinfo=UTC)
 
 @pytest.fixture
 def lock(tmp_path: Path) -> TomlLockAdapter:
+    """Lock."""
     return TomlLockAdapter(
         tmp_path / "dbport.lock",
         model_key="wifor.emp",
@@ -49,11 +50,16 @@ def _make_schema() -> DatasetSchema:
 # Schema
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockSchema:
-    def test_read_schema_empty_file(self, lock: TomlLockAdapter):
+    """Tests for Toml Lock Schema."""
+
+    def test_read_schema_empty_file(self, lock: TomlLockAdapter) -> None:
+        """Read schema empty file."""
         assert lock.read_schema() is None
 
-    def test_read_schema_nonexistent_file(self, tmp_path: Path):
+    def test_read_schema_nonexistent_file(self, tmp_path: Path) -> None:
+        """Read schema nonexistent file."""
         adapter = TomlLockAdapter(
             tmp_path / "nonexistent.lock",
             model_key="wifor.emp",
@@ -62,7 +68,8 @@ class TestTomlLockSchema:
         )
         assert adapter.read_schema() is None
 
-    def test_write_and_read_schema(self, lock: TomlLockAdapter):
+    def test_write_and_read_schema(self, lock: TomlLockAdapter) -> None:
+        """Write and read schema."""
         schema = _make_schema()
         lock.write_schema(schema)
         result = lock.read_schema()
@@ -74,11 +81,13 @@ class TestTomlLockSchema:
         assert result.columns[1].name == "year"
         assert result.columns[2].name == "value"
 
-    def test_write_schema_persists_to_file(self, lock: TomlLockAdapter):
+    def test_write_schema_persists_to_file(self, lock: TomlLockAdapter) -> None:
+        """Write schema persists to file."""
         lock.write_schema(_make_schema())
         assert lock._path.exists()
 
-    def test_write_schema_overwrites(self, lock: TomlLockAdapter):
+    def test_write_schema_overwrites(self, lock: TomlLockAdapter) -> None:
+        """Write schema overwrites."""
         lock.write_schema(_make_schema())
         new_ddl = "CREATE TABLE wifor.emp (id INT)"
         new_schema = DatasetSchema(
@@ -90,21 +99,22 @@ class TestTomlLockSchema:
         assert result.ddl.statement == new_ddl
         assert len(result.columns) == 1
 
-    def test_write_schema_seeds_default_codelist_ids(self, lock: TomlLockAdapter):
+    def test_write_schema_seeds_default_codelist_ids(self, lock: TomlLockAdapter) -> None:
+        """Write schema seeds default codelist ids."""
         lock.write_schema(_make_schema())
         entries = lock.read_codelist_entries()
         assert "geo" in entries
         assert entries["geo"].codelist_id == "geo"
         assert entries["year"].codelist_id == "year"
 
-    def test_model_header_written_to_lock_file(self, lock: TomlLockAdapter):
+    def test_model_header_written_to_lock_file(self, lock: TomlLockAdapter) -> None:
         """Model metadata (agency, dataset_id, model_root) appears in the file."""
         lock.write_schema(_make_schema())
         content = lock._path.read_text()
         assert "wifor" in content
         assert "models/emp" in content
 
-    def test_multiline_ddl_roundtrip(self, lock: TomlLockAdapter):
+    def test_multiline_ddl_roundtrip(self, lock: TomlLockAdapter) -> None:
         """Multi-line DDL must survive write → file → read without TOML parse errors."""
         schema = DatasetSchema(
             ddl=SqlDdl(statement=_DDL_MULTILINE),
@@ -125,17 +135,21 @@ class TestTomlLockSchema:
 # Codelist entries
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockCodelistEntries:
-    def test_read_empty_returns_empty_dict(self, lock: TomlLockAdapter):
+    """Tests for Toml Lock Codelist Entries."""
+
+    def test_read_empty_returns_empty_dict(self, lock: TomlLockAdapter) -> None:
+        """Read empty returns empty dict."""
         assert lock.read_codelist_entries() == {}
 
-    def test_write_and_read_entry(self, lock: TomlLockAdapter):
+    def test_write_and_read_entry(self, lock: TomlLockAdapter) -> None:
+        """Write and read entry."""
         lock.write_schema(_make_schema())
         entry = CodelistEntry(
             column_name="geo",
             column_pos=0,
             codelist_id="NUTS2024",
-
             codelist_kind="hierarchical",
         )
         lock.write_codelist_entry(entry)
@@ -143,58 +157,53 @@ class TestTomlLockCodelistEntries:
         assert entries["geo"].codelist_id == "NUTS2024"
         assert entries["geo"].codelist_kind == "hierarchical"
 
-    def test_write_entry_upserts_by_column_name(self, lock: TomlLockAdapter):
+    def test_write_entry_upserts_by_column_name(self, lock: TomlLockAdapter) -> None:
+        """Write entry upserts by column name."""
         lock.write_schema(_make_schema())
-        e1 = CodelistEntry(
-            column_name="geo", column_pos=0, codelist_id="geo"
-        )
-        e2 = CodelistEntry(
-            column_name="geo", column_pos=0, codelist_id="NUTS2024"
-        )
+        e1 = CodelistEntry(column_name="geo", column_pos=0, codelist_id="geo")
+        e2 = CodelistEntry(column_name="geo", column_pos=0, codelist_id="NUTS2024")
         lock.write_codelist_entry(e1)
         lock.write_codelist_entry(e2)
         entries = lock.read_codelist_entries()
         assert entries["geo"].codelist_id == "NUTS2024"
 
-    def test_write_entry_for_new_column(self, lock: TomlLockAdapter):
-        entry = CodelistEntry(
-            column_name="new_col", column_pos=5, codelist_id="new_col"
-        )
+    def test_write_entry_for_new_column(self, lock: TomlLockAdapter) -> None:
+        """Write entry for new column."""
+        entry = CodelistEntry(column_name="new_col", column_pos=5, codelist_id="new_col")
         lock.write_codelist_entry(entry)
         entries = lock.read_codelist_entries()
         assert "new_col" in entries
 
-    def test_attach_table_persisted(self, lock: TomlLockAdapter):
+    def test_attach_table_persisted(self, lock: TomlLockAdapter) -> None:
+        """Attach table persisted."""
         lock.write_schema(_make_schema())
         entry = CodelistEntry(
             column_name="geo",
             column_pos=0,
             codelist_id="NUTS2024",
-
             attach_table="wifor.cl_nuts2024",
         )
         lock.write_codelist_entry(entry)
         entries = lock.read_codelist_entries()
         assert entries["geo"].attach_table == "wifor.cl_nuts2024"
 
-    def test_labels_persisted(self, lock: TomlLockAdapter):
+    def test_labels_persisted(self, lock: TomlLockAdapter) -> None:
+        """Labels persisted."""
         lock.write_schema(_make_schema())
         entry = CodelistEntry(
             column_name="geo",
             column_pos=0,
             codelist_id="NUTS2024",
-
             codelist_labels={"en": "NUTS 2024", "de": "NUTS 2024 DE"},
         )
         lock.write_codelist_entry(entry)
         entries = lock.read_codelist_entries()
         assert entries["geo"].codelist_labels == {"en": "NUTS 2024", "de": "NUTS 2024 DE"}
 
-    def test_sql_type_preserved_after_codelist_update(self, lock: TomlLockAdapter):
+    def test_sql_type_preserved_after_codelist_update(self, lock: TomlLockAdapter) -> None:
+        """Sql type preserved after codelist update."""
         lock.write_schema(_make_schema())
-        entry = CodelistEntry(
-            column_name="geo", column_pos=0, codelist_id="NUTS2024"
-        )
+        entry = CodelistEntry(column_name="geo", column_pos=0, codelist_id="NUTS2024")
         lock.write_codelist_entry(entry)
         result = lock.read_schema()
         assert result.columns[0].sql_type == "VARCHAR"
@@ -204,11 +213,16 @@ class TestTomlLockCodelistEntries:
 # Ingest records
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockIngestRecords:
-    def test_read_empty(self, lock: TomlLockAdapter):
+    """Tests for Toml Lock Ingest Records."""
+
+    def test_read_empty(self, lock: TomlLockAdapter) -> None:
+        """Read empty."""
         assert lock.read_ingest_records() == []
 
-    def test_write_and_read_record(self, lock: TomlLockAdapter):
+    def test_write_and_read_record(self, lock: TomlLockAdapter) -> None:
+        """Write and read record."""
         record = IngestRecord(
             table_address="estat.foo",
             last_snapshot_id=123,
@@ -223,21 +237,24 @@ class TestTomlLockIngestRecords:
         assert records[0].rows_loaded == 500
         assert records[0].filters == {"wstatus": "EMP"}
 
-    def test_write_multiple_records(self, lock: TomlLockAdapter):
+    def test_write_multiple_records(self, lock: TomlLockAdapter) -> None:
+        """Write multiple records."""
         lock.write_ingest_record(IngestRecord(table_address="estat.foo", last_snapshot_id=1))
         lock.write_ingest_record(IngestRecord(table_address="wifor.bar", last_snapshot_id=2))
         records = lock.read_ingest_records()
         addresses = {r.table_address for r in records}
         assert addresses == {"estat.foo", "wifor.bar"}
 
-    def test_write_record_upserts_by_address(self, lock: TomlLockAdapter):
+    def test_write_record_upserts_by_address(self, lock: TomlLockAdapter) -> None:
+        """Write record upserts by address."""
         lock.write_ingest_record(IngestRecord(table_address="estat.foo", last_snapshot_id=1))
         lock.write_ingest_record(IngestRecord(table_address="estat.foo", last_snapshot_id=999))
         records = lock.read_ingest_records()
         assert len(records) == 1
         assert records[0].last_snapshot_id == 999
 
-    def test_write_record_without_snapshot(self, lock: TomlLockAdapter):
+    def test_write_record_without_snapshot(self, lock: TomlLockAdapter) -> None:
+        """Write record without snapshot."""
         lock.write_ingest_record(IngestRecord(table_address="estat.foo"))
         records = lock.read_ingest_records()
         assert records[0].last_snapshot_id is None
@@ -247,11 +264,16 @@ class TestTomlLockIngestRecords:
 # Versions
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockVersions:
-    def test_read_empty(self, lock: TomlLockAdapter):
+    """Tests for Toml Lock Versions."""
+
+    def test_read_empty(self, lock: TomlLockAdapter) -> None:
+        """Read empty."""
         assert lock.read_versions() == []
 
-    def test_append_and_read_version(self, lock: TomlLockAdapter):
+    def test_append_and_read_version(self, lock: TomlLockAdapter) -> None:
+        """Append and read version."""
         record = VersionRecord(
             version="2026-03-09",
             published_at=_NOW,
@@ -266,7 +288,8 @@ class TestTomlLockVersions:
         assert versions[0].completed is True
         assert versions[0].published_at == _NOW
 
-    def test_append_multiple_versions(self, lock: TomlLockAdapter):
+    def test_append_multiple_versions(self, lock: TomlLockAdapter) -> None:
+        """Append multiple versions."""
         lock.append_version(VersionRecord(version="2026-01-01", published_at=_NOW))
         lock.append_version(VersionRecord(version="2026-03-09", published_at=_NOW))
         versions = lock.read_versions()
@@ -274,14 +297,16 @@ class TestTomlLockVersions:
         assert versions[0].version == "2026-01-01"
         assert versions[1].version == "2026-03-09"
 
-    def test_append_version_upserts_by_version_string(self, lock: TomlLockAdapter):
+    def test_append_version_upserts_by_version_string(self, lock: TomlLockAdapter) -> None:
+        """Append version upserts by version string."""
         lock.append_version(VersionRecord(version="2026-03-09", published_at=_NOW, completed=False))
         lock.append_version(VersionRecord(version="2026-03-09", published_at=_NOW, completed=True))
         versions = lock.read_versions()
         assert len(versions) == 1
         assert versions[0].completed is True
 
-    def test_version_with_params(self, lock: TomlLockAdapter):
+    def test_version_with_params(self, lock: TomlLockAdapter) -> None:
+        """Version with params."""
         record = VersionRecord(
             version="2026-03-09",
             published_at=_NOW,
@@ -291,7 +316,8 @@ class TestTomlLockVersions:
         versions = lock.read_versions()
         assert versions[0].params == {"wstatus": "EMP", "nace_r2": "TOTAL"}
 
-    def test_version_with_iceberg_snapshot(self, lock: TomlLockAdapter):
+    def test_version_with_iceberg_snapshot(self, lock: TomlLockAdapter) -> None:
+        """Version with iceberg snapshot."""
         record = VersionRecord(
             version="2026-03-09",
             published_at=_NOW,
@@ -308,7 +334,10 @@ class TestTomlLockVersions:
 # Multi-model isolation
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockMultiModel:
+    """Tests for Toml Lock Multi Model."""
+
     def _make_lock(self, tmp_path: Path, model_key: str) -> TomlLockAdapter:
         return TomlLockAdapter(
             tmp_path / "dbport.lock",
@@ -317,33 +346,43 @@ class TestTomlLockMultiModel:
             duckdb_path=f"models/{model_key.split('.', 1)[-1]}/data/db.duckdb",
         )
 
-    def test_two_models_share_one_file(self, tmp_path: Path):
+    def test_two_models_share_one_file(self, tmp_path: Path) -> None:
+        """Two models share one file."""
         lock_a = self._make_lock(tmp_path, "wifor.emp")
         lock_b = self._make_lock(tmp_path, "wifor.sector")
 
-        lock_a.write_schema(DatasetSchema(
-            ddl=SqlDdl(statement="CREATE TABLE wifor.emp (geo VARCHAR)"),
-            columns=(ColumnDef(name="geo", pos=0, sql_type="VARCHAR"),),
-        ))
-        lock_b.write_schema(DatasetSchema(
-            ddl=SqlDdl(statement="CREATE TABLE wifor.sector (nace VARCHAR)"),
-            columns=(ColumnDef(name="nace", pos=0, sql_type="VARCHAR"),),
-        ))
+        lock_a.write_schema(
+            DatasetSchema(
+                ddl=SqlDdl(statement="CREATE TABLE wifor.emp (geo VARCHAR)"),
+                columns=(ColumnDef(name="geo", pos=0, sql_type="VARCHAR"),),
+            )
+        )
+        lock_b.write_schema(
+            DatasetSchema(
+                ddl=SqlDdl(statement="CREATE TABLE wifor.sector (nace VARCHAR)"),
+                columns=(ColumnDef(name="nace", pos=0, sql_type="VARCHAR"),),
+            )
+        )
 
         assert lock_a._path == lock_b._path  # same file
 
-    def test_models_are_isolated(self, tmp_path: Path):
+    def test_models_are_isolated(self, tmp_path: Path) -> None:
+        """Models are isolated."""
         lock_a = self._make_lock(tmp_path, "wifor.emp")
         lock_b = self._make_lock(tmp_path, "wifor.sector")
 
-        lock_a.write_schema(DatasetSchema(
-            ddl=SqlDdl(statement="CREATE TABLE wifor.emp (geo VARCHAR)"),
-            columns=(ColumnDef(name="geo", pos=0, sql_type="VARCHAR"),),
-        ))
-        lock_b.write_schema(DatasetSchema(
-            ddl=SqlDdl(statement="CREATE TABLE wifor.sector (nace VARCHAR)"),
-            columns=(ColumnDef(name="nace", pos=0, sql_type="VARCHAR"),),
-        ))
+        lock_a.write_schema(
+            DatasetSchema(
+                ddl=SqlDdl(statement="CREATE TABLE wifor.emp (geo VARCHAR)"),
+                columns=(ColumnDef(name="geo", pos=0, sql_type="VARCHAR"),),
+            )
+        )
+        lock_b.write_schema(
+            DatasetSchema(
+                ddl=SqlDdl(statement="CREATE TABLE wifor.sector (nace VARCHAR)"),
+                columns=(ColumnDef(name="nace", pos=0, sql_type="VARCHAR"),),
+            )
+        )
 
         schema_a = lock_a.read_schema()
         schema_b = lock_b.read_schema()
@@ -352,26 +391,31 @@ class TestTomlLockMultiModel:
         assert "nace" not in schema_a.ddl.statement
         assert "geo" not in schema_b.ddl.statement
 
-    def test_versions_isolated_per_model(self, tmp_path: Path):
+    def test_versions_isolated_per_model(self, tmp_path: Path) -> None:
+        """Versions isolated per model."""
         lock_a = self._make_lock(tmp_path, "wifor.emp")
         lock_b = self._make_lock(tmp_path, "wifor.sector")
 
         lock_a.append_version(VersionRecord(version="2026-03-09", published_at=_NOW))
         assert lock_b.read_versions() == []
 
-    def test_inputs_isolated_per_model(self, tmp_path: Path):
+    def test_inputs_isolated_per_model(self, tmp_path: Path) -> None:
+        """Inputs isolated per model."""
         lock_a = self._make_lock(tmp_path, "wifor.emp")
         lock_b = self._make_lock(tmp_path, "wifor.sector")
 
         lock_a.write_ingest_record(IngestRecord(table_address="estat.foo", last_snapshot_id=1))
         assert lock_b.read_ingest_records() == []
 
-    def test_model_root_stored_in_file(self, tmp_path: Path):
+    def test_model_root_stored_in_file(self, tmp_path: Path) -> None:
+        """Model root stored in file."""
         lock_a = self._make_lock(tmp_path, "wifor.emp")
-        lock_a.write_schema(DatasetSchema(
-            ddl=SqlDdl(statement="CREATE TABLE wifor.emp (geo VARCHAR)"),
-            columns=(ColumnDef(name="geo", pos=0, sql_type="VARCHAR"),),
-        ))
+        lock_a.write_schema(
+            DatasetSchema(
+                ddl=SqlDdl(statement="CREATE TABLE wifor.emp (geo VARCHAR)"),
+                columns=(ColumnDef(name="geo", pos=0, sql_type="VARCHAR"),),
+            )
+        )
         content = lock_a._path.read_text()
         assert "models/emp" in content
         assert 'models."wifor.emp"' in content
@@ -381,24 +425,37 @@ class TestTomlLockMultiModel:
 # Round-trip: write then read via new adapter instance (file persistence)
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockRoundTrip:
-    def test_full_roundtrip(self, tmp_path: Path):
+    """Tests for Toml Lock Round Trip."""
+
+    def test_full_roundtrip(self, tmp_path: Path) -> None:
+        """Full roundtrip."""
         path = tmp_path / "dbport.lock"
-        lock1 = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="")
+        lock1 = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path=""
+        )
         lock1.write_schema(_make_schema())
         lock1.write_ingest_record(IngestRecord(table_address="estat.foo", last_snapshot_id=1))
         lock1.append_version(VersionRecord(version="2026-03-09", published_at=_NOW, completed=True))
 
-        lock2 = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="")
+        lock2 = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path=""
+        )
         assert lock2.read_schema() is not None
         assert len(lock2.read_ingest_records()) == 1
         assert len(lock2.read_versions()) == 1
         assert lock2.read_versions()[0].completed is True
 
-    def test_roundtrip_preserves_other_model(self, tmp_path: Path):
+    def test_roundtrip_preserves_other_model(self, tmp_path: Path) -> None:
+        """Roundtrip preserves other model."""
         path = tmp_path / "dbport.lock"
-        lock_a = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="")
-        lock_b = TomlLockAdapter(path, model_key="wifor.sector", model_root="models/sector", duckdb_path="")
+        lock_a = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path=""
+        )
+        lock_b = TomlLockAdapter(
+            path, model_key="wifor.sector", model_root="models/sector", duckdb_path=""
+        )
 
         lock_a.write_schema(_make_schema())
         lock_b.write_ingest_record(IngestRecord(table_address="estat.foo", last_snapshot_id=99))
@@ -406,7 +463,9 @@ class TestTomlLockRoundTrip:
         # Reloading lock_a should not lose lock_b's data
         lock_a.append_version(VersionRecord(version="2026-03-09", published_at=_NOW))
 
-        lock_b2 = TomlLockAdapter(path, model_key="wifor.sector", model_root="models/sector", duckdb_path="")
+        lock_b2 = TomlLockAdapter(
+            path, model_key="wifor.sector", model_root="models/sector", duckdb_path=""
+        )
         assert len(lock_b2.read_ingest_records()) == 1
         assert lock_b2.read_ingest_records()[0].last_snapshot_id == 99
 
@@ -415,23 +474,27 @@ class TestTomlLockRoundTrip:
 # TOML serialization edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestTomlSerializationEdgeCases:
     """Cover edge cases in the TOML serializer."""
 
-    def test_float_value_serialized(self):
+    def test_float_value_serialized(self) -> None:
         """Float values use repr() for precision."""
         from dbport.adapters.secondary.lock.toml import _toml_value
+
         assert _toml_value(3.14) == repr(3.14)
 
-    def test_unknown_type_falls_back_to_string(self):
+    def test_unknown_type_falls_back_to_string(self) -> None:
         """Unknown types are converted to string."""
         from dbport.adapters.secondary.lock.toml import _toml_value
+
         result = _toml_value([1, 2, 3])  # list is not handled directly
         assert '"[1, 2, 3]"' == result
 
-    def test_none_values_skipped_in_section(self):
+    def test_none_values_skipped_in_section(self) -> None:
         """None values are omitted from TOML sections."""
         from dbport.adapters.secondary.lock.toml import _write_section
+
         lines: list[str] = []
         _write_section(lines, "test", {"key1": "val", "key2": None, "key3": 42})
         text = "\n".join(lines)
@@ -444,10 +507,11 @@ class TestTomlSerializationEdgeCases:
 # Legacy/flat mode (model_key="") with versions
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockFlatMode:
     """Cover legacy/flat mode (model_key='') with versions."""
 
-    def test_flat_mode_versions_roundtrip(self, tmp_path: Path):
+    def test_flat_mode_versions_roundtrip(self, tmp_path: Path) -> None:
         """Versions written in flat mode can be read back."""
         lock = TomlLockAdapter(tmp_path / "dbport.lock", model_key="")
         record = VersionRecord(
@@ -466,22 +530,23 @@ class TestTomlLockFlatMode:
 # String datetime parsing in read_versions
 # ---------------------------------------------------------------------------
 
+
 class TestTomlLockDatetimeParsing:
     """Cover string datetime parsing in read_versions."""
 
-    def test_published_at_string_parsed(self, tmp_path: Path):
+    def test_published_at_string_parsed(self, tmp_path: Path) -> None:
         """published_at stored as ISO string is parsed back to datetime."""
         lock_path = tmp_path / "dbport.lock"
         lock_path.write_text(
             '[models."wifor.emp"]\n'
             'agency = "wifor"\n'
             'dataset_id = "emp"\n'
-            '\n'
+            "\n"
             '[[models."wifor.emp".versions]]\n'
             'version = "v1"\n'
             'published_at = "2026-03-14T12:00:00Z"\n'
-            'completed = true\n'
-            'rows = 10\n',
+            "completed = true\n"
+            "rows = 10\n",
             encoding="utf-8",
         )
         lock = TomlLockAdapter(lock_path, model_key="wifor.emp")
@@ -489,20 +554,20 @@ class TestTomlLockDatetimeParsing:
         assert len(versions) == 1
         assert isinstance(versions[0].published_at, datetime)
 
-    def test_snapshot_timestamp_string_parsed(self, tmp_path: Path):
+    def test_snapshot_timestamp_string_parsed(self, tmp_path: Path) -> None:
         """iceberg_snapshot_timestamp stored as ISO string is parsed."""
         lock_path = tmp_path / "dbport.lock"
         lock_path.write_text(
             '[models."wifor.emp"]\n'
             'agency = "wifor"\n'
             'dataset_id = "emp"\n'
-            '\n'
+            "\n"
             '[[models."wifor.emp".versions]]\n'
             'version = "v1"\n'
             'published_at = "2026-03-14T12:00:00Z"\n'
             'iceberg_snapshot_timestamp = "2026-03-14T12:00:00Z"\n'
-            'completed = true\n'
-            'rows = 10\n',
+            "completed = true\n"
+            "rows = 10\n",
             encoding="utf-8",
         )
         lock = TomlLockAdapter(lock_path, model_key="wifor.emp")
@@ -513,7 +578,8 @@ class TestTomlLockDatetimeParsing:
 class TestDefaultModelRoundTrip:
     """default_model top-level key survives load/save cycle."""
 
-    def test_save_preserves_default_model(self, tmp_path: Path):
+    def test_save_preserves_default_model(self, tmp_path: Path) -> None:
+        """Save preserves default model."""
         import tomllib
 
         lock_path = tmp_path / "dbport.lock"
@@ -531,8 +597,8 @@ class TestDefaultModelRoundTrip:
         assert doc2["default_model"] == "a.x"
         assert doc2["models"]["a.x"]["agency"] == "a"
 
-    def test_save_without_default_model_has_no_key(self, tmp_path: Path):
-
+    def test_save_without_default_model_has_no_key(self, tmp_path: Path) -> None:
+        """Save without default model has no key."""
         lock_path = tmp_path / "dbport.lock"
         adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".")
         doc = adapter._load()
@@ -545,28 +611,38 @@ class TestDefaultModelRoundTrip:
 
 
 class TestRunHook:
-    def test_read_run_hook_returns_none_when_not_set(self, lock):
+    """Tests for Run Hook."""
+
+    def test_read_run_hook_returns_none_when_not_set(self, lock: TomlLockAdapter) -> None:
+        """Read run hook returns none when not set."""
         assert lock.read_run_hook() is None
 
-    def test_write_and_read_run_hook(self, lock):
+    def test_write_and_read_run_hook(self, lock: TomlLockAdapter) -> None:
+        """Write and read run hook."""
         lock.write_run_hook("sql/main.sql")
         assert lock.read_run_hook() == "sql/main.sql"
 
-    def test_write_run_hook_overwrites(self, lock):
+    def test_write_run_hook_overwrites(self, lock: TomlLockAdapter) -> None:
+        """Write run hook overwrites."""
         lock.write_run_hook("sql/old.sql")
         lock.write_run_hook("run.py")
         assert lock.read_run_hook() == "run.py"
 
 
 class TestVersionConfig:
-    def test_read_version_returns_none_when_not_set(self, lock):
+    """Tests for Version Config."""
+
+    def test_read_version_returns_none_when_not_set(self, lock: TomlLockAdapter) -> None:
+        """Read version returns none when not set."""
         assert lock.read_version() is None
 
-    def test_write_and_read_version(self, lock):
+    def test_write_and_read_version(self, lock: TomlLockAdapter) -> None:
+        """Write and read version."""
         lock.write_version("2026-03-16")
         assert lock.read_version() == "2026-03-16"
 
-    def test_write_version_overwrites(self, lock):
+    def test_write_version_overwrites(self, lock: TomlLockAdapter) -> None:
+        """Write version overwrites."""
         lock.write_version("2026-03-15")
         lock.write_version("2026-03-16")
         assert lock.read_version() == "2026-03-16"
@@ -576,48 +652,63 @@ class TestVersionConfig:
 # Project-level operations
 # ---------------------------------------------------------------------------
 
+
 class TestProjectLevelOperations:
     """Test project-level (non-model-scoped) lock operations."""
 
-    def test_read_default_model_key_returns_none_when_empty(self, tmp_path: Path):
+    def test_read_default_model_key_returns_none_when_empty(self, tmp_path: Path) -> None:
+        """Read default model key returns none when empty."""
         adapter = TomlLockAdapter(tmp_path / "dbport.lock")
         assert adapter.read_default_model_key() is None
 
-    def test_write_and_read_default_model_key(self, tmp_path: Path):
+    def test_write_and_read_default_model_key(self, tmp_path: Path) -> None:
+        """Write and read default model key."""
         adapter = TomlLockAdapter(tmp_path / "dbport.lock")
         adapter.write_default_model_key("wifor.emp")
         assert adapter.read_default_model_key() == "wifor.emp"
 
-    def test_read_models_folder_defaults_to_models(self, tmp_path: Path):
+    def test_read_models_folder_defaults_to_models(self, tmp_path: Path) -> None:
+        """Read models folder defaults to models."""
         adapter = TomlLockAdapter(tmp_path / "dbport.lock")
         assert adapter.read_models_folder() == "models"
 
-    def test_write_and_read_models_folder(self, tmp_path: Path):
+    def test_write_and_read_models_folder(self, tmp_path: Path) -> None:
+        """Write and read models folder."""
         adapter = TomlLockAdapter(tmp_path / "dbport.lock")
         adapter.write_models_folder("src/models")
         assert adapter.read_models_folder() == "src/models"
 
-    def test_list_model_keys_empty(self, tmp_path: Path):
+    def test_list_model_keys_empty(self, tmp_path: Path) -> None:
+        """List model keys empty."""
         adapter = TomlLockAdapter(tmp_path / "dbport.lock")
         assert adapter.list_model_keys() == []
 
-    def test_list_model_keys_with_models(self, tmp_path: Path):
+    def test_list_model_keys_with_models(self, tmp_path: Path) -> None:
+        """List model keys with models."""
         path = tmp_path / "dbport.lock"
-        lock_a = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="")
-        lock_b = TomlLockAdapter(path, model_key="wifor.sector", model_root="models/sector", duckdb_path="")
+        lock_a = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path=""
+        )
+        lock_b = TomlLockAdapter(
+            path, model_key="wifor.sector", model_root="models/sector", duckdb_path=""
+        )
         lock_a.write_run_hook("main.py")
         lock_b.write_run_hook("main.py")
         adapter = TomlLockAdapter(path)
         keys = adapter.list_model_keys()
         assert set(keys) == {"wifor.emp", "wifor.sector"}
 
-    def test_read_model_data_returns_none_for_missing(self, tmp_path: Path):
+    def test_read_model_data_returns_none_for_missing(self, tmp_path: Path) -> None:
+        """Read model data returns none for missing."""
         adapter = TomlLockAdapter(tmp_path / "dbport.lock")
         assert adapter.read_model_data("wifor.emp") is None
 
-    def test_read_model_data_returns_dict(self, tmp_path: Path):
+    def test_read_model_data_returns_dict(self, tmp_path: Path) -> None:
+        """Read model data returns dict."""
         path = tmp_path / "dbport.lock"
-        lock = TomlLockAdapter(path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb")
+        lock = TomlLockAdapter(
+            path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb"
+        )
         lock.write_run_hook("main.py")
         adapter = TomlLockAdapter(path)
         data = adapter.read_model_data("wifor.emp")
@@ -626,7 +717,8 @@ class TestProjectLevelOperations:
         assert data["dataset_id"] == "emp"
         assert data["model_root"] == "models/emp"
 
-    def test_register_model_creates_header(self, tmp_path: Path):
+    def test_register_model_creates_header(self, tmp_path: Path) -> None:
+        """Register model creates header."""
         path = tmp_path / "dbport.lock"
         adapter = TomlLockAdapter(
             path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb"
@@ -638,7 +730,8 @@ class TestProjectLevelOperations:
         assert data["agency"] == "wifor"
         assert data["dataset_id"] == "emp"
 
-    def test_register_model_is_idempotent(self, tmp_path: Path):
+    def test_register_model_is_idempotent(self, tmp_path: Path) -> None:
+        """Register model is idempotent."""
         path = tmp_path / "dbport.lock"
         adapter = TomlLockAdapter(
             path, model_key="wifor.emp", model_root="models/emp", duckdb_path="data/emp.duckdb"
@@ -648,7 +741,7 @@ class TestProjectLevelOperations:
         data = adapter.read_model_data("wifor.emp")
         assert data["agency"] == "wifor"
 
-    def test_project_ops_preserve_model_data(self, tmp_path: Path):
+    def test_project_ops_preserve_model_data(self, tmp_path: Path) -> None:
         """Writing project-level keys doesn't lose model data."""
         path = tmp_path / "dbport.lock"
         lock = TomlLockAdapter(path, model_key="wifor.emp", model_root=".", duckdb_path="")
@@ -660,31 +753,39 @@ class TestProjectLevelOperations:
 
 
 class TestAtomicWriteErrorHandling:
-    def test_original_file_preserved_on_write_failure(self, tmp_path: Path):
+    """Tests for Atomic Write Error Handling."""
+
+    def test_original_file_preserved_on_write_failure(self, tmp_path: Path) -> None:
         """If os.replace fails, the original lock file is not corrupted."""
         from unittest.mock import patch
 
         lock_path = tmp_path / "dbport.lock"
-        adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb")
+        adapter = TomlLockAdapter(
+            lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb"
+        )
         adapter.write_run_hook("sql/first.sql")
 
         original_content = lock_path.read_text(encoding="utf-8")
 
         # Monkeypatch os.replace to fail
-        with patch("dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("disk full")):
+        with patch(
+            "dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("disk full")
+        ):
             with pytest.raises(OSError, match="disk full"):
                 adapter.write_run_hook("sql/second.sql")
 
         # Original file should be unchanged
         assert lock_path.read_text(encoding="utf-8") == original_content
 
-    def test_temp_file_cleaned_up_on_failure(self, tmp_path: Path):
+    def test_temp_file_cleaned_up_on_failure(self, tmp_path: Path) -> None:
         """Temp file is removed when os.replace fails."""
         import glob
         from unittest.mock import patch
 
         lock_path = tmp_path / "dbport.lock"
-        adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb")
+        adapter = TomlLockAdapter(
+            lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb"
+        )
 
         with patch("dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("fail")):
             with pytest.raises(OSError):
@@ -694,14 +795,22 @@ class TestAtomicWriteErrorHandling:
         tmp_files = glob.glob(str(tmp_path / "*.dbport.tmp"))
         assert tmp_files == []
 
-    def test_unlink_failure_suppressed(self, tmp_path: Path):
+    def test_unlink_failure_suppressed(self, tmp_path: Path) -> None:
         """When both os.replace and os.unlink fail, unlink OSError is suppressed."""
         from unittest.mock import patch
 
         lock_path = tmp_path / "dbport.lock"
-        adapter = TomlLockAdapter(lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb")
+        adapter = TomlLockAdapter(
+            lock_path, model_key="a.x", model_root=".", duckdb_path="data/x.duckdb"
+        )
 
-        with patch("dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("disk full")), \
-             patch("dbport.adapters.secondary.lock.toml.os.unlink", side_effect=OSError("perm denied")):
+        with (
+            patch(
+                "dbport.adapters.secondary.lock.toml.os.replace", side_effect=OSError("disk full")
+            ),
+            patch(
+                "dbport.adapters.secondary.lock.toml.os.unlink", side_effect=OSError("perm denied")
+            ),
+        ):
             with pytest.raises(OSError, match="disk full"):
                 adapter.write_run_hook("sql/main.sql")

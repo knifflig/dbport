@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Never
 
 import pytest
 
@@ -11,6 +12,7 @@ from dbport.adapters.secondary.compute.duckdb import _INIT_SCHEMAS, DuckDBComput
 
 @pytest.fixture
 def adapter(tmp_path: Path) -> DuckDBComputeAdapter:
+    """Adapter."""
     db_path = tmp_path / "test.duckdb"
     ad = DuckDBComputeAdapter(db_path)
     yield ad
@@ -18,22 +20,28 @@ def adapter(tmp_path: Path) -> DuckDBComputeAdapter:
 
 
 class TestDuckDBComputeAdapterInit:
-    def test_stores_path(self, tmp_path: Path):
+    """Tests for Duck DBCompute Adapter Init."""
+
+    def test_stores_path(self, tmp_path: Path) -> None:
+        """Stores path."""
         path = tmp_path / "dbport.duckdb"
         ad = DuckDBComputeAdapter(path)
         assert ad._path == path
         ad.close()
 
-    def test_connection_lazy_before_first_use(self, tmp_path: Path):
+    def test_connection_lazy_before_first_use(self, tmp_path: Path) -> None:
+        """Connection lazy before first use."""
         ad = DuckDBComputeAdapter(tmp_path / "dbport.duckdb")
         assert ad._con is None
         ad.close()
 
-    def test_connection_established_on_first_execute(self, adapter: DuckDBComputeAdapter):
+    def test_connection_established_on_first_execute(self, adapter: DuckDBComputeAdapter) -> None:
+        """Connection established on first execute."""
         adapter.execute("SELECT 1")
         assert adapter._con is not None
 
-    def test_standard_schemas_created(self, adapter: DuckDBComputeAdapter):
+    def test_standard_schemas_created(self, adapter: DuckDBComputeAdapter) -> None:
+        """Standard schemas created."""
         adapter.execute("SELECT 1")  # trigger connection
         for schema in _INIT_SCHEMAS:
             assert adapter.relation_exists(schema, "__nonexistent__") is False
@@ -44,7 +52,8 @@ class TestDuckDBComputeAdapterInit:
             ).fetchall()
             assert rows, f"Schema '{schema}' was not created"
 
-    def test_file_backed_db_persists(self, tmp_path: Path):
+    def test_file_backed_db_persists(self, tmp_path: Path) -> None:
+        """File backed db persists."""
         path = tmp_path / "persist.duckdb"
         ad = DuckDBComputeAdapter(path)
         ad.execute("CREATE TABLE inputs.t (x INT)")
@@ -58,25 +67,32 @@ class TestDuckDBComputeAdapterInit:
 
 
 class TestDuckDBComputeAdapterExecute:
-    def test_execute_returns_result(self, adapter: DuckDBComputeAdapter):
+    """Tests for Duck DBCompute Adapter Execute."""
+
+    def test_execute_returns_result(self, adapter: DuckDBComputeAdapter) -> None:
+        """Execute returns result."""
         result = adapter.execute("SELECT 1 + 1").fetchone()
         assert result == (2,)
 
-    def test_execute_with_parameters(self, adapter: DuckDBComputeAdapter):
+    def test_execute_with_parameters(self, adapter: DuckDBComputeAdapter) -> None:
+        """Execute with parameters."""
         result = adapter.execute("SELECT ? + ?", [3, 4]).fetchone()
         assert result == (7,)
 
-    def test_execute_ddl(self, adapter: DuckDBComputeAdapter):
+    def test_execute_ddl(self, adapter: DuckDBComputeAdapter) -> None:
+        """Execute ddl."""
         adapter.execute("CREATE TABLE inputs.foo (id INT, val VARCHAR)")
         assert adapter.relation_exists("inputs", "foo")
 
-    def test_execute_insert_and_select(self, adapter: DuckDBComputeAdapter):
+    def test_execute_insert_and_select(self, adapter: DuckDBComputeAdapter) -> None:
+        """Execute insert and select."""
         adapter.execute("CREATE TABLE inputs.nums (n INT)")
         adapter.execute("INSERT INTO inputs.nums VALUES (10), (20), (30)")
         rows = adapter.execute("SELECT SUM(n) FROM inputs.nums").fetchone()
         assert rows == (60,)
 
-    def test_execute_file(self, adapter: DuckDBComputeAdapter, tmp_path: Path):
+    def test_execute_file(self, adapter: DuckDBComputeAdapter, tmp_path: Path) -> None:
+        """Execute file."""
         sql_file = tmp_path / "test.sql"
         sql_file.write_text(
             "CREATE TABLE inputs.from_file (x INT);\nINSERT INTO inputs.from_file VALUES (99);",
@@ -88,26 +104,35 @@ class TestDuckDBComputeAdapterExecute:
 
 
 class TestDuckDBComputeAdapterRelationExists:
-    def test_returns_false_when_not_exists(self, adapter: DuckDBComputeAdapter):
+    """Tests for Duck DBCompute Adapter Relation Exists."""
+
+    def test_returns_false_when_not_exists(self, adapter: DuckDBComputeAdapter) -> None:
+        """Returns false when not exists."""
         assert adapter.relation_exists("inputs", "nonexistent") is False
 
-    def test_returns_true_after_create(self, adapter: DuckDBComputeAdapter):
+    def test_returns_true_after_create(self, adapter: DuckDBComputeAdapter) -> None:
+        """Returns true after create."""
         adapter.execute("CREATE TABLE inputs.my_table (id INT)")
         assert adapter.relation_exists("inputs", "my_table") is True
 
-    def test_case_sensitive_table_name(self, adapter: DuckDBComputeAdapter):
+    def test_case_sensitive_table_name(self, adapter: DuckDBComputeAdapter) -> None:
+        """Case sensitive table name."""
         adapter.execute("CREATE TABLE inputs.lower_table (id INT)")
         # DuckDB uses lowercase internally
         assert adapter.relation_exists("inputs", "lower_table") is True
         assert adapter.relation_exists("inputs", "LOWER_TABLE") is False
 
-    def test_wrong_schema(self, adapter: DuckDBComputeAdapter):
+    def test_wrong_schema(self, adapter: DuckDBComputeAdapter) -> None:
+        """Wrong schema."""
         adapter.execute("CREATE TABLE inputs.my_table (id INT)")
         assert adapter.relation_exists("staging", "my_table") is False
 
 
 class TestDuckDBComputeAdapterArrowBatches:
-    def test_to_arrow_batches_returns_reader(self, adapter: DuckDBComputeAdapter):
+    """Tests for Duck DBCompute Adapter Arrow Batches."""
+
+    def test_to_arrow_batches_returns_reader(self, adapter: DuckDBComputeAdapter) -> None:
+        """To arrow batches returns reader."""
         adapter.execute("CREATE TABLE inputs.data (n INT)")
         adapter.execute("INSERT INTO inputs.data VALUES (1), (2), (3)")
         reader = adapter.to_arrow_batches("SELECT n FROM inputs.data ORDER BY n")
@@ -115,11 +140,10 @@ class TestDuckDBComputeAdapterArrowBatches:
         assert batch.num_rows == 3
         assert batch.column(0).to_pylist() == [1, 2, 3]
 
-    def test_to_arrow_batches_batch_size(self, adapter: DuckDBComputeAdapter):
+    def test_to_arrow_batches_batch_size(self, adapter: DuckDBComputeAdapter) -> None:
+        """To arrow batches batch size."""
         adapter.execute("CREATE TABLE inputs.big (n INT)")
-        adapter.execute(
-            "INSERT INTO inputs.big SELECT range FROM range(1, 101)"
-        )
+        adapter.execute("INSERT INTO inputs.big SELECT range FROM range(1, 101)")
         reader = adapter.to_arrow_batches("SELECT n FROM inputs.big ORDER BY n", batch_size=25)
         total = 0
         for batch in reader:
@@ -128,7 +152,9 @@ class TestDuckDBComputeAdapterArrowBatches:
 
 
 class TestDuckDBComputeAdapterArrowRegistration:
-    def test_register_and_unregister_arrow(self, adapter: DuckDBComputeAdapter):
+    """Tests for Duck DBCompute Adapter Arrow Registration."""
+
+    def test_register_and_unregister_arrow(self, adapter: DuckDBComputeAdapter) -> None:
         """register_arrow and unregister_arrow work with Arrow tables."""
         import pyarrow as pa
 
@@ -138,13 +164,18 @@ class TestDuckDBComputeAdapterArrowRegistration:
         assert result == (3,)
         adapter.unregister_arrow("test_view")
 
-    def test_duckdb_import_error_raises_runtime_error(self, monkeypatch, tmp_path):
+    def test_duckdb_import_error_raises_runtime_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
         """RuntimeError raised when duckdb is not installed."""
         import builtins
 
         real_import = builtins.__import__
 
-        def mock_import(name, *args, **kwargs):
+        def mock_import(name: str, *args: object, **kwargs: object) -> object:
+            """mock_import."""
             if name == "duckdb":
                 raise ImportError("No module named 'duckdb'")
             return real_import(name, *args, **kwargs)
@@ -156,18 +187,28 @@ class TestDuckDBComputeAdapterArrowRegistration:
 
 
 class TestDuckDBComputeAdapterCloseEdgeCases:
-    def test_close_suppresses_exception(self, tmp_path: Path):
+    """Tests for Duck DBCompute Adapter Close Edge Cases."""
+
+    def test_close_suppresses_exception(self, tmp_path: Path) -> None:
         """close() suppresses exceptions from the underlying connection."""
         ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
         ad.execute("SELECT 1")
         # Sabotage the connection to trigger an exception on close
-        ad._con = type("BrokenCon", (), {"close": lambda self: (_ for _ in ()).throw(RuntimeError("broken"))})()
+        ad._con = type(
+            "BrokenCon", (), {"close": lambda self: (_ for _ in ()).throw(RuntimeError("broken"))}
+        )()
         ad.close()  # should not raise
         assert ad._con is None
 
 
 class TestEnsureExtensionsFallback:
-    def test_load_failure_triggers_install_then_load(self, tmp_path: Path, monkeypatch):
+    """Tests for Ensure Extensions Fallback."""
+
+    def test_load_failure_triggers_install_then_load(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """When LOAD fails, ensure_extensions tries DuckDB INSTALL via HTTPS."""
         from unittest.mock import MagicMock
 
@@ -175,7 +216,8 @@ class TestEnsureExtensionsFallback:
         mock_con = MagicMock()
         call_log: list[str] = []
 
-        def tracking_execute(sql, *args, **kwargs):
+        def tracking_execute(sql: object, *args: object, **kwargs: object) -> None:
+            """tracking_execute."""
             call_log.append(sql)
             # First LOAD of each ext fails, INSTALL succeeds, second LOAD succeeds
             if sql.startswith("LOAD") and sum(1 for c in call_log if c == sql) == 1:
@@ -191,7 +233,11 @@ class TestEnsureExtensionsFallback:
         assert any("custom_extension_repository" in c and "https://" in c for c in call_log)
         ad._con = None
 
-    def test_python_download_fallback(self, tmp_path: Path, monkeypatch):
+    def test_python_download_fallback(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """When DuckDB INSTALL also fails, falls back to Python urllib download."""
         from unittest.mock import MagicMock
 
@@ -200,7 +246,8 @@ class TestEnsureExtensionsFallback:
         call_log: list[str] = []
         download_calls: list[str] = []
 
-        def tracking_execute(sql, *args, **kwargs):
+        def tracking_execute(sql: object, *args: object, **kwargs: object) -> None:
+            """tracking_execute."""
             call_log.append(sql)
             # First LOAD fails, INSTALL fails, second LOAD (after download) succeeds
             if sql.startswith("LOAD"):
@@ -214,31 +261,40 @@ class TestEnsureExtensionsFallback:
         ad._con = mock_con
         monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
 
-        def mock_download(ext):
+        def mock_download(ext: object) -> None:
+            """mock_download."""
             download_calls.append(ext)
 
-        monkeypatch.setattr(DuckDBComputeAdapter, "_download_extension", staticmethod(mock_download))
+        monkeypatch.setattr(
+            DuckDBComputeAdapter, "_download_extension", staticmethod(mock_download)
+        )
 
         ad.ensure_extensions()
         # All 3 extensions should trigger the download fallback
         assert len(download_calls) == 3
         ad._con = None
 
-    def test_all_strategies_fail_raises_runtime_error(self, tmp_path: Path, monkeypatch):
+    def test_all_strategies_fail_raises_runtime_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """When LOAD, INSTALL, and download all fail, RuntimeError is raised."""
         from unittest.mock import MagicMock
 
         ad = DuckDBComputeAdapter(tmp_path / "test.duckdb")
         mock_con = MagicMock()
 
-        def always_fail(sql, *args, **kwargs):
+        def always_fail(sql: object, *args: object, **kwargs: object) -> Never:
+            """always_fail."""
             raise Exception("not available")
 
         mock_con.execute = always_fail
         ad._con = mock_con
         monkeypatch.setattr(ad, "_get_con", lambda: mock_con)
         monkeypatch.setattr(
-            DuckDBComputeAdapter, "_download_extension",
+            DuckDBComputeAdapter,
+            "_download_extension",
             staticmethod(lambda ext: (_ for _ in ()).throw(Exception("download failed"))),
         )
 
@@ -248,21 +304,32 @@ class TestEnsureExtensionsFallback:
 
 
 class TestDuckDBComputeAdapterClose:
-    def test_close_sets_con_to_none(self, tmp_path: Path):
+    """Tests for Duck DBCompute Adapter Close."""
+
+    def test_close_sets_con_to_none(self, tmp_path: Path) -> None:
+        """Close sets con to none."""
         ad = DuckDBComputeAdapter(tmp_path / "dbport.duckdb")
         ad.execute("SELECT 1")
         assert ad._con is not None
         ad.close()
         assert ad._con is None
 
-    def test_close_is_idempotent(self, tmp_path: Path):
+    def test_close_is_idempotent(self, tmp_path: Path) -> None:
+        """Close is idempotent."""
         ad = DuckDBComputeAdapter(tmp_path / "dbport.duckdb")
         ad.close()
         ad.close()  # second close must not raise
 
 
 class TestDownloadExtension:
-    def test_download_extension_creates_file(self, tmp_path, monkeypatch):
+    """Tests for Download Extension."""
+
+    def test_download_extension_creates_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Download extension creates file."""
         import gzip
         import urllib.request
         from unittest.mock import MagicMock
@@ -280,12 +347,22 @@ class TestDownloadExtension:
         DuckDBComputeAdapter._download_extension("testext")
 
         ext_file = (
-            tmp_path / ".duckdb" / "extensions" / "v1.0.0" / "linux_amd64" / "testext.duckdb_extension"
+            tmp_path
+            / ".duckdb"
+            / "extensions"
+            / "v1.0.0"
+            / "linux_amd64"
+            / "testext.duckdb_extension"
         )
         assert ext_file.exists()
         assert ext_file.read_bytes() == fake_data
 
-    def test_download_extension_skips_if_exists(self, tmp_path, monkeypatch):
+    def test_download_extension_skips_if_exists(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Download extension skips if exists."""
         import duckdb as real_duckdb
 
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -301,7 +378,13 @@ class TestDownloadExtension:
 
 
 class TestEnsureExtensionsLoadHappyPath:
-    def test_load_succeeds_without_install(self, tmp_path: Path, monkeypatch):
+    """Tests for Ensure Extensions Load Happy Path."""
+
+    def test_load_succeeds_without_install(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """When LOAD succeeds on the first try, the continue branch (line 60) is hit."""
         from unittest.mock import MagicMock
 
@@ -309,7 +392,8 @@ class TestEnsureExtensionsLoadHappyPath:
         mock_con = MagicMock()
         call_log: list[str] = []
 
-        def tracking_execute(sql, *args, **kwargs):
+        def tracking_execute(sql: object, *args: object, **kwargs: object) -> None:
+            """tracking_execute."""
             call_log.append(sql)
             # All LOADs succeed immediately
             return None

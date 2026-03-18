@@ -1,0 +1,1 @@
+"""Secondary adapter test package."""

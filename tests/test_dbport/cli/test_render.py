@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from io import StringIO
 
+import pytest
 from rich.console import Console
 
 from dbport.cli.render import (
@@ -24,15 +25,20 @@ from dbport.infrastructure.progress import progress_callback, progress_phase
 
 
 class TestRenderHelpers:
-    def test_get_console_returns_console(self):
+    """Tests for TestRenderHelpers."""
+
+    def test_get_console_returns_console(self) -> None:
+        """Test Get console returns console."""
         c = get_console()
         assert c is not None
 
-    def test_get_stdout_returns_console(self):
+    def test_get_stdout_returns_console(self) -> None:
+        """Test Get stdout returns console."""
         c = get_stdout()
         assert c is not None
 
-    def test_set_no_color_swaps_consoles(self):
+    def test_set_no_color_swaps_consoles(self) -> None:
+        """Test Set no color swaps consoles."""
         old_console = get_console()
         old_stdout = get_stdout()
         set_no_color(True)
@@ -44,7 +50,8 @@ class TestRenderHelpers:
         # Reset
         set_no_color(False)  # no-op (doesn't reset), but shouldn't crash
 
-    def test_print_json_output(self, capsys):
+    def test_print_json_output(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test Print json output."""
         print_json("test_cmd", {"key": "val"}, ok=True)
         out = capsys.readouterr().out
         data = json.loads(out)
@@ -52,21 +59,25 @@ class TestRenderHelpers:
         assert data["command"] == "test_cmd"
         assert data["data"]["key"] == "val"
 
-    def test_print_json_not_ok(self, capsys):
+    def test_print_json_not_ok(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test Print json not ok."""
         print_json("fail_cmd", {"error": "oops"}, ok=False)
         out = capsys.readouterr().out
         data = json.loads(out)
         assert data["ok"] is False
 
-    def test_print_table_no_crash(self, capsys):
+    def test_print_table_no_crash(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test Print table no crash."""
         # Should not raise
         print_table("My Table", ["A", "B"], [["1", "2"], ["3", "4"]])
 
-    def test_print_panel_no_crash(self, capsys):
+    def test_print_panel_no_crash(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test Print panel no crash."""
         # Should not raise
         print_panel("Title", "Some content here")
 
-    def test_print_success_outputs(self):
+    def test_print_success_outputs(self) -> None:
+        """Test Print success outputs."""
         buf = StringIO()
         console = Console(file=buf, no_color=True)
         import dbport.cli.render as _mod
@@ -80,7 +91,8 @@ class TestRenderHelpers:
         assert "OK" in buf.getvalue()
         assert "it worked" in buf.getvalue()
 
-    def test_print_error_outputs(self):
+    def test_print_error_outputs(self) -> None:
+        """Test Print error outputs."""
         buf = StringIO()
         console = Console(file=buf, no_color=True)
         import dbport.cli.render as _mod
@@ -94,7 +106,8 @@ class TestRenderHelpers:
         assert "Error:" in buf.getvalue()
         assert "bad thing" in buf.getvalue()
 
-    def test_print_warning_outputs(self):
+    def test_print_warning_outputs(self) -> None:
+        """Test Print warning outputs."""
         buf = StringIO()
         console = Console(file=buf, no_color=True)
         import dbport.cli.render as _mod
@@ -108,7 +121,8 @@ class TestRenderHelpers:
         assert "Warning:" in buf.getvalue()
         assert "careful" in buf.getvalue()
 
-    def test_print_info_outputs(self):
+    def test_print_info_outputs(self) -> None:
+        """Test Print info outputs."""
         buf = StringIO()
         console = Console(file=buf, no_color=True)
         import dbport.cli.render as _mod
@@ -121,7 +135,8 @@ class TestRenderHelpers:
             _mod._stdout = old
         assert "some info" in buf.getvalue()
 
-    def test_cli_tree_progress_shows_fixed_run_phases(self):
+    def test_cli_tree_progress_shows_fixed_run_phases(self) -> None:
+        """Test Cli tree progress shows fixed run phases."""
         buf = StringIO()
         console = Console(file=buf, no_color=True, force_terminal=False, width=120)
         import dbport.cli.render as _mod

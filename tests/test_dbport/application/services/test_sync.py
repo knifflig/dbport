@@ -11,7 +11,15 @@ from dbport.infrastructure.progress import progress_callback
 
 
 class TestSyncOutputTable:
-    def _make_service(self, *, schema_ddl: str | None = None, relation_exists: bool = False):
+    """Tests for SyncService output table synchronization."""
+
+    def _make_service(
+        self,
+        *,
+        schema_ddl: str | None = None,
+        relation_exists: bool = False,
+    ) -> tuple[SyncService, MagicMock, MagicMock]:
+        """Build a SyncService with fakes."""
         catalog = MagicMock()
         compute = MagicMock()
         lock = MagicMock()
@@ -28,14 +36,19 @@ class TestSyncOutputTable:
 
         return SyncService(catalog, compute, lock), compute, lock
 
-    def test_skips_when_no_schema(self):
+    def test_skips_when_no_schema(self) -> None:
+        """Test skips when no schema defined."""
         svc, compute, _ = self._make_service(schema_ddl=None)
         svc.execute("test.tbl")
         compute.execute.assert_not_called()
 
-    def test_creates_table_when_not_exists(self):
+    def test_creates_table_when_not_exists(self) -> None:
+        """Test creates table when it does not exist."""
         ddl = "CREATE OR REPLACE TABLE test.tbl (id INT)"
-        svc, compute, _ = self._make_service(schema_ddl=ddl, relation_exists=False)
+        svc, compute, _ = self._make_service(
+            schema_ddl=ddl,
+            relation_exists=False,
+        )
         svc.execute("test.tbl")
 
         # Should create schema and run DDL
@@ -43,34 +56,49 @@ class TestSyncOutputTable:
         assert any("CREATE SCHEMA" in c for c in calls)
         assert any("CREATE OR REPLACE TABLE" in c for c in calls)
 
-    def test_skips_ddl_when_table_exists(self):
+    def test_skips_ddl_when_table_exists(self) -> None:
+        """Test skips DDL when table already exists."""
         ddl = "CREATE OR REPLACE TABLE test.tbl (id INT)"
-        svc, compute, _ = self._make_service(schema_ddl=ddl, relation_exists=True)
+        svc, compute, _ = self._make_service(
+            schema_ddl=ddl,
+            relation_exists=True,
+        )
         svc.execute("test.tbl")
 
         # DDL should NOT be executed
         for call in compute.execute.call_args_list:
             assert "CREATE OR REPLACE TABLE" not in call.args[0]
 
-    def test_relation_exists_called_with_correct_args(self):
+    def test_relation_exists_called_with_correct_args(self) -> None:
+        """Test relation_exists called with correct arguments."""
         ddl = "CREATE OR REPLACE TABLE ns.mytbl (id INT)"
-        svc, compute, _ = self._make_service(schema_ddl=ddl, relation_exists=True)
+        svc, compute, _ = self._make_service(
+            schema_ddl=ddl,
+            relation_exists=True,
+        )
         svc.execute("ns.mytbl")
         compute.relation_exists.assert_called_once_with("ns", "mytbl")
 
-    def test_no_namespace_uses_main(self):
+    def test_no_namespace_uses_main(self) -> None:
+        """Test no namespace uses main schema."""
         ddl = "CREATE TABLE tbl (id INT)"
-        svc, compute, _ = self._make_service(schema_ddl=ddl, relation_exists=False)
+        svc, compute, _ = self._make_service(
+            schema_ddl=ddl,
+            relation_exists=False,
+        )
         svc.execute("tbl")
         compute.relation_exists.assert_called_once_with("main", "tbl")
         # Should NOT create schema for "main"
         for call in compute.execute.call_args_list:
             assert "CREATE SCHEMA" not in call.args[0]
 
-    def test_progress_callback_on_create(self):
+    def test_progress_callback_on_create(self) -> None:
         """Progress callback fires started/finished when table is created."""
         ddl = "CREATE OR REPLACE TABLE test.tbl (id INT)"
-        svc, compute, _ = self._make_service(schema_ddl=ddl, relation_exists=False)
+        svc, _compute, _ = self._make_service(
+            schema_ddl=ddl,
+            relation_exists=False,
+        )
 
         cb = MagicMock()
         token = progress_callback.set(cb)
@@ -84,7 +112,13 @@ class TestSyncOutputTable:
 
 
 class TestSyncInputs:
-    def _make_service(self, records: list[IngestRecord] | None = None):
+    """Tests for SyncService input synchronization."""
+
+    def _make_service(
+        self,
+        records: list[IngestRecord] | None = None,
+    ) -> tuple[SyncService, MagicMock, MagicMock, MagicMock]:
+        """Build a SyncService with fakes."""
         catalog = MagicMock()
         compute = MagicMock()
         lock = MagicMock()
@@ -94,59 +128,69 @@ class TestSyncInputs:
 
         return SyncService(catalog, compute, lock), catalog, compute, lock
 
-    def test_no_records_skips(self):
-        svc, catalog, compute, lock = self._make_service(records=[])
+    def test_no_records_skips(self) -> None:
+        """Test no records skips sync."""
+        svc, _catalog, compute, _lock = self._make_service(records=[])
         svc.execute("test.tbl")
         # IngestService should not be constructed
         compute.execute.assert_not_called()
 
-    def test_syncs_inputs(self):
+    def test_syncs_inputs(self) -> None:
+        """Test inputs are synced."""
         record = IngestRecord(
             table_address="estat.foo",
             last_snapshot_id=123,
             last_snapshot_timestamp_ms=1000,
             rows_loaded=100,
         )
-        svc, catalog, compute, lock = self._make_service(records=[record])
+        svc, _catalog, _compute, _lock = self._make_service(records=[record])
 
-        with patch("dbport.application.services.ingest.IngestService") as MockIngest:
+        with patch(
+            "dbport.application.services.ingest.IngestService",
+        ) as MockIngest:
             mock_ingest = MagicMock()
             MockIngest.return_value = mock_ingest
             svc.execute("test.tbl")
 
-        MockIngest.assert_called_once_with(catalog, compute, lock)
+        MockIngest.assert_called_once_with(_catalog, _compute, _lock)
         mock_ingest.execute.assert_called_once()
         decl = mock_ingest.execute.call_args[0][0]
         assert decl.table_address == "estat.foo"
 
-    def test_failed_input_logs_warning(self):
+    def test_failed_input_logs_warning(self) -> None:
+        """Test failed input logs warning."""
         record = IngestRecord(
             table_address="estat.bad",
             last_snapshot_id=456,
             last_snapshot_timestamp_ms=2000,
             rows_loaded=0,
         )
-        svc, catalog, compute, lock = self._make_service(records=[record])
+        svc, _catalog, _compute, _lock = self._make_service(records=[record])
 
-        with patch("dbport.application.services.ingest.IngestService") as MockIngest:
+        with patch(
+            "dbport.application.services.ingest.IngestService",
+        ) as MockIngest:
             mock_ingest = MagicMock()
             mock_ingest.execute.side_effect = RuntimeError("network error")
             MockIngest.return_value = mock_ingest
-            # Should not raise — errors are caught and logged
+            # Should not raise -- errors are caught and logged
             svc.execute("test.tbl")
 
-    def test_failed_input_with_progress_callback(self):
+    def test_failed_input_with_progress_callback(self) -> None:
+        """Test failed input fires progress callback."""
         record = IngestRecord(
             table_address="estat.bad",
             last_snapshot_id=789,
             last_snapshot_timestamp_ms=3000,
             rows_loaded=0,
         )
-        svc, catalog, compute, lock = self._make_service(records=[record])
+        svc, _catalog, _compute, _lock = self._make_service(records=[record])
         cb = MagicMock()
         token = progress_callback.set(cb)
         try:
-            with patch("dbport.application.services.ingest.IngestService") as MockIngest:
+            with patch(
+                "dbport.application.services.ingest.IngestService",
+            ) as MockIngest:
                 mock_ingest = MagicMock()
                 mock_ingest.execute.side_effect = RuntimeError("fail")
                 MockIngest.return_value = mock_ingest
@@ -157,7 +201,8 @@ class TestSyncInputs:
         cb.log.assert_called_once_with("Failed to sync estat.bad: fail")
         cb.failed.assert_called_once_with("Failed to sync estat.bad")
 
-    def test_syncs_input_with_filters_and_version(self):
+    def test_syncs_input_with_filters_and_version(self) -> None:
+        """Test syncs input with filters and version."""
         record = IngestRecord(
             table_address="estat.bar",
             last_snapshot_id=111,
@@ -166,9 +211,11 @@ class TestSyncInputs:
             filters={"wstatus": "EMP"},
             version="v1",
         )
-        svc, catalog, compute, lock = self._make_service(records=[record])
+        svc, _catalog, _compute, _lock = self._make_service(records=[record])
 
-        with patch("dbport.application.services.ingest.IngestService") as MockIngest:
+        with patch(
+            "dbport.application.services.ingest.IngestService",
+        ) as MockIngest:
             mock_ingest = MagicMock()
             MockIngest.return_value = mock_ingest
             svc.execute("test.tbl")

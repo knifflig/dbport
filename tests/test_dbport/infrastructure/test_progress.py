@@ -25,21 +25,27 @@ class _SimpleProgress:
 
 
 class TestProgressCallback:
-    def test_default_is_none(self):
+    """Tests for ProgressCallback contextvar."""
+
+    def test_default_is_none(self) -> None:
+        """Test that default value is None."""
         assert progress_callback.get(None) is None
 
-    def test_set_and_reset(self):
+    def test_set_and_reset(self) -> None:
+        """Test setting and resetting the contextvar."""
         impl = _SimpleProgress()
         token = progress_callback.set(impl)
         assert progress_callback.get(None) is impl
         progress_callback.reset(token)
         assert progress_callback.get(None) is None
 
-    def test_simple_impl_satisfies_protocol(self):
+    def test_simple_impl_satisfies_protocol(self) -> None:
+        """Test that _SimpleProgress satisfies the protocol."""
         impl = _SimpleProgress()
         assert isinstance(impl, ProgressCallback)
 
-    def test_lifecycle(self):
+    def test_lifecycle(self) -> None:
+        """Test full progress lifecycle."""
         impl = _SimpleProgress()
         token = progress_callback.set(impl)
         try:
@@ -56,12 +62,14 @@ class TestProgressCallback:
         finally:
             progress_callback.reset(token)
 
-    def test_indeterminate_mode(self):
+    def test_indeterminate_mode(self) -> None:
+        """Test started with total=None."""
         impl = _SimpleProgress()
         impl.started("Spinner task", total=None)
         assert impl.events[0] == ("started", "Spinner task", "None")
 
-    def test_log_method(self):
+    def test_log_method(self) -> None:
+        """Test the log method."""
         impl = _SimpleProgress()
         impl.log("Switching to streaming Arrow fallback")
         assert impl.events == [("log", "Switching to streaming Arrow fallback")]

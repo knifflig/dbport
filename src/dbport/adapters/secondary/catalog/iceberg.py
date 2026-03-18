@@ -10,15 +10,23 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+import pyarrow as pa
+from pyiceberg.catalog import Catalog
+from pyiceberg.table import Table as IcebergTable
 
 from ....infrastructure.credentials import WarehouseCreds
 
 if TYPE_CHECKING:
-    from ....domain.entities.input import InputDeclaration
+    from pyiceberg.expressions import BooleanExpression
+
+    from ....domain.entities.input import IngestRecord, InputDeclaration
     from ....domain.entities.version import DatasetVersion, VersionRecord
+    from ....domain.ports.compute import ICompute
+    from ....infrastructure.progress import ProgressCallback
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +36,7 @@ def _sql_escape(value: str) -> str:
     return value.replace("'", "''")
 
 
-def _write_table_properties(table: Any, properties: dict[str, str]) -> None:
+def _write_table_properties(table: IcebergTable, properties: dict[str, str]) -> None:
     """Write properties to an Iceberg table using transaction or update_properties."""
     tx = getattr(table, "transaction", None)
     if callable(tx):
@@ -50,7 +58,7 @@ def _write_table_properties(table: Any, properties: dict[str, str]) -> None:
     raise RuntimeError("Iceberg table does not support writing table properties")
 
 
-def _write_column_docs(table: Any, column_docs: dict[str, str]) -> None:
+def _write_column_docs(table: IcebergTable, column_docs: dict[str, str]) -> None:
     """Write column doc strings to an Iceberg table schema."""
     update_schema = getattr(table, "update_schema", None)
     if not callable(update_schema):
@@ -76,7 +84,7 @@ class IcebergCatalogAdapter:
 
     def __init__(self, creds: WarehouseCreds) -> None:
         self._creds = creds
-        self._catalog: Any = None  # pyiceberg.catalog.Catalog, lazy-loaded
+        self._catalog: Catalog | None = None
         self._warehouse_attached = False
         self._duckdb_writes_supported: bool | None = None  # None = untested
 
@@ -84,7 +92,7 @@ class IcebergCatalogAdapter:
     # pyiceberg catalog (metadata operations only)
     # ------------------------------------------------------------------
 
-    def _get_catalog(self) -> Any:
+    def _get_catalog(self) -> Catalog:
         """Lazy-load pyiceberg catalog for metadata operations."""
         if self._catalog is None:
             try:
@@ -131,7 +139,7 @@ class IcebergCatalogAdapter:
     # DuckDB warehouse connection
     # ------------------------------------------------------------------
 
-    def _ensure_warehouse_attached(self, compute: Any) -> None:
+    def _ensure_warehouse_attached(self, compute: ICompute) -> None:
         """Load extensions, configure S3, and ATTACH the warehouse (idempotent).
 
         Extensions are installed via the compute adapter's ensure_extensions().
@@ -197,7 +205,7 @@ class IcebergCatalogAdapter:
         except Exception:
             return False
 
-    def load_arrow_schema(self, table_address: str) -> Any:
+    def load_arrow_schema(self, table_address: str) -> pa.Schema:
         """Return the PyArrow schema of an existing warehouse table."""
         catalog = self._get_catalog()
         ns, name = self._parse_address(table_address)
@@ -261,7 +269,9 @@ class IcebergCatalogAdapter:
             )
 
     @staticmethod
-    def _build_row_filter(filters: dict[str, str] | None) -> Any:
+    def _build_row_filter(
+        filters: dict[str, str] | None,
+    ) -> BooleanExpression | None:
         if not filters:
             return None
 
@@ -281,7 +291,7 @@ class IcebergCatalogAdapter:
 
     @staticmethod
     def _snapshot_timestamp_from_table(
-        iceberg_table: Any,
+        iceberg_table: IcebergTable,
         snapshot_id: int | None,
     ) -> int | None:
         if snapshot_id is None:
@@ -316,7 +326,7 @@ class IcebergCatalogAdapter:
 
     def _inspect_input_row_count(
         self,
-        iceberg_table: Any,
+        iceberg_table: IcebergTable,
         declaration: InputDeclaration,
         *,
         snapshot_id: int | None,
@@ -344,6 +354,7 @@ class IcebergCatalogAdapter:
         self,
         declaration: InputDeclaration,
     ) -> IngestRecord:
+        """Resolve a configured input against the warehouse and return an IngestRecord."""
         from ....domain.entities.input import IngestRecord
 
         catalog = self._get_catalog()
@@ -418,7 +429,7 @@ class IcebergCatalogAdapter:
     def _ingest_via_arrow(
         self,
         declaration: InputDeclaration,
-        compute: Any,
+        compute: ICompute,
         snapshot_id: int | None = None,
     ) -> int:
         """Arrow ingest: pyiceberg scan → RecordBatchReader → DuckDB.
@@ -433,8 +444,6 @@ class IcebergCatalogAdapter:
         *snapshot_id* pins the scan to a specific Iceberg snapshot (Fix A).
         """
         import time
-
-        import pyarrow as pa
 
         from ....infrastructure.progress import progress_callback
 
@@ -529,7 +538,9 @@ class IcebergCatalogAdapter:
         raise last_exc  # type: ignore[misc]  # pragma: no cover — unreachable, satisfies type checker
 
     @staticmethod
-    def _iter_batches_with_progress(reader: Any, cb: Any):
+    def _iter_batches_with_progress(
+        reader: pa.RecordBatchReader, cb: ProgressCallback | None
+    ) -> Generator[pa.RecordBatch]:
         """Yield batches while advancing the active progress callback."""
         for batch in reader:
             if cb is not None:
@@ -537,7 +548,7 @@ class IcebergCatalogAdapter:
             yield batch
 
     @staticmethod
-    def _snapshot_summary(snapshot: Any) -> dict[str, Any]:
+    def _snapshot_summary(snapshot: object) -> dict[str, object]:
         """Return the best-effort summary dict for a pyiceberg snapshot object."""
         summary = getattr(snapshot, "summary", None)
         if callable(summary):
@@ -563,7 +574,7 @@ class IcebergCatalogAdapter:
 
     def _estimate_ingest_total_rows(
         self,
-        iceberg_table: Any,
+        iceberg_table: IcebergTable,
         *,
         snapshot_id: int | None,
         has_filter: bool,
@@ -611,7 +622,7 @@ class IcebergCatalogAdapter:
     def ingest_into_compute(
         self,
         declaration: InputDeclaration,
-        compute: Any,
+        compute: ICompute,
         snapshot_id: int | None = None,
     ) -> int:
         """Load a warehouse table into DuckDB via pyiceberg Arrow scan.
@@ -717,7 +728,7 @@ class IcebergCatalogAdapter:
     def _write_via_duckdb(
         self,
         table_address: str,
-        compute: Any,
+        compute: ICompute,
         overwrite: bool,
     ) -> None:
         """Primary write path: DuckDB iceberg extension. Data never leaves DuckDB."""
@@ -762,7 +773,7 @@ class IcebergCatalogAdapter:
         self,
         table_address: str,
         version: DatasetVersion,
-        compute: Any,
+        compute: ICompute,
         overwrite: bool,
         total_rows: int,
     ) -> None:
@@ -774,8 +785,6 @@ class IcebergCatalogAdapter:
         On commit conflict, the outer loop reloads table metadata and
         resumes from the remote checkpoint.
         """
-        import pyarrow as pa
-
         try:
             from pyiceberg.exceptions import CommitFailedException
         except ImportError:
@@ -930,7 +939,7 @@ class IcebergCatalogAdapter:
         self,
         table_address: str,
         version: DatasetVersion,
-        compute: Any,
+        compute: ICompute,
         overwrite: bool = False,
     ) -> VersionRecord:
         """Write DuckDB output table to the warehouse.

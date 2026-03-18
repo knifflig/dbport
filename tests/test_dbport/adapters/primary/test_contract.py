@@ -20,21 +20,25 @@ import pytest
 
 
 class TestModuleExports:
-    def test_all_contains_only_dbport(self):
+    """Tests for Module Exports."""
+
+    def test_all_contains_only_dbport(self) -> None:
+        """All contains only dbport."""
         import dbport
 
         assert dbport.__all__ == ["DBPort"]
 
-    def test_dbport_importable(self):
+    def test_dbport_importable(self) -> None:
+        """Dbport importable."""
         from dbport import DBPort  # noqa: F401
 
-    def test_no_version_attribute(self):
+    def test_no_version_attribute(self) -> None:
         """__version__ is deliberately absent — use importlib.metadata instead."""
         import dbport
 
         assert not hasattr(dbport, "__version__")
 
-    def test_version_via_importlib(self):
+    def test_version_via_importlib(self) -> None:
         """The approved way to get the version."""
         from importlib.metadata import version
 
@@ -42,7 +46,7 @@ class TestModuleExports:
         assert isinstance(v, str)
         assert re.match(r"\d+\.\d+\.\d+", v)
 
-    def test_no_internal_symbols_leak(self):
+    def test_no_internal_symbols_leak(self) -> None:
         """Only DBPort should be exported via __all__."""
         import types
 
@@ -65,20 +69,26 @@ class TestModuleExports:
 
 
 class TestConstructorSignature:
-    def test_positional_params(self):
+    """Tests for Constructor Signature."""
+
+    def test_positional_params(self) -> None:
+        """Positional params."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.__init__)
         params = list(sig.parameters.values())
         # Skip 'self'
         positional = [
-            p for p in params if p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and p.name != "self"
+            p
+            for p in params
+            if p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD and p.name != "self"
         ]
         assert [p.name for p in positional] == ["agency", "dataset_id"]
         for p in positional:
             assert p.default is inspect.Parameter.empty, f"{p.name} should be required"
 
-    def test_keyword_only_params(self):
+    def test_keyword_only_params(self) -> None:
+        """Keyword only params."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.__init__)
@@ -103,7 +113,8 @@ class TestConstructorSignature:
         }
         assert kw_only == expected
 
-    def test_total_parameter_count(self):
+    def test_total_parameter_count(self) -> None:
+        """Total parameter count."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.__init__)
@@ -117,7 +128,10 @@ class TestConstructorSignature:
 
 
 class TestPublicSurface:
-    def test_public_methods(self):
+    """Tests for Public Surface."""
+
+    def test_public_methods(self) -> None:
+        """Public methods."""
         from dbport import DBPort
 
         expected_methods = {
@@ -136,7 +150,8 @@ class TestPublicSurface:
         }
         assert actual == expected_methods
 
-    def test_public_properties(self):
+    def test_public_properties(self) -> None:
+        """Public properties."""
         from dbport import DBPort
 
         expected_properties = {"run_hook"}
@@ -147,13 +162,15 @@ class TestPublicSurface:
         }
         assert actual == expected_properties
 
-    def test_context_manager_protocol(self):
+    def test_context_manager_protocol(self) -> None:
+        """Context manager protocol."""
         from dbport import DBPort
 
         assert hasattr(DBPort, "__enter__")
         assert hasattr(DBPort, "__exit__")
 
-    def test_columns_attribute_set_on_init(self, tmp_path: Path):
+    def test_columns_attribute_set_on_init(self, tmp_path: Path) -> None:
+        """Columns attribute set on init."""
         from dbport import DBPort
 
         client = DBPort(
@@ -172,85 +189,69 @@ class TestPublicSurface:
 
 
 class TestMethodSignatures:
-    def test_load_signature(self):
+    """Tests for Method Signatures."""
+
+    def test_load_signature(self) -> None:
+        """Load signature."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.load)
-        params = {
-            name: p.default
-            for name, p in sig.parameters.items()
-            if name != "self"
-        }
+        params = {name: p.default for name, p in sig.parameters.items() if name != "self"}
         assert params == {
             "table_address": inspect.Parameter.empty,
             "filters": None,
             "version": None,
         }
 
-    def test_configure_input_signature(self):
+    def test_configure_input_signature(self) -> None:
+        """Configure input signature."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.configure_input)
-        params = {
-            name: p.default
-            for name, p in sig.parameters.items()
-            if name != "self"
-        }
+        params = {name: p.default for name, p in sig.parameters.items() if name != "self"}
         assert params == {
             "table_address": inspect.Parameter.empty,
             "filters": None,
             "version": None,
         }
 
-    def test_publish_signature(self):
+    def test_publish_signature(self) -> None:
+        """Publish signature."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.publish)
-        params = {
-            name: p.default
-            for name, p in sig.parameters.items()
-            if name != "self"
-        }
+        params = {name: p.default for name, p in sig.parameters.items() if name != "self"}
         assert params == {
             "version": inspect.Parameter.empty,
             "params": None,
             "mode": None,
         }
 
-    def test_run_signature(self):
+    def test_run_signature(self) -> None:
+        """Run signature."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.run)
-        params = {
-            name: p.default
-            for name, p in sig.parameters.items()
-            if name != "self"
-        }
+        params = {name: p.default for name, p in sig.parameters.items() if name != "self"}
         assert params == {
             "version": None,
             "mode": None,
         }
 
-    def test_schema_signature(self):
+    def test_schema_signature(self) -> None:
+        """Schema signature."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.schema)
-        params = {
-            name: p.default
-            for name, p in sig.parameters.items()
-            if name != "self"
-        }
+        params = {name: p.default for name, p in sig.parameters.items() if name != "self"}
         assert params == {"ddl_or_path": inspect.Parameter.empty}
 
-    def test_execute_signature(self):
+    def test_execute_signature(self) -> None:
+        """Execute signature."""
         from dbport import DBPort
 
         sig = inspect.signature(DBPort.execute)
-        params = {
-            name: p.default
-            for name, p in sig.parameters.items()
-            if name != "self"
-        }
+        params = {name: p.default for name, p in sig.parameters.items() if name != "self"}
         assert params == {"sql_or_path": inspect.Parameter.empty}
 
 
@@ -262,7 +263,7 @@ class TestMethodSignatures:
 class TestConfigOnlyContract:
     """Verify which methods are guarded and which work in config_only mode."""
 
-    def _make_config_only(self, tmp_path: Path):
+    def _make_config_only(self, tmp_path: Path) -> object:
         from dbport import DBPort
 
         return DBPort(
@@ -273,15 +274,19 @@ class TestConfigOnlyContract:
             config_only=True,
         )
 
-    @pytest.mark.parametrize("method", [
-        "schema",
-        "load",
-        "execute",
-        "configure_input",
-        "run",
-        "publish",
-    ])
-    def test_guarded_methods_raise_runtime_error(self, tmp_path: Path, method: str):
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "schema",
+            "load",
+            "execute",
+            "configure_input",
+            "run",
+            "publish",
+        ],
+    )
+    def test_guarded_methods_raise_runtime_error(self, tmp_path: Path, method: str) -> None:
+        """Guarded methods raise runtime error."""
         client = self._make_config_only(tmp_path)
         with pytest.raises(RuntimeError, match="config_only"):
             # All guarded methods need at least one arg
@@ -297,21 +302,25 @@ class TestConfigOnlyContract:
                 getattr(client, method)()
         client.close()
 
-    def test_columns_meta_works_in_config_only(self, tmp_path: Path):
+    def test_columns_meta_works_in_config_only(self, tmp_path: Path) -> None:
+        """Columns meta works in config only."""
         client = self._make_config_only(tmp_path)
         client.columns.geo.meta(codelist_id="GEO")
         client.close()
 
-    def test_columns_attach_works_in_config_only(self, tmp_path: Path):
+    def test_columns_attach_works_in_config_only(self, tmp_path: Path) -> None:
+        """Columns attach works in config only."""
         client = self._make_config_only(tmp_path)
         client.columns.geo.attach(table="test.cl_geo")
         client.close()
 
-    def test_close_works_in_config_only(self, tmp_path: Path):
+    def test_close_works_in_config_only(self, tmp_path: Path) -> None:
+        """Close works in config only."""
         client = self._make_config_only(tmp_path)
         client.close()  # should not raise
 
-    def test_context_manager_works_in_config_only(self, tmp_path: Path):
+    def test_context_manager_works_in_config_only(self, tmp_path: Path) -> None:
+        """Context manager works in config only."""
         from dbport import DBPort
 
         with DBPort(
@@ -323,14 +332,16 @@ class TestConfigOnlyContract:
         ) as port:
             assert port is not None
 
-    def test_run_hook_works_in_config_only(self, tmp_path: Path):
+    def test_run_hook_works_in_config_only(self, tmp_path: Path) -> None:
+        """Run hook works in config only."""
         client = self._make_config_only(tmp_path)
         # run_hook is a property that reads from lock — should work
         hook = client.run_hook
         assert hook is None or isinstance(hook, str)
         client.close()
 
-    def test_no_data_dir_created(self, tmp_path: Path):
+    def test_no_data_dir_created(self, tmp_path: Path) -> None:
+        """No data dir created."""
         data_dir = tmp_path / "data"
         self._make_config_only(tmp_path)
         # duckdb_path is tmp_path/test.duckdb (not in data/), check data/ not created
@@ -343,7 +354,9 @@ class TestConfigOnlyContract:
 
 
 class TestReturnTypes:
-    def _make_full_client(self, tmp_path: Path):
+    """Tests for Return Types."""
+
+    def _make_full_client(self, tmp_path: Path) -> object:
         import os
 
         from dbport import DBPort
@@ -361,7 +374,8 @@ class TestReturnTypes:
                 duckdb_path=str(tmp_path / "test.duckdb"),
             )
 
-    def test_load_returns_ingest_record(self, tmp_path: Path):
+    def test_load_returns_ingest_record(self, tmp_path: Path) -> None:
+        """Load returns ingest record."""
         from dbport.domain.entities.input import IngestRecord
 
         client = self._make_full_client(tmp_path)
@@ -376,7 +390,8 @@ class TestReturnTypes:
         assert isinstance(result, IngestRecord)
         client.close()
 
-    def test_configure_input_returns_ingest_record(self, tmp_path: Path):
+    def test_configure_input_returns_ingest_record(self, tmp_path: Path) -> None:
+        """Configure input returns ingest record."""
         from dbport.domain.entities.input import IngestRecord
 
         client = self._make_full_client(tmp_path)
@@ -398,7 +413,9 @@ class TestReturnTypes:
 
 
 class TestInitBehavior:
-    def test_full_mode_calls_sync_phases(self, tmp_path: Path):
+    """Tests for Init Behavior."""
+
+    def test_full_mode_calls_sync_phases(self, tmp_path: Path) -> None:
         """Full-mode init calls all four sync phases."""
         import os
 
@@ -429,7 +446,7 @@ class TestInitBehavior:
         mock_load.assert_called_once()
         client.close()
 
-    def test_load_inputs_on_init_false_skips_input_loading(self, tmp_path: Path):
+    def test_load_inputs_on_init_false_skips_input_loading(self, tmp_path: Path) -> None:
         """load_inputs_on_init=False skips the input reload phase."""
         import os
 
@@ -458,7 +475,7 @@ class TestInitBehavior:
         mock_load.assert_not_called()
         client.close()
 
-    def test_config_only_skips_all_sync(self, tmp_path: Path):
+    def test_config_only_skips_all_sync(self, tmp_path: Path) -> None:
         """config_only=True skips all sync phases and adapter creation."""
         from dbport import DBPort
 
@@ -482,7 +499,7 @@ class TestInitBehavior:
         mock_load.assert_not_called()
         client.close()
 
-    def test_sync_errors_do_not_fail_init(self, tmp_path: Path):
+    def test_sync_errors_do_not_fail_init(self, tmp_path: Path) -> None:
         """Errors in sync phases are swallowed; init completes."""
         import os
 
@@ -495,9 +512,7 @@ class TestInitBehavior:
         }
         with patch.dict(os.environ, creds):
             with (
-                patch.object(
-                    DBPort, "_auto_detect_schema", side_effect=RuntimeError("boom")
-                ),
+                patch.object(DBPort, "_auto_detect_schema", side_effect=RuntimeError("boom")),
                 patch.object(DBPort, "_sync_output_state"),
                 patch.object(DBPort, "_update_last_fetched"),
                 patch.object(DBPort, "_load_inputs"),

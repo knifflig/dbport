@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    import duckdb
+    import pyarrow as pa
 
 
 @runtime_checkable
@@ -12,7 +16,7 @@ class ICompute(Protocol):
     Secondary adapter: adapters/secondary/compute/duckdb.py
     """
 
-    def execute(self, sql: str, parameters: list[Any] | None = None) -> Any:
+    def execute(self, sql: str, parameters: list[object] | None = None) -> duckdb.DuckDBPyRelation:
         """Execute a SQL statement, returning a relation/result."""
         ...
 
@@ -24,11 +28,11 @@ class ICompute(Protocol):
         """Return True if schema.table exists in DuckDB."""
         ...
 
-    def to_arrow_batches(self, sql: str, batch_size: int = 10_000) -> Any:
+    def to_arrow_batches(self, sql: str, batch_size: int = 10_000) -> pa.RecordBatchReader:
         """Stream the result of a SELECT as PyArrow RecordBatch chunks."""
         ...
 
-    def register_arrow(self, view_name: str, arrow_object: Any) -> None:
+    def register_arrow(self, view_name: str, arrow_object: pa.Table | pa.RecordBatchReader) -> None:
         """Register an Arrow object (Table, RecordBatchReader, …) as a DuckDB view."""
         ...
 

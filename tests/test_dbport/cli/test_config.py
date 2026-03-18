@@ -29,7 +29,10 @@ def _write_lock(repo: Path, content: str) -> Path:
 
 
 class TestConfigDefaultShow:
-    def test_show_when_no_lock_file(self, tmp_path: Path):
+    """Tests for TestConfigDefaultShow."""
+
+    def test_show_when_no_lock_file(self, tmp_path: Path) -> None:
+        """Test Show when no lock file."""
         repo = _setup_repo(tmp_path)
         result = runner.invoke(
             app,
@@ -44,7 +47,8 @@ class TestConfigDefaultShow:
         assert result.exit_code == 0
         assert "No default model" in result.output
 
-    def test_show_when_no_default_set(self, tmp_path: Path):
+    def test_show_when_no_default_set(self, tmp_path: Path) -> None:
+        """Test Show when no default set."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
         result = runner.invoke(
@@ -60,7 +64,8 @@ class TestConfigDefaultShow:
         assert result.exit_code == 0
         assert "No default model" in result.output
 
-    def test_show_current_default(self, tmp_path: Path):
+    def test_show_current_default(self, tmp_path: Path) -> None:
+        """Test Show current default."""
         repo = _setup_repo(tmp_path)
         _write_lock(
             repo, ('default_model = "a.x"\n\n[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
@@ -78,7 +83,8 @@ class TestConfigDefaultShow:
         assert result.exit_code == 0
         assert "a.x" in result.output
 
-    def test_show_json_output(self, tmp_path: Path):
+    def test_show_json_output(self, tmp_path: Path) -> None:
+        """Test Show json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(
             repo, ('default_model = "a.x"\n\n[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
@@ -99,7 +105,8 @@ class TestConfigDefaultShow:
         assert data["ok"] is True
         assert data["data"]["default_model"] == "a.x"
 
-    def test_show_json_output_no_default(self, tmp_path: Path):
+    def test_show_json_output_no_default(self, tmp_path: Path) -> None:
+        """Test Show json output no default."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
         result = runner.invoke(
@@ -119,7 +126,10 @@ class TestConfigDefaultShow:
 
 
 class TestConfigDefaultSet:
-    def test_set_valid_model(self, tmp_path: Path):
+    """Tests for TestConfigDefaultSet."""
+
+    def test_set_valid_model(self, tmp_path: Path) -> None:
+        """Test Set valid model."""
         repo = _setup_repo(tmp_path)
         _write_lock(
             repo,
@@ -146,7 +156,8 @@ class TestConfigDefaultSet:
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["default_model"] == "b.y"
 
-    def test_set_invalid_model_errors(self, tmp_path: Path):
+    def test_set_invalid_model_errors(self, tmp_path: Path) -> None:
+        """Test Set invalid model errors."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
         result = runner.invoke(
@@ -163,7 +174,8 @@ class TestConfigDefaultSet:
         assert result.exit_code != 0
         assert "not found" in result.output
 
-    def test_set_json_output(self, tmp_path: Path):
+    def test_set_json_output(self, tmp_path: Path) -> None:
+        """Test Set json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         result = runner.invoke(
@@ -183,7 +195,7 @@ class TestConfigDefaultSet:
         assert data["ok"] is True
         assert data["data"]["default_model"] == "a.x"
 
-    def test_set_preserves_models(self, tmp_path: Path):
+    def test_set_preserves_models(self, tmp_path: Path) -> None:
         """Setting default_model must not lose any model data."""
         repo = _setup_repo(tmp_path)
         _write_lock(
@@ -214,7 +226,9 @@ class TestConfigDefaultSet:
 
 
 class TestConfigFolder:
-    def test_show_default_folder(self, tmp_path: Path):
+    """Tests for TestConfigFolder."""
+
+    def test_show_default_folder(self, tmp_path: Path) -> None:
         """Without any setting, models_folder defaults to 'models'."""
         repo = _setup_repo(tmp_path)
         result = runner.invoke(
@@ -230,7 +244,8 @@ class TestConfigFolder:
         assert result.exit_code == 0
         assert "models" in result.output
 
-    def test_show_custom_folder(self, tmp_path: Path):
+    def test_show_custom_folder(self, tmp_path: Path) -> None:
+        """Test Show custom folder."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, 'models_folder = "examples"\n')
         result = runner.invoke(
@@ -246,7 +261,8 @@ class TestConfigFolder:
         assert result.exit_code == 0
         assert "examples" in result.output
 
-    def test_set_folder(self, tmp_path: Path):
+    def test_set_folder(self, tmp_path: Path) -> None:
+        """Test Set folder."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         result = runner.invoke(
@@ -265,7 +281,8 @@ class TestConfigFolder:
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["models_folder"] == "examples"
 
-    def test_set_folder_strips_slashes(self, tmp_path: Path):
+    def test_set_folder_strips_slashes(self, tmp_path: Path) -> None:
+        """Test Set folder strips slashes."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, "")
         result = runner.invoke(
@@ -283,7 +300,8 @@ class TestConfigFolder:
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["models_folder"] == "examples"
 
-    def test_show_json_output(self, tmp_path: Path):
+    def test_show_json_output(self, tmp_path: Path) -> None:
+        """Test Show json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, 'models_folder = "src/models"\n')
         result = runner.invoke(
@@ -302,7 +320,8 @@ class TestConfigFolder:
         assert data["ok"] is True
         assert data["data"]["models_folder"] == "src/models"
 
-    def test_set_json_output(self, tmp_path: Path):
+    def test_set_json_output(self, tmp_path: Path) -> None:
+        """Test Set json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, "")
         result = runner.invoke(
@@ -322,7 +341,7 @@ class TestConfigFolder:
         assert data["ok"] is True
         assert data["data"]["models_folder"] == "custom"
 
-    def test_set_preserves_models(self, tmp_path: Path):
+    def test_set_preserves_models(self, tmp_path: Path) -> None:
         """Setting models_folder must not lose any model data."""
         repo = _setup_repo(tmp_path)
         _write_lock(
@@ -354,6 +373,8 @@ class TestConfigFolder:
 
 
 class TestConfigRunHook:
+    """Tests for TestConfigRunHook."""
+
     _LOCK_WITH_HOOK = (
         'default_model = "a.x"\n\n'
         '[models."a.x"]\n'
@@ -373,7 +394,8 @@ class TestConfigRunHook:
         'duckdb_path = "data/x.duckdb"\n'
     )
 
-    def test_show_current_hook(self, tmp_path: Path):
+    def test_show_current_hook(self, tmp_path: Path) -> None:
+        """Test Show current hook."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, self._LOCK_WITH_HOOK)
         result = runner.invoke(
@@ -389,7 +411,8 @@ class TestConfigRunHook:
         assert result.exit_code == 0
         assert "sql/main.sql" in result.output
 
-    def test_show_no_hook_set(self, tmp_path: Path):
+    def test_show_no_hook_set(self, tmp_path: Path) -> None:
+        """Test Show no hook set."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, self._LOCK_NO_HOOK)
         result = runner.invoke(
@@ -405,7 +428,8 @@ class TestConfigRunHook:
         assert result.exit_code == 0
         assert "main.py" in result.output
 
-    def test_show_json_output(self, tmp_path: Path):
+    def test_show_json_output(self, tmp_path: Path) -> None:
+        """Test Show json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, self._LOCK_WITH_HOOK)
         result = runner.invoke(
@@ -424,7 +448,8 @@ class TestConfigRunHook:
         assert data["data"]["run_hook"] == "sql/main.sql"
         assert data["data"]["model"] == "a.x"
 
-    def test_show_json_output_uses_main_py_default(self, tmp_path: Path):
+    def test_show_json_output_uses_main_py_default(self, tmp_path: Path) -> None:
+        """Test Show json output uses main py default."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, self._LOCK_NO_HOOK)
         result = runner.invoke(
@@ -442,7 +467,8 @@ class TestConfigRunHook:
         data = json.loads(result.output)
         assert data["data"]["run_hook"] == "main.py"
 
-    def test_set_hook(self, tmp_path: Path):
+    def test_set_hook(self, tmp_path: Path) -> None:
+        """Test Set hook."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, self._LOCK_NO_HOOK)
         result = runner.invoke(
@@ -463,7 +489,8 @@ class TestConfigRunHook:
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["models"]["a.x"]["run_hook"] == "sql/transform.sql"
 
-    def test_set_hook_json_output(self, tmp_path: Path):
+    def test_set_hook_json_output(self, tmp_path: Path) -> None:
+        """Test Set hook json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, self._LOCK_NO_HOOK)
         result = runner.invoke(
@@ -482,7 +509,7 @@ class TestConfigRunHook:
         data = json.loads(result.output)
         assert data["data"]["run_hook"] == "run.py"
 
-    def test_set_hook_normalizes_path(self, tmp_path: Path):
+    def test_set_hook_normalizes_path(self, tmp_path: Path) -> None:
         """Hook path relative to CWD is normalized relative to model_root."""
         import os
 
@@ -562,7 +589,10 @@ _LOCK_NO_SCHEMA = (
 
 
 class TestConfigColumns:
-    def test_show_columns_with_schema(self, tmp_path: Path):
+    """Tests for TestConfigColumns."""
+
+    def test_show_columns_with_schema(self, tmp_path: Path) -> None:
+        """Test Show columns with schema."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -581,7 +611,8 @@ class TestConfigColumns:
         assert "year" in result.output
         assert "value" in result.output
 
-    def test_show_no_columns(self, tmp_path: Path):
+    def test_show_no_columns(self, tmp_path: Path) -> None:
+        """Test Show no columns."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_NO_SCHEMA)
         result = runner.invoke(
@@ -598,7 +629,8 @@ class TestConfigColumns:
         assert result.exit_code == 0
         assert "No columns defined" in result.output
 
-    def test_show_json_output(self, tmp_path: Path):
+    def test_show_json_output(self, tmp_path: Path) -> None:
+        """Test Show json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -619,7 +651,8 @@ class TestConfigColumns:
         assert "geo" in data["data"]["columns"]
         assert data["data"]["columns"]["geo"]["codelist_id"] == "geo"
 
-    def test_set_codelist_id(self, tmp_path: Path):
+    def test_set_codelist_id(self, tmp_path: Path) -> None:
+        """Test Set codelist id."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -644,7 +677,8 @@ class TestConfigColumns:
         geo = next(c for c in cols if c["column_name"] == "geo")
         assert geo["codelist_id"] == "GEO_NUTS"
 
-    def test_set_kind_and_type(self, tmp_path: Path):
+    def test_set_kind_and_type(self, tmp_path: Path) -> None:
+        """Test Set kind and type."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -671,7 +705,8 @@ class TestConfigColumns:
         assert geo["codelist_kind"] == "hierarchical"
         assert geo["codelist_type"] == "reference"
 
-    def test_set_labels(self, tmp_path: Path):
+    def test_set_labels(self, tmp_path: Path) -> None:
+        """Test Set labels."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -695,7 +730,7 @@ class TestConfigColumns:
         geo = next(c for c in cols if c["column_name"] == "geo")
         assert geo["codelist_labels"]["en"] == "Geography"
 
-    def test_set_new_column(self, tmp_path: Path):
+    def test_set_new_column(self, tmp_path: Path) -> None:
         """Setting meta on a column not in schema creates a new entry."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
@@ -716,7 +751,8 @@ class TestConfigColumns:
         )
         assert result.exit_code == 0, result.output
 
-    def test_set_json_output(self, tmp_path: Path):
+    def test_set_json_output(self, tmp_path: Path) -> None:
+        """Test Set json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -743,7 +779,10 @@ class TestConfigColumns:
 
 
 class TestConfigColumnsAttach:
-    def test_attach_table(self, tmp_path: Path):
+    """Tests for TestConfigColumnsAttach."""
+
+    def test_attach_table(self, tmp_path: Path) -> None:
+        """Test Attach table."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -767,7 +806,7 @@ class TestConfigColumnsAttach:
         geo = next(c for c in cols if c["column_name"] == "geo")
         assert geo["attach_table"] == "wifor.cl_nuts"
 
-    def test_attach_new_column(self, tmp_path: Path):
+    def test_attach_new_column(self, tmp_path: Path) -> None:
         """Attaching to a column not in schema creates a new entry."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
@@ -787,7 +826,8 @@ class TestConfigColumnsAttach:
         )
         assert result.exit_code == 0, result.output
 
-    def test_attach_json_output(self, tmp_path: Path):
+    def test_attach_json_output(self, tmp_path: Path) -> None:
+        """Test Attach json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -811,7 +851,8 @@ class TestConfigColumnsAttach:
         assert data["data"]["column"] == "geo"
         assert data["data"]["table"] == "wifor.cl_nuts"
 
-    def test_attach_requires_table_flag(self, tmp_path: Path):
+    def test_attach_requires_table_flag(self, tmp_path: Path) -> None:
+        """Test Attach requires table flag."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -831,7 +872,10 @@ class TestConfigColumnsAttach:
 
 
 class TestConfigVersion:
-    def test_version_show_none(self, tmp_path: Path):
+    """Tests for TestConfigVersion."""
+
+    def test_version_show_none(self, tmp_path: Path) -> None:
+        """Test Version show none."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -848,7 +892,8 @@ class TestConfigVersion:
         assert result.exit_code == 0
         assert "No version set" in result.output
 
-    def test_version_set(self, tmp_path: Path):
+    def test_version_set(self, tmp_path: Path) -> None:
+        """Test Version set."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -868,7 +913,8 @@ class TestConfigVersion:
         doc = tomllib.loads((repo / "dbport.lock").read_text())
         assert doc["models"]["a.x"]["version"] == "2026-03-16"
 
-    def test_version_show_existing(self, tmp_path: Path):
+    def test_version_show_existing(self, tmp_path: Path) -> None:
+        """Test Version show existing."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         # First set
@@ -899,7 +945,8 @@ class TestConfigVersion:
         assert result.exit_code == 0
         assert "2026-03-16" in result.output
 
-    def test_version_json_output(self, tmp_path: Path):
+    def test_version_json_output(self, tmp_path: Path) -> None:
+        """Test Version json output."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
@@ -920,7 +967,7 @@ class TestConfigVersion:
         assert data["ok"] is True
         assert data["data"]["version"] == "2026-03-16"
 
-    def test_version_show_json_output(self, tmp_path: Path):
+    def test_version_show_json_output(self, tmp_path: Path) -> None:
         """Cover JSON output for version show (line 376)."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
@@ -960,7 +1007,7 @@ class TestConfigVersion:
 class TestGetSelectedModelKeyParentTraversal:
     """Cover _get_selected_model_key parent context traversal (lines 203-205)."""
 
-    def test_missing_model_key_raises(self, tmp_path: Path):
+    def test_missing_model_key_raises(self, tmp_path: Path) -> None:
         """When no config_model_key in any context, BadParameter is raised."""
         import click
         import typer
@@ -973,7 +1020,7 @@ class TestGetSelectedModelKeyParentTraversal:
         with pytest.raises(typer.BadParameter, match="Missing model key"):
             _get_selected_model_key(ctx)
 
-    def test_parent_traversal_finds_key(self, tmp_path: Path):
+    def test_parent_traversal_finds_key(self, tmp_path: Path) -> None:
         """_get_selected_model_key walks up to parent to find config_model_key."""
         import click
 
@@ -993,7 +1040,8 @@ class TestGetSelectedModelKeyParentTraversal:
 class TestInputShowFilterText:
     """Cover filter_text formatting in _handle_inputs_show (line 417)."""
 
-    def test_input_show_with_filters_human(self, tmp_path: Path):
+    def test_input_show_with_filters_human(self, tmp_path: Path) -> None:
+        """Test Input show with filters human."""
         repo = _setup_repo(tmp_path)
         _write_lock(
             repo,
@@ -1006,7 +1054,7 @@ class TestInputShowFilterText:
                 'duckdb_path = "data/x.duckdb"\n\n'
                 '[[models."a.x".inputs]]\n'
                 'table_address = "ns.tbl"\n'
-                'rows_loaded = 100\n\n'
+                "rows_loaded = 100\n\n"
                 '[models."a.x".inputs.filters]\n'
                 'wstatus = "EMP"\n'
             ),
@@ -1029,7 +1077,8 @@ class TestInputShowFilterText:
 class TestParseInputFiltersEmptyKey:
     """Cover empty key filter error (line 508)."""
 
-    def test_empty_key_filter_raises(self, tmp_path: Path):
+    def test_empty_key_filter_raises(self, tmp_path: Path) -> None:
+        """Test Empty key filter raises."""
         repo = _setup_repo(tmp_path)
         _write_lock(repo, _LOCK_WITH_SCHEMA)
         result = runner.invoke(
