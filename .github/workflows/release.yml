@@ -73,7 +73,7 @@ jobs:
       - name: Smoke-test installed package
         run: |
           uv venv .venv-smoke --python 3.12
-          .venv-smoke/bin/pip install dist/*.whl
+          VIRTUAL_ENV=.venv-smoke uv pip install dist/*.whl
           .venv-smoke/bin/python -c "from dbport import DBPort; print('import ok')"
           .venv-smoke/bin/dbp --version
       - name: Upload artifacts
