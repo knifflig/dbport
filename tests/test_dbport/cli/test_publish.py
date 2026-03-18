@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,12 @@ from typer.testing import CliRunner
 from dbport.cli.main import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 _PATCH_TARGET = "dbport.adapters.primary.client.DBPort"
 
@@ -77,9 +84,10 @@ class TestPublishCommand:
         """Test Publish help."""
         result = runner.invoke(app, ["model", "publish", "--help"])
         assert result.exit_code == 0
-        assert "--version" in result.output
-        assert "--dry-run" in result.output
-        assert "--refresh" in result.output
+        output = _strip_ansi(result.output)
+        assert "--version" in output
+        assert "--dry-run" in output
+        assert "--refresh" in output
 
     def test_publish_no_version_no_completed_fails(self, tmp_path: Path) -> None:
         """When no --version and no completed versions in lock, fail."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,12 @@ from typer.testing import CliRunner
 from dbport.cli.main import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 _PATCH_TARGET = "dbport.adapters.primary.client.DBPort"
 
@@ -149,8 +156,9 @@ class TestRunCommand:
         """Test Run help."""
         result = runner.invoke(app, ["model", "run", "--help"])
         assert result.exit_code == 0
-        assert "publish" in result.output.lower()
-        assert "--target" in result.output
+        output = _strip_ansi(result.output)
+        assert "publish" in output.lower()
+        assert "--target" in output
 
     def test_run_success(self, tmp_path: Path) -> None:
         """Test Run success."""

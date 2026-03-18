@@ -8,11 +8,18 @@ shifting and must be reviewed deliberately.
 from __future__ import annotations
 
 import inspect
+import re
 
 import typer
 import typer.testing
 
 from dbport.cli.main import app
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -80,8 +87,9 @@ class TestGlobalOptions:
     def test_global_options_in_help(self) -> None:
         """Test all global options appear in help output."""
         result = runner.invoke(app, ["--help"])
+        output = _strip_ansi(result.output)
         for flag in self.EXPECTED_FLAGS:
-            assert flag in result.output, f"Missing global option: {flag}"
+            assert flag in output, f"Missing global option: {flag}"
 
 
 # ---------------------------------------------------------------------------
@@ -96,13 +104,14 @@ class TestStatusSubcommands:
         """Test status check subcommand exists."""
         result = runner.invoke(app, ["status", "check", "--help"])
         assert result.exit_code == 0
-        assert "--strict" in result.output
+        assert "--strict" in _strip_ansi(result.output)
 
     def test_status_flags(self) -> None:
         """Test status flags are present."""
         result = runner.invoke(app, ["status", "--help"])
+        output = _strip_ansi(result.output)
         for flag in ("--inputs", "--history", "--raw"):
-            assert flag in result.output, f"Missing status flag: {flag}"
+            assert flag in output, f"Missing status flag: {flag}"
 
 
 # ---------------------------------------------------------------------------
@@ -131,26 +140,29 @@ class TestModelSubcommands:
         """Test model load flags are present."""
         result = runner.invoke(app, ["model", "load", "--help"])
         assert result.exit_code == 0
-        assert "--update" in result.output
+        assert "--update" in _strip_ansi(result.output)
 
     def test_model_exec_flags(self) -> None:
         """Test model exec flags are present."""
         result = runner.invoke(app, ["model", "exec", "--help"])
         assert result.exit_code == 0
+        output = _strip_ansi(result.output)
         for flag in ("--target", "--timing"):
-            assert flag in result.output, f"Missing exec flag: {flag}"
+            assert flag in output, f"Missing exec flag: {flag}"
 
     def test_model_publish_flags(self) -> None:
         """Test model publish flags are present."""
         result = runner.invoke(app, ["model", "publish", "--help"])
         assert result.exit_code == 0
+        output = _strip_ansi(result.output)
         for flag in ("--version", "--dry-run", "--refresh", "--message"):
-            assert flag in result.output, f"Missing publish flag: {flag}"
+            assert flag in output, f"Missing publish flag: {flag}"
 
     def test_model_run_flags(self) -> None:
         """Test model run flags are present."""
         result = runner.invoke(app, ["model", "run", "--help"])
         assert result.exit_code == 0
+        output = _strip_ansi(result.output)
         for flag in (
             "--version",
             "--target",
@@ -158,7 +170,7 @@ class TestModelSubcommands:
             "--dry-run",
             "--refresh",
         ):
-            assert flag in result.output, f"Missing run flag: {flag}"
+            assert flag in output, f"Missing run flag: {flag}"
 
 
 # ---------------------------------------------------------------------------
@@ -212,8 +224,9 @@ class TestInitFlags:
         """Test init flags are present."""
         result = runner.invoke(app, ["init", "--help"])
         assert result.exit_code == 0
+        output = _strip_ansi(result.output)
         for flag in ("--template", "--dataset", "--agency", "--path", "--force"):
-            assert flag in result.output, f"Missing init flag: {flag}"
+            assert flag in output, f"Missing init flag: {flag}"
 
 
 # ---------------------------------------------------------------------------
