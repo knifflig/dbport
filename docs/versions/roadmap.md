@@ -19,7 +19,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.7 | Execution model and conceptual docs depth | Done |
 | 0.0.8 | Zensical navigation model and brand alignment | Done |
 | 0.0.9 | Homepage UX and publication-facing polish | Done |
-| 0.1.0 | First public release (PyPI + GitHub Pages) | Planned |
+| 0.1.0 | First public release (PyPI + GitHub Pages) | Done |
 
 ---
 
@@ -77,10 +77,10 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.1.0 — First public release
 
-- Publish the package to PyPI
-- Publish the docs to GitHub Pages
-- Tie release publishing, docs versioning, and changelog into one release checklist
-- Make credential resolution deterministic across environments
-- Verify the built package artifact before publishing
-- Make CI enforce the declared quality bar
-- Promote runnable examples to release-gated smoke tests
+- ~~Publish the package to PyPI~~
+- ~~Publish the docs to GitHub Pages~~
+- ~~Tie release publishing, docs versioning, and changelog into one release checklist~~
+- ~~Make credential resolution deterministic across environments~~
+- ~~Verify the built package artifact before publishing~~
+- ~~Make CI enforce the declared quality bar~~
+- ~~Promote runnable examples to release-gated smoke tests~~

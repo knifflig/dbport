@@ -84,20 +84,17 @@ def check_cmd(
                     {"name": "credentials", "status": "pass", "detail": "all required vars set"}
                 )
         except Exception:
-            # Pydantic validation error when env vars are missing
-            import os
-
-            missing = []
-            for var in ("ICEBERG_REST_URI", "ICEBERG_CATALOG_TOKEN", "ICEBERG_WAREHOUSE"):
-                if not os.environ.get(var):
-                    missing.append(var)
+            # WarehouseCreds validation failed — required fields not resolvable
+            # from any source (kwargs, .env file, or environment variables).
             checks.append(
                 {
                     "name": "credentials",
                     "status": "warn",
-                    "detail": f"missing env vars: {', '.join(missing)}"
-                    if missing
-                    else "validation failed",
+                    "detail": (
+                        "not configured"
+                        " (set ICEBERG_REST_URI, ICEBERG_CATALOG_TOKEN,"
+                        " ICEBERG_WAREHOUSE via .env or environment)"
+                    ),
                 }
             )
 

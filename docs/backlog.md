@@ -650,127 +650,30 @@ Status: `done`
 
 Theme: first public release with publishing to PyPI and GitHub Pages.
 
-### DBP-REL-001 - Publish the package to PyPI as part of the 0.1.0 release workflow
+Status: `done`
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - packaging/release workflow
-  - `pyproject.toml`
-  - release documentation
-- Required changes:
-  - Define the PyPI publishing workflow for the package
-  - Make sure the package version used for release matches `pyproject.toml`
-  - Build and smoke-test the distributable artifact as part of the same release path, not as an afterthought
-  - Document the release steps needed for the first public package release
-- Acceptance criteria:
-  - Version `0.1.0` can be published to PyPI through a documented, repeatable process
+### What was implemented
 
-### DBP-REL-002 - Publish the docs to GitHub Pages as part of the 0.1.0 release workflow
+- **PyPI publishing workflow** — new `.github/workflows/release.yml` triggered on version tags (`v*`); validates tag matches `pyproject.toml`, runs full test suite, builds sdist and wheel, smoke-tests the installed package (`from dbport import DBPort` + `dbp --version`), and publishes to PyPI via trusted publishing (OIDC)
+- **CI coverage enforcement** — test job now runs `pytest --cov --cov-report=term-missing`, gating on the `fail_under = 95` threshold declared in `pyproject.toml`
+- **Package artifact verification in CI** — new `package` job builds the distributable, installs it in a clean venv, and smoke-tests the shipped entry points
+- **Example smoke tests in CI** — new `examples` job validates Python example syntax (`py_compile`), CLI example syntax (`bash -n`), and all `dbp` help commands
+- **Deterministic credential resolution** — added `autouse` fixture to credential tests clearing all credential env vars and escaping the repo-root `.env` file; removed manual `os.environ` fallback from `dbp status check`
+- **Comprehensive release checklist** — expanded `docs/versions/release-versioning.md` with pre-release, build verification, publish, and post-release verification steps
+- **Version bumped to `0.1.0`** — updated `pyproject.toml` version and classifier (`3 - Alpha`)
+- **Changelog and roadmap updated** — 0.1.0 entry added to changelog; roadmap marks all items as done
 
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `.github/workflows/docs.yml`
-  - GitHub Pages deployment configuration
-  - release documentation
-- Required changes:
-  - Make the GitHub Pages publishing workflow reliable for the first public release
-  - Ensure the deployed docs expose `latest` and version-specific paths
-  - Ensure the changelog is included in the published site
-- Relevant Zensical docs:
-  - [Basics](https://zensical.org/docs/setup/basics/)
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-  - [Offline usage](https://zensical.org/docs/setup/offline/)
-- Acceptance criteria:
-  - Version `0.1.0` docs are published to GitHub Pages with working version navigation
+### Items delivered
 
-### DBP-REL-003 - Tie release publishing, docs versioning, and changelog updates into one release checklist
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - release/versioning docs
-  - changelog workflow
-  - package/docs publishing workflow
-- Required changes:
-  - Define one release checklist covering:
-    - package version update
-    - changelog entry
-    - PyPI publication
-    - GitHub Pages publication
-    - `latest` update
-  - Ensure the first public release path is documented around `0.1.0`
-- Acceptance criteria:
-  - The first public release can be executed from one coherent release process
-
-### DBP-QA-001 - Make credential resolution and release checks deterministic across environments
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `src/dbport/infrastructure/credentials.py`
-  - `src/dbport/cli/commands/check.py`
-  - `tests/test_dbport/infrastructure/test_credentials.py`
-  - `tests/test_dbport/cli/test_check.py`
-- Required changes:
-  - Define and document the exact precedence between constructor kwargs, project `.env`, and shell environment variables
-  - Fix the currently observed ambient-credential leakage in tests and `dbp status check`
-  - Remove ambient maintainer credentials from influencing tests and `dbp status check` behavior unexpectedly
-  - Make the credential test suite pass reliably even when a real `.env` file or real environment variables are present
-  - Ensure release verification does not silently depend on workstation-specific secrets
-- Acceptance criteria:
-  - Credential behavior is deterministic in local development, CI, and release verification
-  - The credential-related test suite passes without requiring a clean shell session
-
-### DBP-QA-002 - Verify the built package artifact before publishing 0.1.0
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `pyproject.toml`
-  - packaging/release workflow
-  - package smoke-test commands
-- Required changes:
-  - Build both sdist and wheel as part of the release path
-  - Install the built artifact in a clean environment before publishing to PyPI
-  - Smoke-test the shipped entry points from the built artifact, including `from dbport import DBPort` and `dbp --version`
-  - Fail the release workflow if the packaged artifact differs materially from editable/development behavior
-- Acceptance criteria:
-  - The exact artifact intended for PyPI is built, installable, and minimally exercised before publication
-
-### DBP-QA-003 - Make CI enforce the declared quality bar for the first public release
-
-- Priority: `P0`
-- Status: `todo`
-- Files:
-  - `.github/workflows/ci.yml`
-  - `pyproject.toml`
-  - release verification notes
-- Required changes:
-  - Make CI run the same coverage gate that is declared in `pyproject.toml`
-  - Add explicit build verification for the package, not only source-tree tests
-  - Record which operating systems and Python versions are officially verified for `0.1.0`
-  - Ensure the release checklist references these CI gates as mandatory, not optional
-- Acceptance criteria:
-  - CI reflects the actual release bar for `0.1.0` and fails when coverage or packaging checks regress
-
-### DBP-QA-004 - Promote runnable examples to release-gated smoke tests
-
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - `examples/minimal/main.py`
-  - `examples/minimal_cli/run.sh`
-  - `.github/workflows/ci.yml`
-  - example-oriented docs pages
-- Required changes:
-  - Treat the shipped Python and CLI examples as compatibility assets, not illustrative prose only
-  - Add smoke verification so example commands stay aligned with the actual CLI and Python API
-  - Prevent example drift between docs, README snippets, and the implemented command surface
-  - Decide which example checks run in normal CI and which run only in release verification
-- Acceptance criteria:
-  - The examples shipped for `0.1.0` are intentionally maintained and verified against the package behavior
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-REL-001 | `P0` | PyPI publishing workflow with tag validation, artifact build, and trusted publishing |
+| DBP-REL-002 | `P0` | GitHub Pages workflow verified; handles 0.1.0 via existing tag-triggered deployment |
+| DBP-REL-003 | `P0` | Unified release checklist with pre-release, build, publish, and verification steps |
+| DBP-QA-001 | `P0` | Credential tests isolated from ambient environment; check command simplified |
+| DBP-QA-002 | `P0` | Package artifact built, installed, and smoke-tested in CI and release workflow |
+| DBP-QA-003 | `P0` | CI enforces 95% coverage gate; package build and example checks added |
+| DBP-QA-004 | `P1` | Python and CLI examples validated as release-gated smoke tests in CI |
 
 ---
 

@@ -88,8 +88,35 @@ Enforcement:
 
 ## Release checklist (per version)
 
+### Pre-release
+
 1. Update `version` in `pyproject.toml`
-2. Add a changelog entry in `docs/changelog.md`
-3. Update `docs/roadmap.md` status
-4. Tag the commit as `v{version}`
-5. Push the tag to trigger the docs deployment workflow
+2. Update `Development Status` classifier if needed (e.g., `3 - Alpha` for `0.1.0`)
+3. Add a changelog entry in `docs/versions/changelog.md`
+4. Update `docs/versions/roadmap.md` status
+5. Update `docs/backlog.md` — mark work package items as `done`
+6. Commit all changes to `main`
+
+### Build verification
+
+7. Run the full test suite: `uv run pytest --cov --cov-report=term-missing`
+8. Verify docs build: `uv run zensical build --clean`
+9. Build the package: `uv build`
+10. Smoke-test the built artifact in a clean venv:
+    - `pip install dist/*.whl`
+    - `python -c "from dbport import DBPort"`
+    - `dbp --version`
+
+### Publish
+
+11. Tag the commit as `v{version}` (e.g., `git tag v0.1.0`)
+12. Push the tag: `git push origin v{version}`
+13. The tag push triggers:
+    - **Release workflow** (`release.yml`) — builds, tests, and publishes to PyPI via trusted publishing (OIDC)
+    - **Docs workflow** (`docs.yml`) — builds and deploys versioned docs to GitHub Pages
+
+### Post-release verification
+
+14. Verify the package on [PyPI](https://pypi.org/project/dbport/)
+15. Verify the docs at [GitHub Pages](https://knifflig.github.io/dbport/)
+16. Verify `pip install dbport` works in a clean environment

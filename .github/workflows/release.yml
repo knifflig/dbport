@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write  # Required for trusted publishing (OIDC)
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pkg_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from pyproject.toml
+        id: pkg_version
+        run: |
+          PKG_VERSION=$(python3 -c "
+          import re, pathlib
+          text = pathlib.Path('pyproject.toml').read_text()
+          m = re.search(r'^version\s*=\s*\"([^\"]+)\"', text, re.MULTILINE)
+          print(m.group(1))
+          ")
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag matches pyproject.toml version
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+          PKG_VERSION: ${{ steps.pkg_version.outputs.version }}
+        run: |
+          EXPECTED="v${PKG_VERSION}"
+          if [ "$TAG_VERSION" != "$EXPECTED" ]; then
+            echo "::error::Tag '${TAG_VERSION}' does not match pyproject.toml version '${PKG_VERSION}' (expected tag '${EXPECTED}')"
+            exit 1
+          fi
+          echo "Version validated: ${PKG_VERSION}"
+
+  test:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: uv sync
+      - name: Lint
+        run: uv run ruff check src/ tests/
+      - name: Test with coverage
+        run: uv run pytest --cov --cov-report=term-missing --tb=short -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Smoke-test installed package
+        run: |
+          uv venv .venv-smoke --python 3.12
+          .venv-smoke/bin/pip install dist/*.whl
+          .venv-smoke/bin/python -c "from dbport import DBPort; print('import ok')"
+          .venv-smoke/bin/dbp --version
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # Trusted publishing (OIDC)
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
