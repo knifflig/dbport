@@ -1,6 +1,7 @@
 name: Docs
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -12,9 +13,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
         run: uv python install 3.12
@@ -34,6 +35,7 @@ jobs:
           echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Validate tag matches pyproject.toml version
+        if: github.event_name == 'push'
         env:
           TAG_VERSION: ${{ github.ref_name }}
           PKG_VERSION: ${{ steps.pkg_version.outputs.version }}
@@ -51,6 +53,7 @@ jobs:
       - name: Deploy versioned docs to gh-pages
         env:
           VERSION: ${{ steps.pkg_version.outputs.version }}
+          PREVIEW_PATH: preview/${{ github.ref_name }}-${{ github.sha }}
         run: |
           # Configure git for the bot
           git config user.name "github-actions[bot]"
@@ -71,21 +74,29 @@ jobs:
             git commit --allow-empty -m "Initialize gh-pages"
           fi
 
-          # Deploy to versioned subdirectory
-          rm -rf "$VERSION"
-          mkdir -p "$VERSION"
-          cp -r "$BUILT_SITE"/* "$VERSION/"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Preview deploys go to an isolated path and do not touch latest/versioned release docs.
+            rm -rf "$PREVIEW_PATH"
+            mkdir -p "$PREVIEW_PATH"
+            cp -r "$BUILT_SITE"/* "$PREVIEW_PATH/"
+            printf 'Preview docs available at /%s/\n' "$PREVIEW_PATH"
+          else
+            # Deploy to versioned subdirectory
+            rm -rf "$VERSION"
+            mkdir -p "$VERSION"
+            cp -r "$BUILT_SITE"/* "$VERSION/"
 
-          # Update "latest" alias (full copy, not symlink — GitHub Pages doesn't support symlinks)
-          rm -rf latest
-          mkdir -p latest
-          cp -r "$BUILT_SITE"/* latest/
+            # Update "latest" alias (full copy, not symlink — GitHub Pages doesn't support symlinks)
+            rm -rf latest
+            mkdir -p latest
+            cp -r "$BUILT_SITE"/* latest/
 
-          # Update versions.json (script saved before branch switch)
-          python3 "$VERSIONS_SCRIPT" "$VERSION"
+            # Update versions.json (script saved before branch switch)
+            python3 "$VERSIONS_SCRIPT" "$VERSION"
 
-          # Create root index.html redirect to latest
-          printf '<!DOCTYPE html>\n<html>\n  <head><meta http-equiv="refresh" content="0; url=latest/"></head>\n  <body><a href="latest/">Redirecting to latest docs...</a></body>\n</html>\n' > index.html
+            # Create root index.html redirect to latest
+            printf '<!DOCTYPE html>\n<html>\n  <head><meta http-equiv="refresh" content="0; url=latest/"></head>\n  <body><a href="latest/">Redirecting to latest docs...</a></body>\n</html>\n' > index.html
+          fi
 
           # Ensure .nojekyll exists (GitHub Pages)
           touch .nojekyll
