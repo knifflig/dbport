@@ -6,6 +6,23 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.9 — 2026-03-18
+
+Homepage UX and publication-facing docs polish.
+
+### Changed
+
+- **Homepage redesigned** — expanded from 4 to 6 cards aligned to the docs information architecture (Getting Started, Concepts, CLI Reference, Python API, Examples, Changelog); cards use documentation-first descriptions instead of marketing copy
+- **Homepage content trimmed** — removed the "Key features" section; the card grid and quick example now serve as the sole entry points; hero text shortened to a single sentence
+- **Quick example uses content tabs** — CLI and Python examples are now presented in `=== "CLI"` / `=== "Python"` tabs instead of sequential blocks
+- **Homepage TOC kept hidden** — confirmed `hide: toc` is the correct choice for a card-grid landing page (no long-form headings to navigate)
+
+### Improved
+
+- **Lock file page uses Zensical teaching patterns** — added code annotations (`(1)!` syntax) to the annotated TOML example with inline explanations for each section; replaced plain-text correctness warnings with `!!! warning` admonition; replaced merge conflict resolution list with `!!! tip` admonition; improved visual scanability without custom hacks
+
+---
+
 ## 0.0.8 — 2026-03-17
 
 Zensical navigation model and brand alignment.

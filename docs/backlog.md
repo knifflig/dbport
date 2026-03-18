@@ -550,10 +550,12 @@ Status: `done`
 
 Theme: homepage UX and publication-facing docs polish.
 
+Status: `done`
+
 ### DBP-ZEN-010 - Apply stronger Zensical teaching patterns to core concept pages
 
 - Priority: `P2`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/concepts/lock-file.md`
   - other concept pages as needed
@@ -575,7 +577,7 @@ Theme: homepage UX and publication-facing docs polish.
 ### DBP-UI-001 - Redesign the homepage card grid to fit clean rows
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/index.md`
 - Required changes:
@@ -590,7 +592,7 @@ Theme: homepage UX and publication-facing docs polish.
 ### DBP-UI-002 - Improve card interaction without unsupported hacks
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/index.md`
 - Required changes:
@@ -606,7 +608,7 @@ Theme: homepage UX and publication-facing docs polish.
 ### DBP-UI-003 - Make the homepage more documentation-first
 
 - Priority: `P1`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/index.md`
 - Required changes:
@@ -622,7 +624,7 @@ Theme: homepage UX and publication-facing docs polish.
 ### DBP-UI-004 - Review homepage TOC behavior
 
 - Priority: `P2`
-- Status: `todo`
+- Status: `done`
 - Files:
   - `docs/index.md`
 - Required changes:
@@ -631,6 +633,16 @@ Theme: homepage UX and publication-facing docs polish.
   - [Navigation](https://zensical.org/docs/setup/navigation/)
 - Acceptance criteria:
   - Homepage sidebar behavior is intentional and consistent with the page content
+
+### Items delivered
+
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-ZEN-010 | `P2` | Lock file page enhanced with code annotations, warning admonition, and tip admonition |
+| DBP-UI-001 | `P1` | Homepage expanded from 4 to 6 cards aligned to the docs IA |
+| DBP-UI-002 | `P1` | Cards use documentation-first descriptions with clear action links |
+| DBP-UI-003 | `P1` | Marketing copy and feature list removed; homepage is now a documentation hub |
+| DBP-UI-004 | `P2` | `hide: toc` confirmed as intentional for the card-grid homepage |
 
 ---
 
