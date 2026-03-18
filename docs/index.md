@@ -5,7 +5,9 @@ hide:
 
 # DBPort
 
-**Governance and orchestration for recomputable warehouse datasets.**
+**Build locally. Publish safely.**
+
+Governance and orchestration for recomputable warehouse datasets.
 
 You build models that produce datasets — and those datasets depend on each other. When external sources update, you need to recompute downstream models in the right order, knowing exactly which input versions went into each output. As the number of models grows, keeping track of dependencies, provenance, and data quality becomes harder than the modeling itself.
 

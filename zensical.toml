@@ -69,15 +69,15 @@ features = [
 
 [[project.theme.palette]]
 scheme = "default"
-primary = "indigo"
-accent = "deep-orange"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
 [[project.theme.palette]]
 scheme = "slate"
-primary = "indigo"
-accent = "deep-orange"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
 
