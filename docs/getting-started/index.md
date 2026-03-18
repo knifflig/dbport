@@ -14,6 +14,14 @@ The default interface is the `dbp` CLI. If you're new to DBPort, work through th
 
 <div class="grid cards" markdown>
 
+-   **About**
+
+    ---
+
+    Why DBPort exists and who it's for.
+
+    [:octicons-arrow-right-24: About](about.md)
+
 -   **Installation**
 
     ---

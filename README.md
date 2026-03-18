@@ -7,7 +7,7 @@
 
 Versioned dataset recomputation on DuckDB, published to Iceberg.
 
-Analytic workloads often recompute the same large dataset every few weeks or months to produce a new version. That workflow — download inputs, run model logic, upload the result — is simple in concept but tedious to productionize: schema contracts, snapshot caching, version tracking, metadata, and safe publication all need to work every time. DBPort handles that lifecycle so you can focus on the model.
+Analytic workloads often recompute datasets on a regular cycle — whether that is a single indicator refreshed monthly or a family of interdependent models rebuilt together. The workflow is simple in concept (download inputs, run model logic, upload the result) but tedious to productionize: schema contracts, snapshot caching, version tracking, metadata, and safe publication all need to work every time. DBPort handles that lifecycle so you can focus on the model.
 
 ## Quickstart
 
@@ -42,7 +42,7 @@ with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
 
 ## Why DBPort
 
-The hard part of periodic dataset recomputation is not the model logic — it is everything around it:
+The hard part of periodic dataset recomputation is not the model logic — it is everything around it. This is especially true when you manage many interdependent datasets across an organization, where each model's inputs are another model's outputs.
 
 - **Loading inputs** — `dbp model load` pulls Iceberg tables into DuckDB with snapshot caching. Unchanged tables are skipped automatically.
 - **Schema contracts** — `dbp config model ... schema` declares the output shape. Publishing checks for schema drift before writing anything.
@@ -67,6 +67,7 @@ See the [credentials guide](https://knifflig.github.io/dbport/latest/getting-sta
 
 Full docs at **[knifflig.github.io/dbport](https://knifflig.github.io/dbport)**
 
+- [About DBPort](https://knifflig.github.io/dbport/latest/getting-started/about/) — why it exists and who it's for
 - [Getting Started](https://knifflig.github.io/dbport/latest/getting-started/) — installation, credentials, first run
 - [Concepts](https://knifflig.github.io/dbport/latest/concepts/) — inputs, outputs, metadata, lock file, hooks, versioning
 - [CLI Reference](https://knifflig.github.io/dbport/latest/api/cli/) — `dbp` command reference
