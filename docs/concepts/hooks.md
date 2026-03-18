@@ -29,12 +29,14 @@ DBPort supports hook-based execution for model logic. A hook is a Python or SQL 
 
 ## Hook resolution order
 
-When no explicit target is given, DBPort resolves the hook in this order:
+!!! note "Resolution precedence"
 
-1. **Configured hook path** — set via `dbp config default hook`
-2. **`main.py`** in the model root — auto-detected if it exists
-3. **`sql/main.sql`** in the model root — legacy fallback
-4. **Default `main.py`** — used when no model root is available; errors at execution if the file does not exist
+    When no explicit target is given, DBPort resolves the hook in this order:
+
+    1. **Configured hook path** — set via `dbp config default hook`
+    2. **`main.py`** in the model root — auto-detected if it exists
+    3. **`sql/main.sql`** in the model root — legacy fallback
+    4. **Default `main.py`** — used when no model root is available; errors at execution if the file does not exist
 
 ## Python hooks
 
@@ -107,4 +109,6 @@ These three operations are distinct and composable:
 
 ## Trust model
 
-Hook files are trusted code. They run with the same permissions as the calling script or CLI process. There is no sandboxing — the hook is your model logic, authored by the model owner. This is the same trust boundary as any other user-authored Python module.
+!!! warning "Hooks are trusted code"
+
+    Hook files run with the same permissions as the calling script or CLI process. There is no sandboxing — the hook is your model logic, authored by the model owner. This is the same trust boundary as any other user-authored Python module.

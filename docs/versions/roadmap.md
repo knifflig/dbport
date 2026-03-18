@@ -18,7 +18,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.6 | Public package surface and repository trustworthiness | Done |
 | 0.0.7 | Execution model and conceptual docs depth | Done |
 | 0.0.8 | Zensical navigation model and brand alignment | Done |
-| 0.0.9 | Homepage UX and publication-facing polish | Planned |
+| 0.0.9 | Homepage UX and publication-facing polish | Done |
 | 0.1.0 | First public release (PyPI + GitHub Pages) | Planned |
 
 ---
@@ -69,11 +69,11 @@ For completed work, see the [Changelog](changelog.md).
 
 ## 0.0.9 — Homepage UX and publication-facing polish
 
-- Apply stronger Zensical teaching patterns to core concept pages
-- Redesign the homepage card grid for balanced layout
-- Improve card interaction using supported patterns
-- Make the homepage more documentation-first
-- Review homepage TOC behavior
+- ~~Apply stronger Zensical teaching patterns to core concept pages~~
+- ~~Redesign the homepage card grid for balanced layout~~
+- ~~Improve card interaction using supported patterns~~
+- ~~Make the homepage more documentation-first~~
+- ~~Review homepage TOC behavior~~
 
 ## 0.1.0 — First public release
 

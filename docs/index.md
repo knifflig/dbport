@@ -7,43 +7,59 @@ hide:
 
 **Versioned dataset recomputation on DuckDB, published to Iceberg.**
 
-Analytic workloads often recompute the same large dataset periodically to produce a new version. DBPort handles the lifecycle around that — loading inputs, enforcing schema contracts, tracking versions, and publishing safely — so you can focus on the model.
+Load inputs, enforce schema contracts, track versions, and publish safely — so you can focus on the model.
 
 ---
 
 <div class="grid cards" markdown>
 
--   :material-console:{ .lg .middle } **CLI-driven workflow**
+-   :material-rocket-launch:{ .lg .middle } **Getting Started**
 
     ---
 
-    `dbp model run` loads inputs, executes your model, and publishes the result in one command. Configure once, recompute on demand.
+    Install DBPort, configure credentials, and run your first model in five minutes.
 
-    [:octicons-arrow-right-24: Getting started](getting-started/index.md)
+    [:octicons-arrow-right-24: Start here](getting-started/index.md)
 
--   :material-database:{ .lg .middle } **DuckDB-native execution**
-
-    ---
-
-    All data operations run through DuckDB. Tables stream in via Arrow, transforms run in SQL or Python, outputs publish to Iceberg.
-
-    [:octicons-arrow-right-24: Concepts](concepts/index.md)
-
--   :material-shield-check:{ .lg .middle } **Safe, versioned publish**
+-   :material-book-open-variant:{ .lg .middle } **Concepts**
 
     ---
 
-    Schema drift protection, version checkpoints, and resumable writes. Re-running a completed version is always a no-op.
+    How inputs, schemas, metadata, versioning, and the lock file work together.
 
-    [:octicons-arrow-right-24: CLI Reference](api/cli.md)
+    [:octicons-arrow-right-24: Read the concepts](concepts/index.md)
 
--   :material-file-document:{ .lg .middle } **Automatic metadata**
+-   :material-console:{ .lg .middle } **CLI Reference**
 
     ---
 
-    Codelists, version history, and lifecycle timestamps are managed hands-free. No manual metadata files to maintain.
+    Full command reference for `dbp init`, `dbp model`, `dbp config`, and `dbp status`.
 
-    [:octicons-arrow-right-24: Examples](examples/index.md)
+    [:octicons-arrow-right-24: See all commands](api/cli.md)
+
+-   :material-language-python:{ .lg .middle } **Python API**
+
+    ---
+
+    Constructor options, methods, and lifecycle for the `DBPort` class.
+
+    [:octicons-arrow-right-24: See the API](api/python.md)
+
+-   :material-file-code:{ .lg .middle } **Examples**
+
+    ---
+
+    End-to-end CLI and Python workflows showing load, transform, and publish.
+
+    [:octicons-arrow-right-24: View examples](examples/index.md)
+
+-   :material-history:{ .lg .middle } **Changelog**
+
+    ---
+
+    What changed in each release, from `0.0.1` through the current version.
+
+    [:octicons-arrow-right-24: View changelog](changelog.md)
 
 </div>
 
@@ -51,39 +67,29 @@ Analytic workloads often recompute the same large dataset periodically to produc
 
 ## Quick example
 
-```bash
-# Initialize a project
-dbp init regional_trends --agency wifor --dataset emp__regional_trends
-cd regional_trends
+=== "CLI"
 
-# Configure the model
-dbp config model wifor.emp__regional_trends schema sql/create_output.sql
-dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+    ```bash
+    # Initialize a project
+    dbp init regional_trends --agency wifor --dataset emp__regional_trends
+    cd regional_trends
 
-# Run the full lifecycle: load → execute → publish
-dbp model run --version 2026-03-09 --timing
-```
+    # Configure the model
+    dbp config model wifor.emp__regional_trends schema sql/create_output.sql
+    dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
 
-For programmatic control, the same workflow in Python:
+    # Run the full lifecycle: load → execute → publish
+    dbp model run --version 2026-03-09 --timing
+    ```
 
-```python
-from dbport import DBPort
+=== "Python"
 
-with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
-    port.schema("sql/create_output.sql")
-    port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
-    port.execute("sql/transform.sql")
-    port.publish(version="2026-03-09", params={"wstatus": "EMP"})
-```
+    ```python
+    from dbport import DBPort
 
----
-
-## Key features
-
-- **CLI-first** — `dbp` covers init, config, load, exec, publish, and run. One command for the full lifecycle.
-- **DuckDB-native** — ingest and publish go through the DuckDB Iceberg extension. No batch loops, no memory copies.
-- **Snapshot-cached ingest** — `dbp model load` skips unchanged tables automatically.
-- **Schema contracts** — publish checks local vs warehouse schema before writing anything.
-- **Idempotent publish** — interrupted runs resume from checkpoint. Completed versions are skipped.
-- **Automatic metadata** — timestamps, input provenance, codelists, and version history — all managed without manual files.
-- **Committable lock file** — `dbport.lock` is TOML, credential-free, and safe to commit.
+    with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
+        port.schema("sql/create_output.sql")
+        port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
+        port.execute("sql/transform.sql")
+        port.publish(version="2026-03-09", params={"wstatus": "EMP"})
+    ```

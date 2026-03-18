@@ -13,6 +13,45 @@ The lock file lives at the **repository root**, next to `pyproject.toml`. When n
 - **Multi-model** — each model gets a namespaced section under `[models."agency.dataset_id"]`
 - **Safe to commit** — belongs in version control
 
+## Annotated example
+
+``` toml
+default_model = "wifor.emp__regional_trends" # (1)!
+
+[models."wifor.emp__regional_trends"] # (2)!
+last_fetched_at = "2026-03-15T08:00:00Z"
+
+[models."wifor.emp__regional_trends".schema]
+ddl = "CREATE OR REPLACE TABLE wifor.emp__regional_trends (nuts2024 VARCHAR, year SMALLINT, value DOUBLE)" # (3)!
+
+[[models."wifor.emp__regional_trends".schema.columns]] # (4)!
+column_name  = "nuts2024"
+column_pos   = 0
+codelist_id  = "NUTS2024"
+codelist_kind = "hierarchical"
+attach_table = "wifor.cl_nuts2024"
+
+[[models."wifor.emp__regional_trends".inputs]] # (5)!
+table_address    = "estat.nama_10r_3empers"
+filters          = {wstatus = "EMP"}
+last_snapshot_id = 123456789
+rows_loaded      = 42000
+
+[[models."wifor.emp__regional_trends".versions]] # (6)!
+version      = "2026-03-09"
+published_at = "2026-03-09T14:30:00Z"
+params       = {wstatus = "EMP"}
+rows         = 1345678
+completed    = true
+```
+
+1. Which model the CLI uses when no `--model` flag is given.
+2. Each model is namespaced by `agency.dataset_id`.
+3. The exact DDL that DuckDB executes — must match the current `.sql` file.
+4. Column metadata entries. Set via `port.columns.<name>.meta()` or `dbp config model … columns`.
+5. One entry per loaded input table. `last_snapshot_id` drives the ingest cache.
+6. Append-only version history. Each `publish()` adds a new entry.
+
 ## When does the lock file change?
 
 Every mutating operation writes to disk immediately — there is no deferred flush.
@@ -84,13 +123,27 @@ Normal development produces predictable diffs. Here are the three most common pa
 +completed    = true
 ```
 
+## Fields that matter for correctness
+
+Most fields are informational, but three have behavioral consequences.
+
+!!! warning "These fields drive runtime behavior"
+
+    - **`last_snapshot_id`** — drives the ingest cache. A wrong value causes stale data or unnecessary reloads.
+    - **`completed`** on versions — drives publish idempotency. Flipping this causes skipped or duplicate publishes.
+    - **`ddl`** — must match what DuckDB actually has. Use the schema command to change it, not manual edits.
+
+    If any of these are wrong, the safest fix is to delete the lock file and re-run the full pipeline. The warehouse is always the source of truth.
+
 ## Merge conflicts
 
 The lock file is structured to minimize conflicts:
 
-- **`[[versions]]`** — append-only. Accept both sides; each publish appends a new entry.
-- **`[schema]`** — take the version that matches the current DDL in your SQL file. If both sides changed the DDL, resolve the DDL first, then re-run the schema command.
-- **`[[inputs]]`** — take the entry with the higher `last_snapshot_id`. The next load will re-check against the warehouse regardless.
+!!! tip "Resolution by section"
+
+    - **`[[versions]]`** — append-only. Accept both sides; each publish appends a new entry.
+    - **`[schema]`** — take the version that matches the current DDL in your SQL file. If both sides changed the DDL, resolve the DDL first, then re-run the schema command.
+    - **`[[inputs]]`** — take the entry with the higher `last_snapshot_id`. The next load will re-check against the warehouse regardless.
 
 ## Stale or missing lock file
 
@@ -146,14 +199,6 @@ Running the full pipeline rebuilds all lock state from scratch. The warehouse is
         port.execute("sql/transform.sql")
         port.publish(version="2026-03-15", params={"wstatus": "EMP"})
     ```
-
-## Fields that matter for correctness
-
-Most fields are informational, but three have behavioral consequences:
-
-- **`last_snapshot_id`** — drives the ingest cache; a wrong value causes stale data or unnecessary reloads
-- **`completed`** on versions — drives publish idempotency; flipping this causes skipped or duplicate publishes
-- **`ddl`** — must match what DuckDB actually has; use the schema command to change it
 
 ## Multi-model support
 

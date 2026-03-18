@@ -59,11 +59,11 @@ This syncs state, executes the configured hook, and publishes — equivalent to 
 
 ## Pre-publish checks
 
-Before writing any data, publish runs these checks in order:
+!!! warning "These checks must pass before any data is written"
 
-1. **Schema defined** — fails if no schema has been declared
-2. **Version idempotency** — if the version already completed, returns immediately (skipped in refresh mode)
-3. **Schema drift** — compares local schema to warehouse schema; fails with a diff if incompatible. Catalog connection failures also block the publish.
+    1. **Schema defined** — fails if no schema has been declared.
+    2. **Version idempotency** — if the version already completed, returns immediately (skipped in refresh mode).
+    3. **Schema drift** — compares local schema to warehouse schema; fails with a diff if incompatible. Catalog connection failures also block the publish.
 
 ## Idempotency and checkpoints
 
@@ -84,12 +84,16 @@ If a publish is interrupted, the next run detects the incomplete checkpoint and 
 
 ## Write strategy
 
-The DuckDB `iceberg` extension is the primary write path. When the catalog does not support multi-table commits (e.g., returns 404 on the transactions endpoint), the adapter auto-switches to **streaming Arrow fallback**:
+The DuckDB `iceberg` extension is the primary write path.
 
-- Streams 50K-row Arrow batches from DuckDB
-- Each batch committed in a single pyiceberg transaction
-- Checkpoint properties updated per batch
-- On commit conflict: reload metadata, resume from remote checkpoint (max 5 retries)
-- Peak memory: ~50K rows per batch (bounded)
+!!! info "Automatic streaming Arrow fallback"
 
-This session-level fallback is transparent — once DuckDB writes fail, all subsequent writes use Arrow without retrying.
+    When the catalog does not support multi-table commits (e.g., returns 404 on the transactions endpoint), the adapter auto-switches to streaming Arrow:
+
+    - Streams 50K-row Arrow batches from DuckDB
+    - Each batch committed in a single pyiceberg transaction
+    - Checkpoint properties updated per batch
+    - On commit conflict: reload metadata, resume from remote checkpoint (max 5 retries)
+    - Peak memory: ~50K rows per batch (bounded)
+
+    This session-level fallback is transparent — once DuckDB writes fail, all subsequent writes use Arrow without retrying.
