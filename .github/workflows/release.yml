@@ -1,6 +1,16 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "Optional publish target for a manual prerelease run"
+        required: true
+        default: "none"
+        type: choice
+        options:
+          - none
+          - testpypi
   push:
     tags:
       - "v*"
@@ -15,7 +25,7 @@ jobs:
     outputs:
       version: ${{ steps.pkg_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract version from pyproject.toml
         id: pkg_version
@@ -29,6 +39,7 @@ jobs:
           echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Validate tag matches pyproject.toml version
+        if: github.event_name == 'push'
         env:
           TAG_VERSION: ${{ github.ref_name }}
           PKG_VERSION: ${{ steps.pkg_version.outputs.version }}
@@ -39,6 +50,12 @@ jobs:
             exit 1
           fi
           echo "Version validated: ${PKG_VERSION}"
+
+      - name: Summarize manual prerelease run
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Manual prerelease validation for version ${{ steps.pkg_version.outputs.version }}"
+          echo "Publish target: ${{ inputs.publish_target }}"
 
   test:
     needs: validate
@@ -82,7 +99,26 @@ jobs:
           name: dist
           path: dist/
 
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_target == 'testpypi'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
   publish:
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
