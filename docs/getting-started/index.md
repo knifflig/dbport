@@ -1,53 +1,68 @@
 # Getting Started
 
-You recompute datasets on a regular cycle. You download inputs, run model logic, and upload the result. It works — until it doesn't: a schema drifts silently, an interrupted publish corrupts the warehouse, a rerun overwrites data it shouldn't have, or nobody can tell which input version produced last month's output.
+DBPort is the governance layer between your models and your Iceberg warehouse. You bring the warehouse and credentials — DBPort gives you a DuckDB workspace where inputs are tracked, outputs are versioned, and every publish is safe and reproducible.
 
-**DBPort makes that workflow reliable.** It gives you a DuckDB-native runtime that loads warehouse inputs, enforces schema contracts, tracks every version, and publishes safely — with resumable checkpoints and full provenance. You write the model logic. DBPort handles everything around it.
-
-## See it in action
-
-=== "CLI"
-
-    ```bash
-    pip install dbport
-
-    # Initialize a project
-    dbp init regional_trends --agency wifor --dataset emp__regional_trends
-    cd regional_trends
-
-    # Configure and run the full lifecycle
-    dbp config model wifor.emp__regional_trends schema sql/create_output.sql
-    dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
-    dbp model run --version 2026-03-09 --timing
-    ```
-
-=== "Python"
-
-    ```python
-    from dbport import DBPort
-
-    with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
-        port.schema("sql/create_output.sql")
-        port.load("estat.nama_10r_3empers", filters={"wstatus": "EMP"})
-        port.execute("sql/transform.sql")
-        port.publish(version="2026-03-09", params={"wstatus": "EMP"})
-    ```
-
-That is a complete lifecycle: inputs loaded from an Iceberg warehouse into DuckDB, SQL transforms executed, and versioned output published back — with schema validation, metadata, and codelists attached automatically.
-
-## What you get
-
-- :material-download:{ .middle } **Snapshot-cached inputs** — unchanged tables are skipped automatically on reload
-- :material-shield-check:{ .middle } **Schema contracts** — drift is caught before anything is written to the warehouse
-- :material-tag:{ .middle } **Version tracking** — every publish records its version, parameters, timestamps, and row count
-- :material-lock:{ .middle } **Committable state** — `dbport.lock` tracks everything in TOML, safe for code review and CI
-- :material-restart:{ .middle } **Resumable publishes** — interrupted runs pick up from checkpoint, never corrupt
-
-## What you'll need
+## Prerequisites
 
 - Python 3.11 or 3.12
 - An Iceberg REST catalog with S3-compatible object storage
 - Catalog credentials (URI, token, warehouse name)
+
+## 1. Install
+
+```bash
+pip install dbport
+```
+
+## 2. Set credentials
+
+DBPort needs to know how to reach your warehouse. Export the credentials for your Iceberg catalog:
+
+```bash
+export ICEBERG_REST_URI=https://catalog.example.com
+export ICEBERG_CATALOG_TOKEN=your-token
+export ICEBERG_WAREHOUSE=your-warehouse
+```
+
+See [Credentials](credentials.md) for all options including S3 access keys.
+
+## 3. Initialize a model
+
+```bash
+dbp init regional_trends --agency wifor --dataset emp__regional_trends
+cd regional_trends
+```
+
+This creates a project folder with a `dbport.lock` and a `data/` directory. The lock file tracks your schema, inputs, and versions — commit it alongside your code.
+
+## 4. Configure and run
+
+```bash
+# Declare the output schema and inputs
+dbp config model wifor.emp__regional_trends schema sql/create_output.sql
+dbp config model wifor.emp__regional_trends input estat.nama_10r_3empers
+
+# Run the full lifecycle: load inputs → execute transforms → publish
+dbp model run --version 2026-03-09 --timing
+```
+
+Behind the scenes, DBPort loads your inputs into a local DuckDB file (`data/emp__regional_trends.duckdb`). You can open that file with any DuckDB client to explore data, develop queries, or debug transforms — it's a regular DuckDB database.
+
+## 5. Publish
+
+Publishing writes your output back to the warehouse as a versioned Iceberg table — with schema validation, metadata, and codelists attached automatically. If a publish is interrupted, it resumes from checkpoint. If the version was already completed, it's a safe no-op.
+
+## 6. Build on it
+
+Once your first model is published, its output is a versioned artifact in the warehouse. The next model can declare it as an input:
+
+```bash
+dbp init downstream_model --agency wifor --dataset emp__summary
+cd downstream_model
+dbp config model wifor.emp__summary input wifor.emp__regional_trends
+```
+
+That's the core idea: each model's output becomes a governed, versioned input for the next. DBPort tracks these dependencies so recomputes flow through your model graph in the right order, picking up new versions automatically.
 
 ## Next steps
 
@@ -61,19 +76,11 @@ That is a complete lifecycle: inputs loaded from an Iceberg warehouse into DuckD
 
     [:octicons-arrow-right-24: Read more](about.md)
 
--   **Installation**
-
-    ---
-
-    Install DBPort and verify your environment.
-
-    [:octicons-arrow-right-24: Install](installation.md)
-
 -   **Credentials**
 
     ---
 
-    Configure warehouse access credentials.
+    All credential options including S3 access keys and `.env` files.
 
     [:octicons-arrow-right-24: Configure](credentials.md)
 
@@ -84,5 +91,13 @@ That is a complete lifecycle: inputs loaded from an Iceberg warehouse into DuckD
     Walk through a complete project from init to publish.
 
     [:octicons-arrow-right-24: Start building](quickstart.md)
+
+-   **Concepts**
+
+    ---
+
+    How inputs, schemas, metadata, versioning, and the lock file work together.
+
+    [:octicons-arrow-right-24: Read the concepts](../concepts/index.md)
 
 </div>
