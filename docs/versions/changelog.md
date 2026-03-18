@@ -6,6 +6,29 @@ Each entry includes: version number, release date, and a summary of changes grou
 
 ---
 
+## 0.0.8 — 2026-03-17
+
+Zensical navigation model and brand alignment.
+
+### Changed
+
+- **Homepage navigation restored** — removed `hide: navigation` from the homepage so the left sidebar is visible on all pages, including the landing page
+- **Left navigation expanded by default** — added `navigation.expand` so section subpages are visible in the sidebar without clicking to expand
+- **Brand palette applied** — switched theme palette from `deep purple`/`amber` to brand-aligned `indigo`/`deep-orange` base, with exact brand color overrides via `docs/stylesheets/brand.css` (Harbor Blue `#1F4E79`, Signal Coral `#E07A5F`, dark mode backgrounds from brand guide)
+- **Brand typography configured** — set Inter as the text font and JetBrains Mono as the code font via `[project.theme.font]`, matching `docs/brand.md`
+
+### Added
+
+- **`docs/stylesheets/brand.css`** — custom property overrides for light and dark mode using the brand design tokens from `docs/brand.md`
+
+### Confirmed
+
+- **Right sidebar TOC preserved** — explicitly confirmed `toc.integrate` is not enabled and `toc.follow` remains active, keeping the intended three-column layout (tabs + left nav + right TOC)
+- **Logo unchanged** — `lucide/fishing-hook` icon matches the brand guide; no change needed
+- **Zensical-native only** — all changes use documented Zensical/Material capabilities (`extra_css`, `--md-*` properties, `theme.font`); no custom template overrides or JavaScript
+
+---
+
 ## 0.0.7 — 2026-03-17
 
 Execution model and conceptual docs depth.
