@@ -5,9 +5,11 @@
 [![Python 3.11–3.12](https://img.shields.io/pypi/pyversions/dbport)](https://pypi.org/project/dbport/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Versioned dataset recomputation on DuckDB, published to Iceberg.
+Governance and orchestration for recomputable warehouse datasets.
 
-Analytic workloads often recompute datasets on a regular cycle — whether that is a single indicator refreshed monthly or a family of interdependent models rebuilt together. The workflow is simple in concept (download inputs, run model logic, upload the result) but tedious to productionize: schema contracts, snapshot caching, version tracking, metadata, and safe publication all need to work every time. DBPort handles that lifecycle so you can focus on the model.
+You build models that produce datasets — and those datasets depend on each other. When external sources update, you need to recompute downstream models in the right order, knowing exactly which input versions went into each output. As the number of models grows, keeping track of dependencies, provenance, and data quality becomes harder than the modeling itself.
+
+DBPort is the orchestration layer on top of your warehouse that enforces governance into recomputable workflows. It tracks dependencies between your models and on external inputs, so you can build with the confidence that future updates will be picked up correctly — and that other models can pick up your results.
 
 ## Quickstart
 
@@ -42,13 +44,11 @@ with DBPort(agency="wifor", dataset_id="emp__regional_trends") as port:
 
 ## Why DBPort
 
-The hard part of periodic dataset recomputation is not the model logic — it is everything around it. This is especially true when you manage many interdependent datasets across an organization, where each model's inputs are another model's outputs.
-
-- **Loading inputs** — `dbp model load` pulls Iceberg tables into DuckDB with snapshot caching. Unchanged tables are skipped automatically.
-- **Schema contracts** — `dbp config model ... schema` declares the output shape. Publishing checks for schema drift before writing anything.
-- **Version tracking** — each publish records version, timestamp, parameters, and row count. Re-running a completed version is a no-op.
-- **Metadata** — timestamps, input provenance, codelists, and version history are attached to the published table automatically.
-- **Safe publication** — interrupted runs resume from checkpoint. Schema drift blocks the publish rather than corrupting the warehouse.
+- **Dependency tracking** — models produce datasets that feed other models. DBPort tracks these dependencies so you always know what depends on what across your organisation.
+- **Input provenance** — every publish records exactly which input versions and snapshots were used. Trace any output back to the data that produced it.
+- **Recompute on change** — snapshot-cached inputs detect when external sources update. Unchanged tables are skipped — only what's new gets reprocessed.
+- **Schema drift detection** — declare the output shape upfront. Drift is caught before anything is written to the warehouse, not after.
+- **Versioned, resumable publishes** — each publish records version, parameters, and row count. Interrupted runs resume from checkpoint. Re-running a completed version is a safe no-op.
 - **Committable state** — `dbport.lock` is TOML, credential-free, and safe to commit. It tracks schema, inputs, and version history for code review and CI.
 
 ## Configuration

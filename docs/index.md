@@ -5,11 +5,11 @@ hide:
 
 # DBPort
 
-**The production layer for DuckDB data products.**
+**Governance and orchestration for recomputable warehouse datasets.**
 
-You recompute datasets on a regular cycle — download inputs from a warehouse, run your model, publish the result. That workflow is straightforward until something breaks: a schema drifts silently, an interrupted publish corrupts the warehouse, a rerun overwrites data it shouldn't, or nobody can trace which inputs produced last month's output.
+You build models that produce datasets — and those datasets depend on each other. When external sources update, you need to recompute downstream models in the right order, knowing exactly which input versions went into each output. As the number of models grows, keeping track of dependencies, provenance, and data quality becomes harder than the modeling itself.
 
-DBPort handles the lifecycle around your model so those problems go away. Load governed inputs into DuckDB, enforce output contracts, track every version, and publish safely — with resumable checkpoints and full provenance. You write the model logic however you want. DBPort manages everything around it.
+DBPort is the orchestration layer on top of your warehouse that enforces governance into recomputable workflows. It tracks dependencies between your models and on external inputs, so you can build with the confidence that future updates will be picked up correctly — and that other models can pick up your results.
 
 [:octicons-arrow-right-24: Why DBPort — and who it's for](getting-started/about.md){ .md-button } [:octicons-arrow-right-24: Get started](getting-started/index.md){ .md-button .md-button--primary }
 
@@ -52,29 +52,35 @@ That is a complete lifecycle: inputs loaded from an Iceberg warehouse, SQL trans
 
 <div class="grid cards" markdown>
 
--   :material-download:{ .lg .middle } **Snapshot-cached inputs**
+-   :material-graph-outline:{ .lg .middle } **Model dependencies, tracked**
 
     ---
 
-    Load Iceberg tables into DuckDB. Unchanged snapshots are skipped automatically — no wasted reads, no stale data.
+    Models produce datasets that feed other models. DBPort tracks these dependencies so you always know what depends on what — across your entire organisation.
 
--   :material-shield-check:{ .lg .middle } **Schema contracts**
-
-    ---
-
-    Declare the output shape upfront. Schema drift is caught before anything is written to the warehouse, not after.
-
--   :material-tag:{ .lg .middle } **Version tracking**
+-   :material-history:{ .lg .middle } **Full input provenance**
 
     ---
 
-    Every publish records its version, parameters, timestamps, and row count. Re-running a completed version is a safe no-op.
+    Every publish records exactly which input versions and snapshots were used. Months later, you can trace any output back to the data that produced it.
 
--   :material-restart:{ .lg .middle } **Resumable publishes**
+-   :material-refresh-auto:{ .lg .middle } **Recompute when sources update**
 
     ---
 
-    Interrupted runs pick up from checkpoint. Nothing is corrupted, nothing is lost.
+    Snapshot-cached inputs detect when external sources change. Unchanged tables are skipped automatically — only what's new gets reprocessed.
+
+-   :material-shield-check:{ .lg .middle } **Schema drift, caught early**
+
+    ---
+
+    Declare the output shape upfront. Drift is caught before anything is written to the warehouse — no fraudulent data, no silent corruption.
+
+-   :material-tag:{ .lg .middle } **Versioned, resumable publishes**
+
+    ---
+
+    Every publish records version, parameters, and row count. Interrupted runs resume from checkpoint. Re-running a completed version is a safe no-op.
 
 -   :material-lock:{ .lg .middle } **Committable state**
 
@@ -82,19 +88,13 @@ That is a complete lifecycle: inputs loaded from an Iceberg warehouse, SQL trans
 
     `dbport.lock` is TOML, credential-free, and tracks schema, inputs, and versions — ready for code review and CI.
 
--   :material-text-box-check:{ .lg .middle } **Automatic metadata**
-
-    ---
-
-    Timestamps, input provenance, codelists, and version history are attached to published tables without any manual work.
-
 </div>
 
 ---
 
 ## It fits with what you already use
 
-DBPort is not a warehouse, not an orchestrator, and not a transformation framework. It is the production lifecycle layer that connects them.
+DBPort doesn't deliver the models — it delivers the platform to keep track of dependencies between them. It is the governance layer that connects your tools.
 
 | | |
 |---|---|
