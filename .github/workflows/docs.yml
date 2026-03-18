@@ -85,13 +85,7 @@ jobs:
           python3 "$VERSIONS_SCRIPT" "$VERSION"
 
           # Create root index.html redirect to latest
-          cat > index.html <<'REDIRECT'
-<!DOCTYPE html>
-<html>
-  <head><meta http-equiv="refresh" content="0; url=latest/"></head>
-  <body><a href="latest/">Redirecting to latest docs...</a></body>
-</html>
-REDIRECT
+          printf '<!DOCTYPE html>\n<html>\n  <head><meta http-equiv="refresh" content="0; url=latest/"></head>\n  <body><a href="latest/">Redirecting to latest docs...</a></body>\n</html>\n' > index.html
 
           # Ensure .nojekyll exists (GitHub Pages)
           touch .nojekyll
