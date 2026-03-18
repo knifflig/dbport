@@ -17,7 +17,7 @@ For completed work, see the [Changelog](changelog.md).
 | 0.0.5 | CLI reference and executable workflows | Done |
 | 0.0.6 | Public package surface and repository trustworthiness | Done |
 | 0.0.7 | Execution model and conceptual docs depth | Done |
-| 0.0.8 | Zensical navigation model | Planned |
+| 0.0.8 | Zensical navigation model and brand alignment | Done |
 | 0.0.9 | Homepage UX and publication-facing polish | Planned |
 | 0.1.0 | First public release (PyPI + GitHub Pages) | Planned |
 
@@ -58,11 +58,14 @@ For completed work, see the [Changelog](changelog.md).
 - ~~Strengthen section index pages~~
 - ~~Tighten hook execution and publish safety semantics~~
 
-## 0.0.8 — Zensical navigation model
+## 0.0.8 — Zensical navigation model and brand alignment
 
-- Restore the left sidebar on the homepage
-- Expand left navigation by default
-- Keep the right sidebar TOC separate from left nav
+- ~~Restore the left sidebar on the homepage~~
+- ~~Expand left navigation by default~~
+- ~~Keep the right sidebar TOC separate from left nav~~
+- ~~Apply brand palette (Harbor Blue / Signal Coral) via custom CSS~~
+- ~~Configure brand typography (Inter / JetBrains Mono)~~
+- ~~Verify all changes use only documented Zensical capabilities~~
 
 ## 0.0.9 — Homepage UX and publication-facing polish
 

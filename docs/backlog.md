@@ -520,48 +520,29 @@ Status: `done`
 
 ## Work Package 0.0.8
 
-Theme: Zensical navigation model.
+Theme: Zensical navigation model and brand alignment.
 
-### DBP-ZEN-001 - Restore the intended left sidebar on the homepage
+Status: `done`
 
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - `docs/index.md`
-- Required changes:
-  - Remove `hide: navigation` from the homepage
-  - Reconsider whether `hide: toc` should remain
-- Relevant Zensical docs:
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-- Acceptance criteria:
-  - The homepage participates in the main docs navigation model
+### What was implemented
 
-### DBP-ZEN-002 - Expand left navigation by default
+- **Homepage left sidebar restored** — removed `hide: navigation` from `docs/index.md`; `hide: toc` retained (homepage is a card grid, not long-form content; revisited in DBP-UI-004)
+- **Left navigation expanded** — added `navigation.expand` to `zensical.toml` features so section subpages are visible by default
+- **Right sidebar TOC preserved** — confirmed `toc.integrate` is not enabled and `toc.follow` remains active; the three-column layout (tabs + left nav + right TOC) is intentional
+- **Brand palette applied** — switched named palette from `deep purple`/`amber` to `indigo`/`deep-orange` as base; added `docs/stylesheets/brand.css` with exact brand color overrides (Harbor Blue `#1F4E79`, Signal Coral `#E07A5F`, dark mode backgrounds) via documented `--md-*` custom properties
+- **Brand typography configured** — added `[project.theme.font]` with Inter (text) and JetBrains Mono (code), matching `docs/brand.md`
+- **Zensical-native constraint enforced** — all changes use only documented Zensical/Material capabilities: `extra_css`, `--md-*` properties, `theme.font`, `theme.palette`; no custom template overrides or JavaScript
 
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - `zensical.toml`
-- Required changes:
-  - Add `navigation.expand`
-- Relevant Zensical docs:
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-- Acceptance criteria:
-  - Section subpages are visible by default in the left sidebar on desktop
+### Items delivered
 
-### DBP-ZEN-004 - Keep right sidebar TOC instead of integrating it into the left nav
-
-- Priority: `P1`
-- Status: `todo`
-- Files:
-  - `zensical.toml`
-- Required changes:
-  - Explicitly avoid `toc.integrate`
-  - Preserve `toc.follow`
-- Relevant Zensical docs:
-  - [Navigation](https://zensical.org/docs/setup/navigation/)
-- Acceptance criteria:
-  - The docs keep the intended tabs + left nav + right TOC layout
+| Item | Priority | Summary |
+|---|---|---|
+| DBP-ZEN-001 | `P1` | Homepage participates in the main navigation model |
+| DBP-ZEN-002 | `P1` | Section subpages visible by default in the left sidebar |
+| DBP-ZEN-004 | `P1` | Three-column layout (tabs + left nav + right TOC) explicitly preserved |
+| DBP-UI-005 | `P2` | Brand palette (Harbor Blue / Signal Coral) applied via custom CSS overrides |
+| DBP-UI-006 | `P2` | Brand typography (Inter / JetBrains Mono) configured via theme font settings |
+| DBP-UI-007 | `P1` | All changes verified against documented Zensical capabilities |
 
 ---
 
@@ -879,6 +860,6 @@ This roadmap is complete when the repository is ready for its first public relea
 - `0.0.5` freezes the CLI contract, including command taxonomy, model/version resolution, and operational error behavior
 - `0.0.6` locks down the public package surface, completes PyPI-facing package metadata, establishes the public repository posture, and makes public-facing documentation trustworthy
 - `0.0.7` makes execution, hook, publish, and lock-file semantics stable enough for a safety-oriented first release
-- `0.0.8` implements the intended Zensical navigation model
+- `0.0.8` implements the intended Zensical navigation model and aligns the theme with the brand guide
 - `0.0.9` makes the homepage publication-ready
 - `0.1.0` delivers the first public release to PyPI and GitHub Pages with deterministic credentials, verified package artifacts, enforced CI quality gates, and release-gated examples
