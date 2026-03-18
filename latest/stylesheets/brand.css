@@ -1,0 +1,28 @@
+/* DBPort brand color overrides — see docs/brand.md for design tokens.
+   Uses only documented --md-* custom properties (Material/Zensical). */
+
+/* ---------- Light mode ---------- */
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #1F4E79;          /* Harbor Blue */
+  --md-primary-fg-color--light: #4F7EA8;   /* Tide Blue */
+  --md-primary-fg-color--dark: #16354F;    /* Deep Current */
+  --md-accent-fg-color: #E07A5F;           /* Signal Coral */
+
+  /* Semantic — admonitions, alerts */
+  --md-admonition-fg-color--success: #2F7D5C;
+  --md-admonition-fg-color--warning: #C58A1C;
+  --md-admonition-fg-color--failure: #B44949;
+  --md-admonition-fg-color--info: #2F6FA3;
+}
+
+/* ---------- Dark mode ---------- */
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #4F7EA8;          /* Tide Blue — lighter for dark bg */
+  --md-primary-fg-color--light: #6A9BC4;
+  --md-primary-fg-color--dark: #1F4E79;    /* Harbor Blue */
+  --md-accent-fg-color: #E07A5F;           /* Signal Coral */
+  --md-default-bg-color: #0F1C28;          /* Brand dark background */
+  --md-default-bg-color--light: #16354F;   /* Deep Current — cards/panels */
+}
