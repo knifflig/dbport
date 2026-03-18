@@ -67,9 +67,13 @@ The referenced table should already be loaded via `dbp model load` or `port.load
 In the Python API, `.meta()` returns `self` for chaining:
 
 ```python
-port.columns.nuts2024.meta(codelist_id="NUTS2024").attach(table="wifor.cl_nuts2024")
+port.columns.nuts2024.meta(codelist_id="NUTS2024").attach(table="wifor.cl_nuts2024") # (1)!
 ```
+
+1. `.meta()` returns the `ColumnConfig` instance, so `.attach()` can be called immediately on the result.
 
 ## How metadata is stored
 
-On publish, the finalized `metadata.json` is built in-memory and embedded directly in Iceberg table properties (gzip + base64 compressed). Codelist CSVs are generated in-memory from DuckDB and embedded in Iceberg column docs. No intermediate files are written to disk.
+!!! info "No files on disk"
+
+    On publish, the finalized `metadata.json` is built in-memory and embedded directly in Iceberg table properties (gzip + base64 compressed). Codelist CSVs are generated in-memory from DuckDB and embedded in Iceberg column docs. No intermediate files are written to disk.

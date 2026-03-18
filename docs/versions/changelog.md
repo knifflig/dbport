@@ -20,6 +20,12 @@ Homepage UX and publication-facing docs polish.
 ### Improved
 
 - **Lock file page uses Zensical teaching patterns** — added code annotations (`(1)!` syntax) to the annotated TOML example with inline explanations for each section; replaced plain-text correctness warnings with `!!! warning` admonition; replaced merge conflict resolution list with `!!! tip` admonition; improved visual scanability without custom hacks
+- **Inputs page enhanced** — added Mermaid flow diagram for the Arrow ingestion pipeline; snapshot caching force-refresh note moved to `!!! tip` admonition; input tracking details moved to `!!! info` admonition
+- **Outputs page enhanced** — `SchemaDriftError` example now uses code annotations explaining each diff symbol (`+`, `-`, `~`); idempotency note consolidated into `!!! info` admonition
+- **Metadata page enhanced** — chaining example uses code annotation explaining the return-self pattern; storage mechanism highlighted with `!!! info` admonition
+- **Hooks page enhanced** — hook resolution order wrapped in `!!! note` admonition for reference visibility; trust model wrapped in `!!! warning` admonition for security emphasis
+- **Versioning page enhanced** — pre-publish checks wrapped in `!!! warning` admonition; streaming Arrow fallback wrapped in `!!! info` admonition
+- **Concepts index page enhanced** — ASCII mental model diagram replaced with Mermaid `graph LR` flow diagram using brand colors
 
 ---
 

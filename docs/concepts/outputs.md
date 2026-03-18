@@ -34,18 +34,22 @@ The table is created in DuckDB and the schema (DDL + column list) is persisted t
 
 If the output table already exists in the warehouse, DBPort compares the local DDL against the warehouse schema. Incompatible changes raise `SchemaDriftError`:
 
-```
+``` title="SchemaDriftError output"
 SchemaDriftError: Schema drift detected:
-  + new_column (string)     # added locally, not in warehouse
-  - old_column (int32)      # in warehouse, removed locally
-  ~ value (int32 → float64) # type changed
+  + new_column (string)     # (1)!
+  - old_column (int32)      # (2)!
+  ~ value (int32 → float64) # (3)!
 ```
+
+1. Column added locally but not present in the warehouse.
+2. Column exists in the warehouse but was removed from the local DDL.
+3. Column type changed between local and warehouse schema.
 
 This check runs at schema declaration time (early fail-fast) and again at publish time (safety net).
 
-## Idempotency
+!!! info "Idempotent schema declaration"
 
-Declaring the same schema repeatedly is idempotent — the table is created or replaced in DuckDB without error.
+    Declaring the same schema repeatedly is safe — the table is created or replaced in DuckDB without error. Only incompatible changes relative to the *warehouse* trigger `SchemaDriftError`.
 
 ## Column metadata
 

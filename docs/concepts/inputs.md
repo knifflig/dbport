@@ -44,39 +44,31 @@ Filters are equality predicates pushed down to the Iceberg scan. They reduce the
 
 Each Iceberg table has a snapshot ID. If the snapshot has not changed since the last run and the DuckDB table already exists, loading is skipped automatically.
 
-This makes repeated runs fast without manual cache management. To force re-resolution of the newest snapshot:
+This makes repeated runs fast without manual cache management.
 
-=== "CLI"
+!!! tip "Forcing a fresh snapshot check"
 
-    ```bash
-    dbp model load --update
-    ```
-
-=== "Python"
-
-    ```python
-    # Snapshot caching is automatic — just call load() again.
-    # The table is only re-loaded if the warehouse snapshot changed.
-    port.load("estat.nama_10r_3empers")
-    ```
+    Use `dbp model load --update` (CLI) to re-resolve the newest snapshot even when the cached snapshot ID has not changed. In Python, snapshot caching is automatic — calling `port.load()` again only re-loads if the warehouse snapshot actually changed.
 
 ## How ingestion works
 
-Under the hood, loading uses pyiceberg's Arrow C++ multi-threaded Parquet reader:
+Under the hood, loading uses pyiceberg's Arrow C++ multi-threaded Parquet reader. No full-table Python memory allocation — data streams directly from Parquet to DuckDB.
 
-1. pyiceberg scans the table with the given filters and snapshot
-2. A `RecordBatchReader` streams Arrow batches into DuckDB
-3. DuckDB creates (or replaces) the table from the Arrow stream
-
-No full-table Python memory allocation — data streams directly from Parquet to DuckDB.
+``` mermaid
+graph LR
+    A["Iceberg table<br/>(Parquet files)"] -->|"pyiceberg scan<br/>+ filters"| B["RecordBatchReader<br/>(Arrow batches)"]
+    B -->|"streaming insert"| C["DuckDB table<br/>(local file)"]
+```
 
 ## Input tracking
 
-Every load is recorded in `dbport.lock`:
+!!! info "What gets recorded in `dbport.lock`"
 
-- Table address
-- Filters applied
-- Snapshot ID and timestamp
-- Row count
+    Every load records the following in the lock file:
 
-This state is included in published metadata and enables the snapshot-based skip logic on subsequent runs.
+    - **Table address** — the fully qualified Iceberg table name
+    - **Filters applied** — equality predicates used during the scan
+    - **Snapshot ID and timestamp** — pins the exact data version loaded
+    - **Row count** — number of rows ingested
+
+    This state is included in published metadata and enables the snapshot-based skip logic on subsequent runs.

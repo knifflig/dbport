@@ -17,9 +17,14 @@ Start with [Inputs & Loading](inputs.md) if you want to understand data flow, or
 
 ## The mental model
 
-```
-Warehouse ──▶ dbp model load ──▶ DuckDB ──▶ dbp model exec ──▶ dbp model publish ──▶ Warehouse
-              (inputs)           (your SQL/Python)                (versioned output)
+``` mermaid
+graph LR
+    A["Warehouse"] -->|"dbp model load"| B["DuckDB"]
+    B -->|"dbp model exec"| B
+    B -->|"dbp model publish"| C["Warehouse"]
+    style A fill:#f5f5f5,stroke:#1F4E79
+    style B fill:#f5f5f5,stroke:#E07A5F
+    style C fill:#f5f5f5,stroke:#1F4E79
 ```
 
 You bring the model. DBPort manages the dataset lifecycle.
