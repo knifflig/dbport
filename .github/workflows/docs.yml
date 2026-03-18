@@ -104,13 +104,7 @@ jobs:
               python3 "$GITHUB_WORKSPACE/scripts/update_versions.py" "$VERSION"
             )
 
-            cat > "$STATE_DIR/index.html" <<'REDIRECT'
-<!DOCTYPE html>
-<html>
-  <head><meta http-equiv="refresh" content="0; url=latest/"></head>
-  <body><a href="latest/">Redirecting to latest docs...</a></body>
-</html>
-REDIRECT
+            printf '<!DOCTYPE html>\n<html>\n  <head><meta http-equiv="refresh" content="0; url=latest/"></head>\n  <body><a href="latest/">Redirecting to latest docs...</a></body>\n</html>\n' > "$STATE_DIR/index.html"
 
             echo "preview_path=" >> "$GITHUB_OUTPUT"
           fi
