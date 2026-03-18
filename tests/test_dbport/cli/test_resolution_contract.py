@@ -33,16 +33,10 @@ def _write_multi_model_lock(tmp_path: Path, *, default_model: str | None = None)
     if default_model:
         lines.append(f'default_model = "{default_model}"\n')
     lines.append(
-        '[models."a.first"]\n'
-        'agency = "a"\n'
-        'dataset_id = "first"\n'
-        'model_root = "models/first"\n'
+        '[models."a.first"]\nagency = "a"\ndataset_id = "first"\nmodel_root = "models/first"\n'
     )
     lines.append(
-        '[models."b.second"]\n'
-        'agency = "b"\n'
-        'dataset_id = "second"\n'
-        'model_root = "models/second"\n'
+        '[models."b.second"]\nagency = "b"\ndataset_id = "second"\nmodel_root = "models/second"\n'
     )
     lock.write_text("\n".join(lines))
     return lock
@@ -78,16 +72,14 @@ def _write_versioned_lock(
 
 
 class TestModelResolutionPrecedence:
-    """Lock the 5-step model resolution order:
+    """Lock the 5-step model resolution order."""
 
-    1. Positional MODEL argument
-    2. --model flag
-    3. CWD matching against model_root
-    4. default_model from lock file
-    5. First model (single-model fallback)
-    """
-
-    def test_step1_positional_arg_wins_over_all(self, tmp_path: Path, monkeypatch):
+    def test_step1_positional_arg_wins_over_all(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test positional arg wins over all."""
         lock = _write_multi_model_lock(tmp_path, default_model="a.first")
         (tmp_path / "models" / "first").mkdir(parents=True)
         monkeypatch.chdir(tmp_path / "models" / "first")  # CWD matches a.first
@@ -96,20 +88,24 @@ class TestModelResolutionPrecedence:
         assert key == "b.second"
 
     def test_step2_model_flag_wins_over_cwd_default_first(
-        self, tmp_path: Path, monkeypatch
-    ):
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test model flag wins over cwd, default, and first."""
         lock = _write_multi_model_lock(tmp_path, default_model="a.first")
         (tmp_path / "models" / "first").mkdir(parents=True)
         monkeypatch.chdir(tmp_path / "models" / "first")
-        ctx = CliContext(
-            project_path=tmp_path, lockfile_path=lock, model_dir="models/second"
-        )
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="models/second")
         key, _ = resolve_model_key(ctx)
         assert key == "b.second"
 
     def test_step3_cwd_wins_over_default_and_first(
-        self, tmp_path: Path, monkeypatch
-    ):
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test CWD wins over default and first."""
         lock = _write_multi_model_lock(tmp_path, default_model="a.first")
         (tmp_path / "models" / "second").mkdir(parents=True)
         monkeypatch.chdir(tmp_path / "models" / "second")
@@ -118,8 +114,11 @@ class TestModelResolutionPrecedence:
         assert key == "b.second"
 
     def test_step4_default_model_wins_over_first(
-        self, tmp_path: Path, monkeypatch
-    ):
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test default model wins over first."""
         lock = _write_multi_model_lock(tmp_path, default_model="b.second")
         monkeypatch.chdir(tmp_path)  # CWD is repo root, no model_root match
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
@@ -127,15 +126,22 @@ class TestModelResolutionPrecedence:
         assert key == "b.second"
 
     def test_step5_first_model_as_last_resort(
-        self, tmp_path: Path, monkeypatch
-    ):
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test first model as last resort."""
         lock = _write_multi_model_lock(tmp_path)  # no default_model
         monkeypatch.chdir(tmp_path)
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         key, _ = resolve_model_key(ctx)
         assert key == "a.first"
 
-    def test_unknown_positional_falls_through(self, tmp_path: Path, monkeypatch):
+    def test_unknown_positional_falls_through(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Positional arg that doesn't match any model falls through to step 2+."""
         lock = _write_multi_model_lock(tmp_path, default_model="b.second")
         monkeypatch.chdir(tmp_path)
@@ -143,16 +149,20 @@ class TestModelResolutionPrecedence:
         key, _ = resolve_model_key(ctx, "nonexistent.model")
         assert key == "b.second"  # falls to step 4
 
-    def test_model_flag_not_found_raises(self, tmp_path: Path, monkeypatch):
+    def test_model_flag_not_found_raises(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Model flag not found raises."""
         lock = _write_multi_model_lock(tmp_path)
         monkeypatch.chdir(tmp_path)
-        ctx = CliContext(
-            project_path=tmp_path, lockfile_path=lock, model_dir="nonexistent"
-        )
+        ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="nonexistent")
         with pytest.raises(RuntimeError, match="No model with model_root"):
             resolve_model_key(ctx)
 
-    def test_no_models_raises(self, tmp_path: Path):
+    def test_no_models_raises(self, tmp_path: Path) -> None:
+        """Test No models raises."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
@@ -166,14 +176,10 @@ class TestModelResolutionPrecedence:
 
 
 class TestResolvePublishVersion:
-    """Lock the 3-step version resolution for ``dbp model run``:
+    """Lock the 3-step version resolution for ``dbp model run``."""
 
-    1. Explicit --version flag
-    2. Configured version in lock (``version`` field)
-    3. Latest completed version from versions array
-    """
-
-    def test_step1_explicit_version_wins(self, tmp_path: Path):
+    def test_step1_explicit_version_wins(self, tmp_path: Path) -> None:
+        """Test Step1 explicit version wins."""
         lock = _write_versioned_lock(
             tmp_path, configured_version="2026-01-01", completed_versions=["2025-12-01"]
         )
@@ -181,7 +187,8 @@ class TestResolvePublishVersion:
         result = resolve_publish_version(ctx, "a.x", "2026-06-01")
         assert result == "2026-06-01"
 
-    def test_step2_configured_version_wins_over_completed(self, tmp_path: Path):
+    def test_step2_configured_version_wins_over_completed(self, tmp_path: Path) -> None:
+        """Test Step2 configured version wins over completed."""
         lock = _write_versioned_lock(
             tmp_path, configured_version="2026-01-01", completed_versions=["2025-12-01"]
         )
@@ -189,15 +196,15 @@ class TestResolvePublishVersion:
         result = resolve_publish_version(ctx, "a.x", None)
         assert result == "2026-01-01"
 
-    def test_step3_latest_completed_as_fallback(self, tmp_path: Path):
-        lock = _write_versioned_lock(
-            tmp_path, completed_versions=["2025-11-01", "2025-12-01"]
-        )
+    def test_step3_latest_completed_as_fallback(self, tmp_path: Path) -> None:
+        """Test Step3 latest completed as fallback."""
+        lock = _write_versioned_lock(tmp_path, completed_versions=["2025-11-01", "2025-12-01"])
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         result = resolve_publish_version(ctx, "a.x", None)
         assert result == "2025-12-01"
 
-    def test_raises_when_no_version_available(self, tmp_path: Path):
+    def test_raises_when_no_version_available(self, tmp_path: Path) -> None:
+        """Test Raises when no version available."""
         lock = _write_versioned_lock(tmp_path)
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         with pytest.raises(RuntimeError, match="No version available"):
@@ -210,18 +217,10 @@ class TestResolvePublishVersion:
 
 
 class TestResolvePublishVersionForPublish:
-    """Lock the 2-step version resolution for ``dbp model publish``:
+    """Lock the 2-step version resolution for ``dbp model publish``."""
 
-    1. Explicit --version flag
-    2. Latest completed version from versions array
-
-    Notably, this does NOT fall back to the configured ``version`` field.
-    This is intentional: ``publish`` re-publishes existing output, so it
-    should default to the most recent completed version rather than a
-    configured future version.
-    """
-
-    def test_step1_explicit_version_wins(self, tmp_path: Path):
+    def test_step1_explicit_version_wins(self, tmp_path: Path) -> None:
+        """Test Step1 explicit version wins."""
         lock = _write_versioned_lock(
             tmp_path, configured_version="2026-01-01", completed_versions=["2025-12-01"]
         )
@@ -229,24 +228,22 @@ class TestResolvePublishVersionForPublish:
         result = resolve_publish_version_for_publish(ctx, "a.x", "2026-06-01")
         assert result == "2026-06-01"
 
-    def test_step2_latest_completed_version(self, tmp_path: Path):
-        lock = _write_versioned_lock(
-            tmp_path, completed_versions=["2025-11-01", "2025-12-01"]
-        )
+    def test_step2_latest_completed_version(self, tmp_path: Path) -> None:
+        """Test Step2 latest completed version."""
+        lock = _write_versioned_lock(tmp_path, completed_versions=["2025-11-01", "2025-12-01"])
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         result = resolve_publish_version_for_publish(ctx, "a.x", None)
         assert result == "2025-12-01"
 
-    def test_ignores_configured_version(self, tmp_path: Path):
+    def test_ignores_configured_version(self, tmp_path: Path) -> None:
         """Configured version is intentionally skipped for publish-only."""
-        lock = _write_versioned_lock(
-            tmp_path, configured_version="2026-01-01"
-        )
+        lock = _write_versioned_lock(tmp_path, configured_version="2026-01-01")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         with pytest.raises(RuntimeError, match="No completed versions"):
             resolve_publish_version_for_publish(ctx, "a.x", None)
 
-    def test_raises_when_no_completed_versions(self, tmp_path: Path):
+    def test_raises_when_no_completed_versions(self, tmp_path: Path) -> None:
+        """Test Raises when no completed versions."""
         lock = _write_versioned_lock(tmp_path)
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         with pytest.raises(RuntimeError, match="No completed versions"):
@@ -266,13 +263,15 @@ class TestRunVsPublishVersionDifference:
     data and defaults to the most recent completed version.
     """
 
-    def test_run_uses_configured_version(self, tmp_path: Path):
+    def test_run_uses_configured_version(self, tmp_path: Path) -> None:
+        """Test Run uses configured version."""
         lock = _write_versioned_lock(tmp_path, configured_version="2026-03-17")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         result = resolve_publish_version(ctx, "a.x", None)
         assert result == "2026-03-17"
 
-    def test_publish_ignores_configured_version(self, tmp_path: Path):
+    def test_publish_ignores_configured_version(self, tmp_path: Path) -> None:
+        """Test Publish ignores configured version."""
         lock = _write_versioned_lock(tmp_path, configured_version="2026-03-17")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         with pytest.raises(RuntimeError):
@@ -285,14 +284,20 @@ class TestRunVsPublishVersionDifference:
 
 
 class TestResolvePublishMode:
-    def test_default_returns_none(self):
+    """Tests for TestResolvePublishMode."""
+
+    def test_default_returns_none(self) -> None:
+        """Test Default returns none."""
         assert resolve_publish_mode(dry_run=False, refresh=False) is None
 
-    def test_dry_run(self):
+    def test_dry_run(self) -> None:
+        """Test Dry run."""
         assert resolve_publish_mode(dry_run=True, refresh=False) == "dry"
 
-    def test_refresh(self):
+    def test_refresh(self) -> None:
+        """Test Refresh."""
         assert resolve_publish_mode(dry_run=False, refresh=True) == "refresh"
 
-    def test_dry_run_takes_precedence(self):
+    def test_dry_run_takes_precedence(self) -> None:
+        """Test Dry run takes precedence."""
         assert resolve_publish_mode(dry_run=True, refresh=True) == "dry"

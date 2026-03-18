@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import typer
 
 from ..context import read_lock_models, resolve_model_paths_from_data
+
+if TYPE_CHECKING:
+    from ..context import CliContext
 from ..errors import cli_error_handler
 from ..render import print_info, print_json, print_success, print_table, print_warning
 
@@ -36,7 +41,7 @@ def _selected_model_key(ctx: typer.Context) -> str | None:
     return None
 
 
-def _resolve_schema_target(ctx: typer.Context, cli_ctx) -> tuple[str, dict]:
+def _resolve_schema_target(ctx: typer.Context, cli_ctx: CliContext) -> tuple[str, dict]:
     """Resolve the model key and data for schema commands.
 
     When invoked via ``dbp config model <model_key> schema``, prefer the explicit
@@ -65,7 +70,7 @@ def _resolve_schema_target(ctx: typer.Context, cli_ctx) -> tuple[str, dict]:
     return model_key, model_data
 
 
-def _show_schema(ctx: typer.Context, cli_ctx) -> None:
+def _show_schema(ctx: typer.Context, cli_ctx: CliContext) -> None:
     """Display the current schema from the lock file."""
     try:
         model_key, model_data = _resolve_schema_target(ctx, cli_ctx)
@@ -120,7 +125,7 @@ def _show_schema(ctx: typer.Context, cli_ctx) -> None:
     print_info(schema["ddl"])
 
 
-def _apply_schema(ctx: typer.Context, cli_ctx, source: str) -> None:
+def _apply_schema(ctx: typer.Context, cli_ctx: CliContext, source: str) -> None:
     """Apply a schema from a SQL file via DBPort client."""
     from pathlib import Path
 

@@ -21,7 +21,10 @@ def _create_lock(path: Path, content: str) -> None:
 
 
 class TestSchemaShowCommand:
-    def test_schema_show_no_model(self, tmp_path: Path):
+    """Tests for TestSchemaShowCommand."""
+
+    def test_schema_show_no_model(self, tmp_path: Path) -> None:
+        """Test Schema show no model."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         result = runner.invoke(
@@ -38,7 +41,8 @@ class TestSchemaShowCommand:
         assert result.exit_code == 0
         assert "No models found" in result.output
 
-    def test_schema_show_no_ddl(self, tmp_path: Path):
+    def test_schema_show_no_ddl(self, tmp_path: Path) -> None:
+        """Test Schema show no ddl."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -62,7 +66,8 @@ dataset_id = "b"
         assert result.exit_code == 0
         assert "No schema defined" in result.output
 
-    def test_schema_show_with_columns(self, tmp_path: Path):
+    def test_schema_show_with_columns(self, tmp_path: Path) -> None:
+        """Test Schema show with columns."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -100,7 +105,8 @@ sql_type = "DOUBLE"
         assert "id" in result.output
         assert "VARCHAR" in result.output
 
-    def test_schema_show_json(self, tmp_path: Path):
+    def test_schema_show_json(self, tmp_path: Path) -> None:
+        """Test Schema show json."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -135,7 +141,8 @@ sql_type = "VARCHAR"
         assert data["data"]["ddl"] is not None
         assert len(data["data"]["columns"]) == 1
 
-    def test_schema_show_no_columns(self, tmp_path: Path):
+    def test_schema_show_no_columns(self, tmp_path: Path) -> None:
+        """Test Schema show no columns."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -163,7 +170,8 @@ ddl = "CREATE TABLE a.b (id VARCHAR)"
         assert "No columns defined" in result.output
         assert "DDL" in result.output
 
-    def test_schema_show_json_no_models(self, tmp_path: Path):
+    def test_schema_show_json_no_models(self, tmp_path: Path) -> None:
+        """Test Schema show json no models."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, "# empty\n")
         result = runner.invoke(
@@ -184,7 +192,10 @@ ddl = "CREATE TABLE a.b (id VARCHAR)"
 
 
 class TestSchemaApplyCommand:
-    def test_schema_apply_file_not_found(self, tmp_path: Path):
+    """Tests for TestSchemaApplyCommand."""
+
+    def test_schema_apply_file_not_found(self, tmp_path: Path) -> None:
+        """Test Schema apply file not found."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -209,7 +220,8 @@ dataset_id = "b"
         assert result.exit_code != 0
         assert "not found" in result.output
 
-    def test_schema_apply_file_not_found_json(self, tmp_path: Path):
+    def test_schema_apply_file_not_found_json(self, tmp_path: Path) -> None:
+        """Test Schema apply file not found json."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -239,7 +251,8 @@ model_root = "."
         data = json.loads(result.output)
         assert data["ok"] is False
 
-    def test_schema_apply_success(self, tmp_path: Path):
+    def test_schema_apply_success(self, tmp_path: Path) -> None:
+        """Test Schema apply success."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -279,7 +292,8 @@ duckdb_path = "data/b.duckdb"
         assert "Schema applied" in result.output
         mp.schema.assert_called_once_with("sql/create_output.sql")
 
-    def test_schema_apply_json_output(self, tmp_path: Path):
+    def test_schema_apply_json_output(self, tmp_path: Path) -> None:
+        """Test Schema apply json output."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
             lock,
@@ -321,7 +335,7 @@ duckdb_path = "data/b.duckdb"
         assert data["data"]["applied"] == "sql/out.sql"
         assert data["data"]["model"] == "a.b"
 
-    def test_schema_apply_non_sql_extension(self, tmp_path: Path):
+    def test_schema_apply_non_sql_extension(self, tmp_path: Path) -> None:
         """Source without .sql extension skips file existence pre-check."""
         lock = tmp_path / "dbport.lock"
         _create_lock(
@@ -361,7 +375,7 @@ duckdb_path = "data/b.duckdb"
 class TestSelectedModelKeyTraversal:
     """Cover _selected_model_key parent traversal returning None (lines 35-36)."""
 
-    def test_returns_none_when_no_config_model_key(self):
+    def test_returns_none_when_no_config_model_key(self) -> None:
         """_selected_model_key returns None when no context has config_model_key."""
         import click
 
@@ -372,7 +386,7 @@ class TestSelectedModelKeyTraversal:
         ctx.obj = {}
         assert _selected_model_key(ctx) is None
 
-    def test_returns_none_with_parent_chain(self):
+    def test_returns_none_with_parent_chain(self) -> None:
         """_selected_model_key walks parent chain and returns None if not found."""
         import click
 
@@ -385,7 +399,7 @@ class TestSelectedModelKeyTraversal:
         child_ctx.obj = {}
         assert _selected_model_key(child_ctx) is None
 
-    def test_returns_key_from_parent(self):
+    def test_returns_key_from_parent(self) -> None:
         """_selected_model_key finds key in parent context."""
         import click
 
@@ -402,7 +416,7 @@ class TestSelectedModelKeyTraversal:
 class TestResolveSchemaTargetModelNotFound:
     """Cover RuntimeError when explicit model key not found (line 57)."""
 
-    def test_explicit_model_not_in_lock_raises(self, tmp_path: Path):
+    def test_explicit_model_not_in_lock_raises(self, tmp_path: Path) -> None:
         """_resolve_schema_target raises RuntimeError for unknown model key."""
         import click
 
@@ -425,6 +439,7 @@ class TestResolveSchemaTargetModelNotFound:
         cli_ctx.lockfile_path = lock
 
         import pytest
+
         with pytest.raises(RuntimeError, match="not found"):
             _resolve_schema_target(child_ctx, cli_ctx)
 
@@ -432,7 +447,7 @@ class TestResolveSchemaTargetModelNotFound:
 class TestResolveSchemaTargetFallback:
     """Cover fallback model resolution in _resolve_schema_target (lines 63-65)."""
 
-    def test_fallback_to_resolve_model_data(self, tmp_path: Path):
+    def test_fallback_to_resolve_model_data(self, tmp_path: Path) -> None:
         """When no explicit model key, falls back to _resolve_model_data."""
         import click
 

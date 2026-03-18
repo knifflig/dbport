@@ -7,13 +7,24 @@ in ``dbport.lock``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
+
+if TYPE_CHECKING:
+    from ...adapters.secondary.lock.toml import TomlLockAdapter
+    from ..context import CliContext
 
 from ..errors import cli_error_handler
 from ..render import print_error, print_info, print_json, print_success, print_table
 
 CONFIG_HELP = "Manage repo defaults and model-specific configuration."
+
+_FILTER_OPTION = typer.Option(
+    None,
+    "--filter",
+    help="Equality filter as key=value. Repeatable.",
+)
 
 config_app = typer.Typer(
     name="config",
@@ -103,11 +114,7 @@ def model_version_cmd(
 def model_input_cmd(
     ctx: typer.Context,
     dataset: str | None = typer.Argument(None, help="Table address to configure as input."),
-    filters: list[str] = typer.Option(
-        None,
-        "--filter",
-        help="Equality filter as key=value. Repeatable.",
-    ),
+    filters: list[str] = _FILTER_OPTION,
     version: str | None = typer.Option(None, "--version", help="Pinned dataset version to load."),
     load: bool = typer.Option(
         False,
@@ -205,7 +212,7 @@ def _get_selected_model_key(ctx: typer.Context) -> str:
     raise typer.BadParameter("Missing model key. Use: dbp config model <model_key> ...")
 
 
-def _handle_default_model(cli_ctx, model_key: str | None) -> None:
+def _handle_default_model(cli_ctx: CliContext, model_key: str | None) -> None:
     """Show or set the default model for this project."""
     from ..context import read_default_model, read_lock_models, write_default_model
 
@@ -238,7 +245,7 @@ def _handle_default_model(cli_ctx, model_key: str | None) -> None:
                 print_success(f"Default model set to: {model_key}")
 
 
-def _handle_default_folder(cli_ctx, folder: str | None) -> None:
+def _handle_default_folder(cli_ctx: CliContext, folder: str | None) -> None:
     """Show or set the default models folder for new models.
 
     New models created with `dbp init` are scaffolded inside this folder.
@@ -265,7 +272,7 @@ def _handle_default_folder(cli_ctx, folder: str | None) -> None:
                 print_success(f"Models folder set to: {folder}")
 
 
-def _handle_default_hook(cli_ctx, hook_path: str | None) -> None:
+def _handle_default_hook(cli_ctx: CliContext, hook_path: str | None) -> None:
     """Show or set the run hook for the resolved model."""
     with cli_error_handler("config default hook", json_output=cli_ctx.json_output):
         adapter, model_key = _make_lock_adapter(cli_ctx)
@@ -306,7 +313,7 @@ def _handle_default_hook(cli_ctx, hook_path: str | None) -> None:
                 print_success(f"Run hook set to: {normalized}")
 
 
-def _make_lock_adapter(cli_ctx):
+def _make_lock_adapter(cli_ctx: CliContext) -> tuple[TomlLockAdapter, str]:
     """Create a TomlLockAdapter for the resolved model."""
     from ...adapters.secondary.lock.toml import TomlLockAdapter
     from ..context import resolve_model_paths
@@ -332,7 +339,10 @@ def _make_lock_adapter(cli_ctx):
     return adapter, model_key
 
 
-def _make_lock_adapter_for_model(cli_ctx, explicit_model_key: str):
+def _make_lock_adapter_for_model(
+    cli_ctx: CliContext,
+    explicit_model_key: str,
+) -> tuple[TomlLockAdapter, str]:
     """Create a TomlLockAdapter for an explicitly selected model key."""
     from ...adapters.secondary.lock.toml import TomlLockAdapter
     from ..context import read_lock_models, resolve_model_paths_from_data
@@ -366,7 +376,7 @@ def _make_lock_adapter_for_model(cli_ctx, explicit_model_key: str):
     return adapter, explicit_model_key
 
 
-def _handle_version_for_model(cli_ctx, model_key: str, version: str | None) -> None:
+def _handle_version_for_model(cli_ctx: CliContext, model_key: str, version: str | None) -> None:
     with cli_error_handler("config version", json_output=cli_ctx.json_output):
         adapter, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
 
@@ -387,7 +397,7 @@ def _handle_version_for_model(cli_ctx, model_key: str, version: str | None) -> N
             print_success(f"Version set to: {version}")
 
 
-def _handle_inputs_show(cli_ctx, model_key: str) -> None:
+def _handle_inputs_show(cli_ctx: CliContext, model_key: str) -> None:
     with cli_error_handler("config input", json_output=cli_ctx.json_output):
         adapter, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
         records = adapter.read_ingest_records()
@@ -432,7 +442,7 @@ def _handle_inputs_show(cli_ctx, model_key: str) -> None:
 
 
 def _handle_input_add(
-    cli_ctx,
+    cli_ctx: CliContext,
     model_key: str,
     *,
     dataset: str,
@@ -513,7 +523,7 @@ def _parse_input_filters(filters: list[str] | None) -> dict[str, str] | None:
     return parsed
 
 
-def _handle_columns_show(cli_ctx, model_key: str) -> None:
+def _handle_columns_show(cli_ctx: CliContext, model_key: str) -> None:
     with cli_error_handler("config columns", json_output=cli_ctx.json_output):
         adapter, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
         entries = adapter.read_codelist_entries()
@@ -553,7 +563,7 @@ def _handle_columns_show(cli_ctx, model_key: str) -> None:
 
 
 def _handle_columns_set(
-    cli_ctx,
+    cli_ctx: CliContext,
     model_key: str,
     *,
     column: str,
@@ -595,13 +605,15 @@ def _parse_column_override_args(
     return overrides
 
 
-def _handle_attach_for_model(cli_ctx, model_key: str, column: str, table: str) -> None:
+def _handle_attach_for_model(cli_ctx: CliContext, model_key: str, column: str, table: str) -> None:
     with cli_error_handler("config columns attach", json_output=cli_ctx.json_output):
         _, resolved_model_key = _make_lock_adapter_for_model(cli_ctx, model_key)
         _attach_column_table(cli_ctx, resolved_model_key, column, table)
 
 
-def _update_column_metadata(cli_ctx, model_key: str, column: str, overrides: dict) -> None:
+def _update_column_metadata(
+    cli_ctx: CliContext, model_key: str, column: str, overrides: dict
+) -> None:
     from ...adapters.primary.client import DBPort
     from ..context import read_lock_models, resolve_model_paths_from_data
 
@@ -633,7 +645,7 @@ def _update_column_metadata(cli_ctx, model_key: str, column: str, overrides: dic
         print_success(f"Updated metadata for column '{column}'")
 
 
-def _attach_column_table(cli_ctx, model_key: str, column: str, table: str) -> None:
+def _attach_column_table(cli_ctx: CliContext, model_key: str, column: str, table: str) -> None:
     from ...adapters.primary.client import DBPort
     from ..context import read_lock_models, resolve_model_paths_from_data
 

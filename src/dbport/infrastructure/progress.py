@@ -7,6 +7,7 @@ CLI layer sets it; library users and tests leave it as None (no-op).
 from __future__ import annotations
 
 import contextvars
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Protocol, runtime_checkable
 
@@ -42,7 +43,7 @@ progress_callback: contextvars.ContextVar[ProgressCallback | None] = contextvars
 
 
 @contextmanager
-def progress_phase(key: str, title: str, icon: str):
+def progress_phase(key: str, title: str, icon: str) -> Generator[None]:
     """Route nested progress events into a named phase when supported.
 
     Tree-based CLI progress nodes can expose a ``phase(...)`` context manager.

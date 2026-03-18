@@ -10,7 +10,10 @@ No secrets are written to disk (dbport.lock is credential-free).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pydantic_settings import PydanticBaseSettingsSource
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -67,7 +70,7 @@ class WarehouseCreds(BaseSettings):
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
-        **kwargs: Any,
+        **kwargs: PydanticBaseSettingsSource,
     ) -> tuple:
         """Override source priority: init > .env file > shell env vars."""
         return (

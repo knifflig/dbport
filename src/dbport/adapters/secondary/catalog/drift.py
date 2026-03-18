@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+import pyarrow as pa
 
 
 class SchemaDriftError(Exception):
@@ -16,7 +16,7 @@ def _normalize_type(t: str) -> str:
     return _EQUIVALENT_TYPES.get(t, t)
 
 
-def check_schema_drift(local_arrow_schema: Any, warehouse_arrow_schema: Any) -> None:
+def check_schema_drift(local_arrow_schema: pa.Schema, warehouse_arrow_schema: pa.Schema) -> None:
     """Compare two PyArrow schemas. Raises SchemaDriftError with a diff if incompatible."""
     local_fields = {f.name: _normalize_type(str(f.type)) for f in local_arrow_schema}
     warehouse_fields = {f.name: _normalize_type(str(f.type)) for f in warehouse_arrow_schema}
@@ -24,9 +24,7 @@ def check_schema_drift(local_arrow_schema: Any, warehouse_arrow_schema: Any) -> 
     added = set(local_fields) - set(warehouse_fields)
     removed = set(warehouse_fields) - set(local_fields)
     changed = {
-        n
-        for n in local_fields
-        if n in warehouse_fields and local_fields[n] != warehouse_fields[n]
+        n for n in local_fields if n in warehouse_fields and local_fields[n] != warehouse_fields[n]
     }
 
     if added or removed or changed:

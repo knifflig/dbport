@@ -12,7 +12,7 @@ from dbport.adapters.primary.client import DBPort
 class TestDBPortInit:
     """DBPort init wires adapters correctly without credentials."""
 
-    def test_context_manager_calls_close(self, tmp_path: Path):
+    def test_context_manager_calls_close(self, tmp_path: Path) -> None:
         """__exit__ calls close() without error."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -28,7 +28,7 @@ class TestDBPortInit:
             )
             client.close()  # should not raise
 
-    def test_duckdb_file_created_on_execute(self, tmp_path: Path):
+    def test_duckdb_file_created_on_execute(self, tmp_path: Path) -> None:
         """DuckDB file is created lazily on first use."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -46,7 +46,8 @@ class TestDBPortInit:
                 client.execute("SELECT 1")
         assert db_path.exists()
 
-    def test_schema_creates_table_and_updates_lock(self, tmp_path: Path):
+    def test_schema_creates_table_and_updates_lock(self, tmp_path: Path) -> None:
+        """Schema creates table and updates lock."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
             "ICEBERG_CATALOG_TOKEN": "tok",
@@ -70,7 +71,7 @@ class TestDBPortInit:
         names = [c.name for c in schema.columns]
         assert "geo" in names and "year" in names
 
-    def test_lock_scoped_to_model_key(self, tmp_path: Path):
+    def test_lock_scoped_to_model_key(self, tmp_path: Path) -> None:
         """Two DBPort instances share one lock file but don't interfere."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -108,7 +109,7 @@ class TestDBPortInit:
         assert [c.name for c in schema_a.columns] == ["geo"]
         assert [c.name for c in schema_b.columns] == ["nace"]
 
-    def test_repo_root_discovery(self, tmp_path: Path):
+    def test_repo_root_discovery(self, tmp_path: Path) -> None:
         """When lock_path is not given, lock is placed at repo root (pyproject.toml location)."""
         from dbport.adapters.primary.client import _find_repo_root
 
@@ -118,7 +119,9 @@ class TestDBPortInit:
 
 
 class TestFindRepoRoot:
-    def test_falls_back_to_start_when_no_pyproject(self, tmp_path: Path):
+    """Tests for Find Repo Root."""
+
+    def test_falls_back_to_start_when_no_pyproject(self, tmp_path: Path) -> None:
         """_find_repo_root returns start.resolve() when no pyproject.toml exists above."""
         from dbport.adapters.primary.client import _find_repo_root
 
@@ -142,7 +145,9 @@ class TestFindRepoRoot:
 
 
 class TestDBPortCredentialKwargs:
-    def test_explicit_credentials_override_env(self, tmp_path: Path):
+    """Tests for DBPort Credential Kwargs."""
+
+    def test_explicit_credentials_override_env(self, tmp_path: Path) -> None:
         """Credential kwargs are forwarded to WarehouseCreds."""
         with patch.dict(os.environ, {}, clear=False):
             client = DBPort(
@@ -167,7 +172,9 @@ class TestDBPortCredentialKwargs:
 
 
 class TestDBPortAutoLockPath:
-    def test_lock_path_none_uses_repo_root(self, tmp_path: Path):
+    """Tests for DBPort Auto Lock Path."""
+
+    def test_lock_path_none_uses_repo_root(self, tmp_path: Path) -> None:
         """When lock_path=None, lock file is placed at _find_repo_root(caller_dir)."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -192,7 +199,9 @@ class TestDBPortAutoLockPath:
 
 
 class TestDBPortAutoDuckdbPath:
-    def test_duckdb_path_none_uses_caller_dir(self, tmp_path: Path):
+    """Tests for DBPort Auto Duckdb Path."""
+
+    def test_duckdb_path_none_uses_caller_dir(self, tmp_path: Path) -> None:
         """When duckdb_path=None, DuckDB is placed at caller_dir/data/<dataset_id>.duckdb."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -214,6 +223,8 @@ class TestDBPortAutoDuckdbPath:
 
 
 class TestDBPortMethods:
+    """Tests for DBPort Methods."""
+
     def _make_client(self, tmp_path: Path) -> DBPort:
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -228,7 +239,7 @@ class TestDBPortMethods:
                 duckdb_path=str(tmp_path / "dbport.duckdb"),
             )
 
-    def test_load_delegates_to_ingest_service(self, tmp_path: Path):
+    def test_load_delegates_to_ingest_service(self, tmp_path: Path) -> None:
         """client.load() creates IngestService and calls execute()."""
         client = self._make_client(tmp_path)
         mock_svc = MagicMock()
@@ -244,7 +255,7 @@ class TestDBPortMethods:
         assert decl.filters == {"wstatus": "EMP"}
         client.close()
 
-    def test_publish_delegates_to_publish_service(self, tmp_path: Path):
+    def test_publish_delegates_to_publish_service(self, tmp_path: Path) -> None:
         """client.publish() creates PublishService and calls execute()."""
         client = self._make_client(tmp_path)
         mock_publish = MagicMock()
@@ -261,7 +272,7 @@ class TestDBPortMethods:
         assert dv.mode == "dry"
         client.close()
 
-    def test_close_suppresses_compute_exception(self, tmp_path: Path):
+    def test_close_suppresses_compute_exception(self, tmp_path: Path) -> None:
         """close() suppresses exceptions from compute.close()."""
         client = self._make_client(tmp_path)
         client._compute = MagicMock()
@@ -270,7 +281,9 @@ class TestDBPortMethods:
 
 
 class TestDBPortModelRoot:
-    def test_explicit_model_root_kwarg(self, tmp_path: Path):
+    """Tests for DBPort Model Root."""
+
+    def test_explicit_model_root_kwarg(self, tmp_path: Path) -> None:
         """When model_root is provided, it is used as caller_dir."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -292,7 +305,9 @@ class TestDBPortModelRoot:
 
 
 class TestDBPortDuckdbPathRelative:
-    def test_duckdb_path_outside_repo_root(self, tmp_path: Path):
+    """Tests for DBPort Duckdb Path Relative."""
+
+    def test_duckdb_path_outside_repo_root(self, tmp_path: Path) -> None:
         """When duckdb_path is outside repo_root, falls back to absolute string."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
@@ -318,7 +333,10 @@ class TestDBPortDuckdbPathRelative:
 
 
 class TestDBPortRunMethod:
-    def test_run_delegates_to_run_service(self, tmp_path: Path):
+    """Tests for DBPort Run Method."""
+
+    def test_run_delegates_to_run_service(self, tmp_path: Path) -> None:
+        """Run delegates to run service."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
             "ICEBERG_CATALOG_TOKEN": "tok",
@@ -340,7 +358,8 @@ class TestDBPortRunMethod:
             mock_svc.execute.assert_called_once_with(client, version="v1", mode="dry")
             client.close()
 
-    def test_run_hook_property(self, tmp_path: Path):
+    def test_run_hook_property(self, tmp_path: Path) -> None:
+        """Run hook property."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
             "ICEBERG_CATALOG_TOKEN": "tok",
@@ -360,7 +379,8 @@ class TestDBPortRunMethod:
             assert client.run_hook == "sql/main.sql"
             client.close()
 
-    def test_configure_input_delegates_to_ingest_service(self, tmp_path: Path):
+    def test_configure_input_delegates_to_ingest_service(self, tmp_path: Path) -> None:
+        """Configure input delegates to ingest service."""
         creds = {
             "ICEBERG_REST_URI": "https://catalog.example.com",
             "ICEBERG_CATALOG_TOKEN": "tok",
@@ -398,7 +418,7 @@ class TestDBPortRunMethod:
 class TestDBPortConfigOnly:
     """Tests for config_only lightweight mode."""
 
-    def test_config_only_no_credentials_required(self, tmp_path: Path):
+    def test_config_only_no_credentials_required(self, tmp_path: Path) -> None:
         """config_only=True skips credential validation."""
         client = DBPort(
             agency="wifor",
@@ -409,7 +429,7 @@ class TestDBPortConfigOnly:
         )
         client.close()  # should not raise
 
-    def test_config_only_columns_meta_works(self, tmp_path: Path):
+    def test_config_only_columns_meta_works(self, tmp_path: Path) -> None:
         """Column metadata can be set in config_only mode."""
         lock_path = tmp_path / "dbport.lock"
         with DBPort(
@@ -430,7 +450,7 @@ class TestDBPortConfigOnly:
         assert entries["geo"].codelist_id == "NUTS2024"
         assert entries["geo"].codelist_kind == "hierarchical"
 
-    def test_config_only_columns_attach_works(self, tmp_path: Path):
+    def test_config_only_columns_attach_works(self, tmp_path: Path) -> None:
         """Column attach can be set in config_only mode."""
         lock_path = tmp_path / "dbport.lock"
         with DBPort(
@@ -448,7 +468,7 @@ class TestDBPortConfigOnly:
         entries = lock.read_codelist_entries()
         assert entries["geo"].attach_table == "wifor.cl_nuts2024"
 
-    def test_config_only_schema_raises(self, tmp_path: Path):
+    def test_config_only_schema_raises(self, tmp_path: Path) -> None:
         """Data methods raise RuntimeError in config_only mode."""
         import pytest
 
@@ -462,7 +482,7 @@ class TestDBPortConfigOnly:
             with pytest.raises(RuntimeError, match="config_only"):
                 port.schema("CREATE TABLE test (id INT)")
 
-    def test_config_only_load_raises(self, tmp_path: Path):
+    def test_config_only_load_raises(self, tmp_path: Path) -> None:
         """load() raises RuntimeError in config_only mode."""
         import pytest
 
@@ -476,7 +496,7 @@ class TestDBPortConfigOnly:
             with pytest.raises(RuntimeError, match="config_only"):
                 port.load("estat.foo")
 
-    def test_config_only_execute_raises(self, tmp_path: Path):
+    def test_config_only_execute_raises(self, tmp_path: Path) -> None:
         """execute() raises RuntimeError in config_only mode."""
         import pytest
 
@@ -490,7 +510,7 @@ class TestDBPortConfigOnly:
             with pytest.raises(RuntimeError, match="config_only"):
                 port.execute("SELECT 1")
 
-    def test_config_only_publish_raises(self, tmp_path: Path):
+    def test_config_only_publish_raises(self, tmp_path: Path) -> None:
         """publish() raises RuntimeError in config_only mode."""
         import pytest
 
@@ -504,7 +524,7 @@ class TestDBPortConfigOnly:
             with pytest.raises(RuntimeError, match="config_only"):
                 port.publish(version="v1")
 
-    def test_config_only_run_raises(self, tmp_path: Path):
+    def test_config_only_run_raises(self, tmp_path: Path) -> None:
         """run() raises RuntimeError in config_only mode."""
         import pytest
 
@@ -518,7 +538,7 @@ class TestDBPortConfigOnly:
             with pytest.raises(RuntimeError, match="config_only"):
                 port.run(version="v1")
 
-    def test_config_only_no_duckdb_dir_created(self, tmp_path: Path):
+    def test_config_only_no_duckdb_dir_created(self, tmp_path: Path) -> None:
         """config_only=True does not create the data/ directory."""
         data_dir = tmp_path / "data"
         assert not data_dir.exists()
@@ -534,7 +554,11 @@ class TestDBPortConfigOnly:
 
 
 class TestDBPortAutoSchema:
-    def _make_auto_schema_client(self, tmp_path: Path, mock_catalog=None):
+    """Tests for DBPort Auto Schema."""
+
+    def _make_auto_schema_client(
+        self, tmp_path: Path, mock_catalog: MagicMock | None = None
+    ) -> None:
         """Helper to create a DBPort instance for auto-schema tests."""
         import pyarrow as pa
 
@@ -574,7 +598,7 @@ class TestDBPortAutoSchema:
         client.columns = ColumnRegistry(client._lock)
         return client
 
-    def test_auto_detect_schema_refreshes_columns(self, tmp_path: Path):
+    def test_auto_detect_schema_refreshes_columns(self, tmp_path: Path) -> None:
         """When auto-schema succeeds, columns._refresh() is called."""
         client = self._make_auto_schema_client(tmp_path)
         client._auto_detect_schema()
@@ -586,7 +610,7 @@ class TestDBPortAutoSchema:
         assert hasattr(client.columns, "year")
         client._compute.close()
 
-    def test_auto_detect_schema_with_progress_callback(self, tmp_path: Path):
+    def test_auto_detect_schema_with_progress_callback(self, tmp_path: Path) -> None:
         """Progress callback is called during auto-schema detection."""
         from dbport.infrastructure.progress import progress_callback
 
@@ -602,7 +626,7 @@ class TestDBPortAutoSchema:
         cb.finished.assert_called_once_with("Schema detected from warehouse")
         client._compute.close()
 
-    def test_auto_detect_schema_no_table_with_callback(self, tmp_path: Path):
+    def test_auto_detect_schema_no_table_with_callback(self, tmp_path: Path) -> None:
         """When auto-schema returns None, callback reports 'No existing warehouse table'."""
         from dbport.infrastructure.progress import progress_callback
 
@@ -627,7 +651,7 @@ class TestDBPortAutoSchema:
         cb.finished.assert_called_once_with("No existing warehouse table")
         client._compute.close()
 
-    def test_auto_detect_schema_exception_with_callback(self, tmp_path: Path):
+    def test_auto_detect_schema_exception_with_callback(self, tmp_path: Path) -> None:
         """When auto-schema raises, callback reports 'Schema detection skipped'."""
         from dbport.infrastructure.progress import progress_callback
 
@@ -650,7 +674,9 @@ class TestDBPortAutoSchema:
 
 
 class TestDBPortSyncLocalState:
-    def test_sync_exception_does_not_propagate(self, tmp_path: Path):
+    """Tests for DBPort Sync Local State."""
+
+    def test_sync_exception_does_not_propagate(self, tmp_path: Path) -> None:
         """_sync_output_state swallows exceptions."""
         from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
@@ -681,7 +707,9 @@ class TestDBPortSyncLocalState:
 
 
 class TestDBPortUpdateLastFetched:
-    def test_update_last_fetched_with_callback(self, tmp_path: Path):
+    """Tests for DBPort Update Last Fetched."""
+
+    def test_update_last_fetched_with_callback(self, tmp_path: Path) -> None:
         """Progress callback is invoked during _update_last_fetched."""
         from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter
@@ -722,7 +750,7 @@ class TestDBPortUpdateLastFetched:
 class TestDBPortLoadInputs:
     """Cover _load_inputs exception handling (client.py lines 440-441)."""
 
-    def test_load_inputs_exception_swallowed(self, tmp_path: Path):
+    def test_load_inputs_exception_swallowed(self, tmp_path: Path) -> None:
         """_load_inputs swallows exceptions and logs debug message."""
         from dbport.adapters.secondary.compute.duckdb import DuckDBComputeAdapter
         from dbport.adapters.secondary.lock.toml import TomlLockAdapter

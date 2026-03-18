@@ -64,9 +64,7 @@ class PublishService:
         # ------------------------------------------------------------------
         schema = self._lock.read_schema()
         if schema is None:
-            raise RuntimeError(
-                "No schema defined. Call client.schema(...) before publishing."
-            )
+            raise RuntimeError("No schema defined. Call client.schema(...) before publishing.")
 
         # ------------------------------------------------------------------
         # 2. Fail-fast: version already completed → skip idempotently
@@ -81,9 +79,7 @@ class PublishService:
                     cb = progress_callback.get(None)
                     if cb:
                         cb.log(f"Version {version.version} already completed; skipping")
-                    logger.info(
-                        "Version %s already completed; skipping", version.version
-                    )
+                    logger.info("Version %s already completed; skipping", version.version)
                     return vr
 
         # ------------------------------------------------------------------
@@ -92,9 +88,7 @@ class PublishService:
         if self._catalog.table_exists(table_address):
             try:
                 warehouse_arrow = self._catalog.load_arrow_schema(table_address)
-                reader = self._compute.to_arrow_batches(
-                    f"SELECT * FROM {table_address} LIMIT 0"
-                )
+                reader = self._compute.to_arrow_batches(f"SELECT * FROM {table_address} LIMIT 0")
                 local_arrow = getattr(reader, "schema_arrow", None) or reader.schema
                 check_schema_drift(local_arrow, warehouse_arrow)
             except SchemaDriftError:
@@ -117,6 +111,7 @@ class PublishService:
                 version.version,
             )
             from ...domain.entities.version import VersionRecord
+
             return VersionRecord(
                 version=version.version,
                 published_at=datetime.now(UTC).replace(microsecond=0),
@@ -155,11 +150,13 @@ class PublishService:
         # ------------------------------------------------------------------
         # 8. Build metadata.json in-memory
         # ------------------------------------------------------------------
-        prev_metadata = self._catalog.get_table_property(
-            table_address, "dbport.metadata_json"
-        )
+        prev_metadata = self._catalog.get_table_property(table_address, "dbport.metadata_json")
         metadata_bytes = self._metadata.build_metadata_json(
-            dataset, version, inputs, codelists, prev_metadata,
+            dataset,
+            version,
+            inputs,
+            codelists,
+            prev_metadata,
             snapshot_id=version_record.iceberg_snapshot_id,
         )
 

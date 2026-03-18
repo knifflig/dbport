@@ -84,7 +84,7 @@ completed = true
 """
 
 
-def _mock_dbport(run_hook="main.py"):
+def _mock_dbport(run_hook: str = "main.py") -> MagicMock:
     mock_port = MagicMock()
     mock_port.__enter__ = MagicMock(return_value=mock_port)
     mock_port.__exit__ = MagicMock(return_value=False)
@@ -94,7 +94,10 @@ def _mock_dbport(run_hook="main.py"):
 
 
 class TestRunCommand:
-    def test_run_no_hook_defaults_to_main_py(self, tmp_path: Path):
+    """Tests for TestRunCommand."""
+
+    def test_run_no_hook_defaults_to_main_py(self, tmp_path: Path) -> None:
+        """Test Run no hook defaults to main py."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_NO_HOOK)
         (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
@@ -118,7 +121,7 @@ class TestRunCommand:
         mp.execute.assert_called_once_with("SELECT 1")
         mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
-    def test_run_no_version_fails(self, tmp_path: Path):
+    def test_run_no_version_fails(self, tmp_path: Path) -> None:
         """When no version is configured or in history, run fails early."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_NO_VERSION)
@@ -142,13 +145,15 @@ class TestRunCommand:
         assert "version" in result.output
         assert "<version>" in result.output
 
-    def test_run_help(self):
+    def test_run_help(self) -> None:
+        """Test Run help."""
         result = runner.invoke(app, ["model", "run", "--help"])
         assert result.exit_code == 0
         assert "publish" in result.output.lower()
         assert "--target" in result.output
 
-    def test_run_success(self, tmp_path: Path):
+    def test_run_success(self, tmp_path: Path) -> None:
+        """Test Run success."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -172,7 +177,8 @@ class TestRunCommand:
         mp.execute.assert_called_once_with("SELECT 1")
         mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
-    def test_run_python_hook_callable_uses_injected_port(self, tmp_path: Path):
+    def test_run_python_hook_callable_uses_injected_port(self, tmp_path: Path) -> None:
+        """Test Run python hook callable uses injected port."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -201,7 +207,8 @@ class TestRunCommand:
         mp.execute.assert_called_once_with("SELECT 2")
         mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
-    def test_run_with_model_positional_arg(self, tmp_path: Path):
+    def test_run_with_model_positional_arg(self, tmp_path: Path) -> None:
+        """Test Run with model positional arg."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MULTI_MODEL_LOCK)
         mp = _mock_dbport(run_hook="sql/run.sql")
@@ -225,7 +232,8 @@ class TestRunCommand:
         assert call_kwargs["agency"] == "c"
         assert call_kwargs["dataset_id"] == "d"
 
-    def test_run_with_version_publishes(self, tmp_path: Path):
+    def test_run_with_version_publishes(self, tmp_path: Path) -> None:
+        """Test Run with version publishes."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -249,7 +257,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
-    def test_run_with_timing(self, tmp_path: Path):
+    def test_run_with_timing(self, tmp_path: Path) -> None:
+        """Test Run with timing."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -272,7 +281,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         assert "Duration" in result.output
 
-    def test_run_json_output(self, tmp_path: Path):
+    def test_run_json_output(self, tmp_path: Path) -> None:
+        """Test Run json output."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -299,7 +309,8 @@ class TestRunCommand:
         assert data["data"]["model"] == "a.b"
         assert "elapsed_seconds" in data["data"]
 
-    def test_run_no_model_fails(self, tmp_path: Path):
+    def test_run_no_model_fails(self, tmp_path: Path) -> None:
+        """Test Run no model fails."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         result = runner.invoke(
@@ -314,7 +325,8 @@ class TestRunCommand:
         assert result.exit_code != 0
         assert "No models found" in result.output
 
-    def test_run_dry_run_mode(self, tmp_path: Path):
+    def test_run_dry_run_mode(self, tmp_path: Path) -> None:
+        """Test Run dry run mode."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -339,7 +351,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode="dry")
 
-    def test_run_refresh_mode(self, tmp_path: Path):
+    def test_run_refresh_mode(self, tmp_path: Path) -> None:
+        """Test Run refresh mode."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -364,7 +377,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
 
-    def test_run_refresh_without_version_uses_latest(self, tmp_path: Path):
+    def test_run_refresh_without_version_uses_latest(self, tmp_path: Path) -> None:
+        """Test Run refresh without version uses latest."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
         mp = _mock_dbport()
@@ -387,7 +401,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode="refresh")
 
-    def test_run_json_output_with_version(self, tmp_path: Path):
+    def test_run_json_output_with_version(self, tmp_path: Path) -> None:
+        """Test Run json output with version."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -414,7 +429,8 @@ class TestRunCommand:
         assert data["ok"] is True
         assert data["data"]["version"] == "2026-03-15"
 
-    def test_run_model_key_in_json_output(self, tmp_path: Path):
+    def test_run_model_key_in_json_output(self, tmp_path: Path) -> None:
+        """Test Run model key in json output."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MULTI_MODEL_LOCK)
         mp = _mock_dbport(run_hook="sql/run.sql")
@@ -437,7 +453,7 @@ class TestRunCommand:
         data = json.loads(result.output)
         assert data["data"]["model"] == "c.d"
 
-    def test_run_auto_resolves_config_version(self, tmp_path: Path):
+    def test_run_auto_resolves_config_version(self, tmp_path: Path) -> None:
         """Without --version, run uses version from lock config."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
@@ -460,7 +476,7 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
-    def test_run_falls_back_to_latest_completed_version(self, tmp_path: Path):
+    def test_run_falls_back_to_latest_completed_version(self, tmp_path: Path) -> None:
         """Without config version, falls back to latest completed version."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK_WITH_VERSIONS)
@@ -483,7 +499,7 @@ class TestRunCommand:
         assert result.exit_code == 0
         mp.publish.assert_called_once_with(version="2026-03-15", mode=None)
 
-    def test_run_explicit_version_overrides_config(self, tmp_path: Path):
+    def test_run_explicit_version_overrides_config(self, tmp_path: Path) -> None:
         """--version flag takes precedence over config version."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
@@ -512,7 +528,7 @@ class TestRunCommand:
 class TestRunExecuteStepCallbackFailed:
     """Cover _run_execute_step callback.failed() path (lifecycle.py lines 28-32)."""
 
-    def test_callback_failed_called_on_exception(self):
+    def test_callback_failed_called_on_exception(self) -> None:
         """When execute_hook raises, callback.failed() is called and exception re-raised."""
         import pytest
 
@@ -535,7 +551,7 @@ class TestRunExecuteStepCallbackFailed:
         cb.started.assert_called_once_with("Executing main.py")
         cb.failed.assert_called_once_with("Failed executing main.py")
 
-    def test_callback_finished_on_success(self):
+    def test_callback_finished_on_success(self) -> None:
         """When execute_hook succeeds, callback.finished() is called."""
         from dbport.cli.commands.lifecycle import _run_execute_step
         from dbport.infrastructure.progress import progress_callback
@@ -552,7 +568,7 @@ class TestRunExecuteStepCallbackFailed:
         cb.started.assert_called_once_with("Executing main.py")
         cb.finished.assert_called_once_with("Executed main.py")
 
-    def test_no_callback_exception_still_reraises(self):
+    def test_no_callback_exception_still_reraises(self) -> None:
         """When no callback is set, _run_execute_step still re-raises."""
         import pytest
 

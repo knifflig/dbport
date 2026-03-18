@@ -7,13 +7,17 @@ import gzip
 import hashlib
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ....domain.entities.codelist import CodelistEntry
+    from ....domain.ports.catalog import ICatalog
 
 logger = logging.getLogger(__name__)
 
 
 def attach_metadata_json(
-    catalog: Any,
+    catalog: ICatalog,
     table_address: str,
     metadata_bytes: bytes,
 ) -> None:
@@ -39,17 +43,17 @@ def attach_metadata_json(
 
 
 def attach_codelist_csv(
-    catalog: Any,
+    catalog: ICatalog,
     table_address: str,
     column_name: str,
     csv_bytes: bytes,
-    codelist_entry: Any = None,
+    codelist_entry: CodelistEntry | None = None,
 ) -> None:
     """Compress codelist CSV bytes and write to column documentation in Iceberg."""
     sha = hashlib.sha256(csv_bytes).hexdigest()
     csv_gz_b64 = base64.b64encode(gzip.compress(csv_bytes)).decode("ascii")
 
-    payload: dict[str, Any] = {
+    payload: dict[str, dict[str, str | None]] = {
         "dbport": {
             "csv_sha256": sha,
             "csv_gzip_base64": csv_gz_b64,
@@ -71,9 +75,7 @@ def attach_codelist_csv(
     update_fn = getattr(catalog, "update_column_docs", None)
     if callable(update_fn):
         update_fn(table_address, {column_name: doc_json})
-        logger.debug(
-            "attach_codelist_csv: attached column %s on %s", column_name, table_address
-        )
+        logger.debug("attach_codelist_csv: attached column %s on %s", column_name, table_address)
     else:
         logger.warning(
             "attach_codelist_csv: catalog has no update_column_docs; skipping column %s",

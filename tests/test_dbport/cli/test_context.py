@@ -25,13 +25,17 @@ from dbport.cli.context import (
 
 
 class TestFindRepoRoot:
-    def test_finds_pyproject_in_parent(self, tmp_path: Path):
+    """Tests for TestFindRepoRoot."""
+
+    def test_finds_pyproject_in_parent(self, tmp_path: Path) -> None:
+        """Test Finds pyproject in parent."""
         (tmp_path / "pyproject.toml").write_text("[project]\n")
         child = tmp_path / "sub" / "deep"
         child.mkdir(parents=True)
         assert _find_repo_root(child) == tmp_path
 
-    def test_falls_back_to_start_when_none(self, tmp_path: Path):
+    def test_falls_back_to_start_when_none(self, tmp_path: Path) -> None:
+        """Test Falls back to start when none."""
         child = tmp_path / "no_marker"
         child.mkdir()
         result = _find_repo_root(child)
@@ -39,7 +43,13 @@ class TestFindRepoRoot:
 
 
 class TestResolveContext:
-    def test_lockfile_always_at_repo_root(self, tmp_path: Path, monkeypatch):
+    """Tests for TestResolveContext."""
+
+    def test_lockfile_always_at_repo_root(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Lock file is always at repo root, even when CWD has its own."""
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -55,7 +65,12 @@ class TestResolveContext:
 
         assert ctx.lockfile_path == repo / "dbport.lock"
 
-    def test_explicit_lockfile_overrides(self, tmp_path: Path, monkeypatch):
+    def test_explicit_lockfile_overrides(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Explicit lockfile overrides."""
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / "pyproject.toml").write_text("[project]\n")
@@ -68,7 +83,12 @@ class TestResolveContext:
 
         assert ctx.lockfile_path == explicit
 
-    def test_model_flag_stored(self, tmp_path: Path, monkeypatch):
+    def test_model_flag_stored(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Model flag stored."""
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / "pyproject.toml").write_text("[project]\n")
@@ -79,12 +99,24 @@ class TestResolveContext:
 
 
 class TestCwdModelRoot:
-    def test_returns_relative_path(self, tmp_path: Path, monkeypatch):
+    """Tests for TestCwdModelRoot."""
+
+    def test_returns_relative_path(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Returns relative path."""
         monkeypatch.chdir(tmp_path / "sub" if False else tmp_path)
         # When CWD == project_path, returns "."
         assert _cwd_model_root(tmp_path) == "."
 
-    def test_returns_subdir(self, tmp_path: Path, monkeypatch):
+    def test_returns_subdir(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Returns subdir."""
         sub = tmp_path / "examples" / "model"
         sub.mkdir(parents=True)
         monkeypatch.chdir(sub)
@@ -92,7 +124,10 @@ class TestCwdModelRoot:
 
 
 class TestFindModel:
-    def test_matches_by_model_root(self):
+    """Tests for TestFindModel."""
+
+    def test_matches_by_model_root(self) -> None:
+        """Test Matches by model root."""
         models = {
             "a.x": {"model_root": "models/x", "agency": "a", "dataset_id": "x"},
             "b.y": {"model_root": "models/y", "agency": "b", "dataset_id": "y"},
@@ -101,13 +136,16 @@ class TestFindModel:
         assert result is not None
         assert result[0] == "b.y"
 
-    def test_returns_none_when_not_found(self):
+    def test_returns_none_when_not_found(self) -> None:
+        """Test Returns none when not found."""
         models = {"a.x": {"model_root": "models/x"}}
         assert _find_model(models, "nonexistent") is None
 
 
 class TestResolveModelPaths:
-    def test_resolves_relative_paths_from_repo_root(self, tmp_path: Path):
+    """Tests for TestResolveModelPaths."""
+
+    def test_resolves_relative_paths_from_repo_root(self, tmp_path: Path) -> None:
         """model_root and duckdb_path in lock are relative to repo root."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
@@ -128,20 +166,17 @@ class TestResolveModelPaths:
         assert paths.duckdb_path == str((tmp_path / "examples/model/data/t.duckdb").resolve())
         assert paths.model_root == str((tmp_path / "examples/model").resolve())
 
-    def test_defaults_duckdb_path_when_empty(self, tmp_path: Path):
+    def test_defaults_duckdb_path_when_empty(self, tmp_path: Path) -> None:
+        """Test Defaults duckdb path when empty."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.b"]\n'
-            'agency = "a"\n'
-            'dataset_id = "b"\n'
-            'model_root = "sub"\n'
-        )
+        lock.write_text('[models."a.b"]\nagency = "a"\ndataset_id = "b"\nmodel_root = "sub"\n')
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         paths = resolve_model_paths(ctx)
 
         assert paths.duckdb_path == str((tmp_path / "sub" / "data" / "b.duckdb").resolve())
 
-    def test_resolves_model_by_flag(self, tmp_path: Path):
+    def test_resolves_model_by_flag(self, tmp_path: Path) -> None:
+        """Test Resolves model by flag."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             '[models."a.x"]\n'
@@ -149,7 +184,7 @@ class TestResolveModelPaths:
             'dataset_id = "x"\n'
             'model_root = "models/x"\n'
             'duckdb_path = "models/x/data/x.duckdb"\n'
-            '\n'
+            "\n"
             '[models."b.y"]\n'
             'agency = "b"\n'
             'dataset_id = "y"\n'
@@ -162,14 +197,19 @@ class TestResolveModelPaths:
         assert paths.agency == "b"
         assert paths.dataset_id == "y"
 
-    def test_resolves_model_by_cwd(self, tmp_path: Path, monkeypatch):
+    def test_resolves_model_by_cwd(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Resolves model by cwd."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             '[models."a.x"]\n'
             'agency = "a"\n'
             'dataset_id = "x"\n'
             'model_root = "models/x"\n'
-            '\n'
+            "\n"
             '[models."b.y"]\n'
             'agency = "b"\n'
             'dataset_id = "y"\n'
@@ -184,14 +224,14 @@ class TestResolveModelPaths:
         assert paths.agency == "b"
         assert paths.dataset_id == "y"
 
-    def test_falls_back_to_first_model(self, tmp_path: Path, monkeypatch):
+    def test_falls_back_to_first_model(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Falls back to first model."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\n'
-            'agency = "a"\n'
-            'dataset_id = "x"\n'
-            'model_root = "models/x"\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "models/x"\n')
         monkeypatch.chdir(tmp_path)  # CWD is repo root, no match
 
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
@@ -199,7 +239,8 @@ class TestResolveModelPaths:
 
         assert paths.agency == "a"
 
-    def test_raises_when_no_models(self, tmp_path: Path):
+    def test_raises_when_no_models(self, tmp_path: Path) -> None:
+        """Test Raises when no models."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
@@ -207,20 +248,16 @@ class TestResolveModelPaths:
         with pytest.raises(RuntimeError, match="No models found"):
             resolve_model_paths(ctx)
 
-    def test_raises_when_model_flag_not_found(self, tmp_path: Path):
+    def test_raises_when_model_flag_not_found(self, tmp_path: Path) -> None:
+        """Test Raises when model flag not found."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\n'
-            'agency = "a"\n'
-            'dataset_id = "x"\n'
-            'model_root = "models/x"\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "models/x"\n')
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="nonexistent")
 
         with pytest.raises(RuntimeError, match="No model with model_root"):
             resolve_model_paths(ctx)
 
-    def test_handles_absolute_duckdb_path_in_lock(self, tmp_path: Path):
+    def test_handles_absolute_duckdb_path_in_lock(self, tmp_path: Path) -> None:
         """Absolute duckdb_path in lock (legacy) should still work."""
         abs_path = str(tmp_path / "data" / "t.duckdb")
         lock = tmp_path / "dbport.lock"
@@ -236,7 +273,11 @@ class TestResolveModelPaths:
 
         assert paths.duckdb_path == abs_path
 
-    def test_resolves_default_model_over_first(self, tmp_path: Path, monkeypatch):
+    def test_resolves_default_model_over_first(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """When no --model and no CWD match, default_model wins over first."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
@@ -245,7 +286,7 @@ class TestResolveModelPaths:
             'agency = "a"\n'
             'dataset_id = "x"\n'
             'model_root = "models/x"\n'
-            '\n'
+            "\n"
             '[models."b.y"]\n'
             'agency = "b"\n'
             'dataset_id = "y"\n'
@@ -258,7 +299,7 @@ class TestResolveModelPaths:
         assert paths.agency == "b"
         assert paths.dataset_id == "y"
 
-    def test_model_flag_overrides_default_model(self, tmp_path: Path):
+    def test_model_flag_overrides_default_model(self, tmp_path: Path) -> None:
         """Explicit --model flag should still override default_model."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
@@ -267,7 +308,7 @@ class TestResolveModelPaths:
             'agency = "a"\n'
             'dataset_id = "x"\n'
             'model_root = "models/x"\n'
-            '\n'
+            "\n"
             '[models."b.y"]\n'
             'agency = "b"\n'
             'dataset_id = "y"\n'
@@ -281,64 +322,74 @@ class TestResolveModelPaths:
 
 
 class TestDefaultModelReadWrite:
-    def test_read_returns_none_when_no_file(self, tmp_path: Path):
+    """Tests for TestDefaultModelReadWrite."""
+
+    def test_read_returns_none_when_no_file(self, tmp_path: Path) -> None:
+        """Test Read returns none when no file."""
         assert read_default_model(tmp_path / "missing.lock") is None
 
-    def test_read_returns_none_when_no_key(self, tmp_path: Path):
+    def test_read_returns_none_when_no_key(self, tmp_path: Path) -> None:
+        """Test Read returns none when no key."""
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.x"]\nagency = "a"\n')
         assert read_default_model(lock) is None
 
-    def test_read_returns_value(self, tmp_path: Path):
+    def test_read_returns_value(self, tmp_path: Path) -> None:
+        """Test Read returns value."""
         lock = tmp_path / "dbport.lock"
         lock.write_text('default_model = "a.x"\n')
         assert read_default_model(lock) == "a.x"
 
-    def test_write_creates_key(self, tmp_path: Path):
+    def test_write_creates_key(self, tmp_path: Path) -> None:
+        """Test Write creates key."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         write_default_model(lock, "a.x")
         assert read_default_model(lock) == "a.x"
 
-    def test_write_preserves_models(self, tmp_path: Path):
+    def test_write_preserves_models(self, tmp_path: Path) -> None:
+        """Test Write preserves models."""
         import tomllib
+
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         write_default_model(lock, "a.x")
         doc = tomllib.loads(lock.read_text())
         assert doc["models"]["a.x"]["agency"] == "a"
 
 
 class TestModelsFolderReadWrite:
-    def test_read_returns_default_when_no_file(self, tmp_path: Path):
+    """Tests for TestModelsFolderReadWrite."""
+
+    def test_read_returns_default_when_no_file(self, tmp_path: Path) -> None:
+        """Test Read returns default when no file."""
         assert read_models_folder(tmp_path / "missing.lock") == "models"
 
-    def test_read_returns_default_when_no_key(self, tmp_path: Path):
+    def test_read_returns_default_when_no_key(self, tmp_path: Path) -> None:
+        """Test Read returns default when no key."""
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.x"]\nagency = "a"\n')
         assert read_models_folder(lock) == "models"
 
-    def test_read_returns_value(self, tmp_path: Path):
+    def test_read_returns_value(self, tmp_path: Path) -> None:
+        """Test Read returns value."""
         lock = tmp_path / "dbport.lock"
         lock.write_text('models_folder = "examples"\n')
         assert read_models_folder(lock) == "examples"
 
-    def test_write_creates_key(self, tmp_path: Path):
+    def test_write_creates_key(self, tmp_path: Path) -> None:
+        """Test Write creates key."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("")
         write_models_folder(lock, "custom")
         assert read_models_folder(lock) == "custom"
 
-    def test_write_preserves_models(self, tmp_path: Path):
+    def test_write_preserves_models(self, tmp_path: Path) -> None:
+        """Test Write preserves models."""
         import tomllib
+
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         write_models_folder(lock, "examples")
         doc = tomllib.loads(lock.read_text())
         assert doc["models"]["a.x"]["agency"] == "a"
@@ -346,32 +397,46 @@ class TestModelsFolderReadWrite:
 
 
 class TestResolveDataset:
-    def test_returns_agency_and_dataset(self, tmp_path: Path, monkeypatch):
+    """Tests for TestResolveDataset."""
+
+    def test_returns_agency_and_dataset(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Returns agency and dataset."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         monkeypatch.chdir(tmp_path)
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         agency, dataset_id = resolve_dataset(ctx)
         assert agency == "a"
         assert dataset_id == "x"
 
-    def test_raises_when_no_models(self, tmp_path: Path):
+    def test_raises_when_no_models(self, tmp_path: Path) -> None:
+        """Test Raises when no models."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         with pytest.raises(RuntimeError, match="No models found"):
             resolve_dataset(ctx)
 
-    def test_raises_when_no_lock_file(self, tmp_path: Path):
+    def test_raises_when_no_lock_file(self, tmp_path: Path) -> None:
+        """Test Raises when no lock file."""
         ctx = CliContext(project_path=tmp_path, lockfile_path=tmp_path / "nope.lock")
         with pytest.raises(RuntimeError, match="No models found"):
             resolve_dataset(ctx)
 
 
 class TestResolveModelKey:
-    def test_explicit_model_key(self, tmp_path: Path, monkeypatch):
+    """Tests for TestResolveModelKey."""
+
+    def test_explicit_model_key(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Explicit model key."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
@@ -383,7 +448,12 @@ class TestResolveModelKey:
         assert key == "b.y"
         assert data["agency"] == "b"
 
-    def test_falls_back_to_default_resolution(self, tmp_path: Path, monkeypatch):
+    def test_falls_back_to_default_resolution(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Falls back to default resolution."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             'default_model = "b.y"\n'
@@ -395,18 +465,26 @@ class TestResolveModelKey:
         key, data = resolve_model_key(ctx)
         assert key == "b.y"
 
-    def test_unknown_model_arg_falls_through(self, tmp_path: Path, monkeypatch):
+    def test_unknown_model_arg_falls_through(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Unknown model arg falls through."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n')
         monkeypatch.chdir(tmp_path)
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         # "nonexistent" not in models, falls through to default resolution
         key, data = resolve_model_key(ctx, "nonexistent")
         assert key == "a.x"
 
-    def test_resolves_via_model_dir_flag(self, tmp_path: Path, monkeypatch):
+    def test_resolves_via_model_dir_flag(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Resolves via model dir flag."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
@@ -417,17 +495,25 @@ class TestResolveModelKey:
         key, data = resolve_model_key(ctx)
         assert key == "b.y"
 
-    def test_model_dir_flag_not_found_raises(self, tmp_path: Path, monkeypatch):
+    def test_model_dir_flag_not_found_raises(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Model dir flag not found raises."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n')
         monkeypatch.chdir(tmp_path)
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock, model_dir="nonexistent")
         with pytest.raises(RuntimeError, match="No model with model_root"):
             resolve_model_key(ctx)
 
-    def test_resolves_via_cwd(self, tmp_path: Path, monkeypatch):
+    def test_resolves_via_cwd(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Resolves via cwd."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
@@ -439,17 +525,21 @@ class TestResolveModelKey:
         key, data = resolve_model_key(ctx)
         assert key == "b.y"
 
-    def test_fallback_to_first_model(self, tmp_path: Path, monkeypatch):
+    def test_fallback_to_first_model(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test Fallback to first model."""
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "m/x"\n')
         monkeypatch.chdir(tmp_path)  # no CWD match, no default_model
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
         key, data = resolve_model_key(ctx)
         assert key == "a.x"
 
-    def test_raises_when_no_models(self, tmp_path: Path):
+    def test_raises_when_no_models(self, tmp_path: Path) -> None:
+        """Test Raises when no models."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         ctx = CliContext(project_path=tmp_path, lockfile_path=lock)
@@ -458,7 +548,10 @@ class TestResolveModelKey:
 
 
 class TestResolveModelPathsFromData:
-    def test_builds_paths_from_model_data(self, tmp_path: Path):
+    """Tests for TestResolveModelPathsFromData."""
+
+    def test_builds_paths_from_model_data(self, tmp_path: Path) -> None:
+        """Test Builds paths from model data."""
         ctx = CliContext(project_path=tmp_path, lockfile_path=tmp_path / "dbport.lock")
         model_data = {
             "agency": "test",
@@ -472,7 +565,8 @@ class TestResolveModelPathsFromData:
         assert paths.model_root == str((tmp_path / "examples/m").resolve())
         assert paths.duckdb_path == str((tmp_path / "examples/m/data/tbl.duckdb").resolve())
 
-    def test_defaults_duckdb_path(self, tmp_path: Path):
+    def test_defaults_duckdb_path(self, tmp_path: Path) -> None:
+        """Test Defaults duckdb path."""
         ctx = CliContext(project_path=tmp_path, lockfile_path=tmp_path / "dbport.lock")
         model_data = {"agency": "a", "dataset_id": "b", "model_root": "sub"}
         paths = resolve_model_paths_from_data(ctx, model_data)
@@ -480,7 +574,10 @@ class TestResolveModelPathsFromData:
 
 
 class TestReadLockVersions:
-    def test_returns_versions_list(self, tmp_path: Path):
+    """Tests for TestReadLockVersions."""
+
+    def test_returns_versions_list(self, tmp_path: Path) -> None:
+        """Test Returns versions list."""
         lock = tmp_path / "dbport.lock"
         lock.write_text(
             '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nmodel_root = "."\n'
@@ -491,47 +588,52 @@ class TestReadLockVersions:
         assert len(versions) == 2
         assert versions[0]["version"] == "2026-03-15"
 
-    def test_returns_empty_for_missing_model(self, tmp_path: Path):
+    def test_returns_empty_for_missing_model(self, tmp_path: Path) -> None:
+        """Test Returns empty for missing model."""
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.x"]\nagency = "a"\n')
         assert read_lock_versions(lock, "b.y") == []
 
-    def test_returns_empty_for_no_versions(self, tmp_path: Path):
+    def test_returns_empty_for_no_versions(self, tmp_path: Path) -> None:
+        """Test Returns empty for no versions."""
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
         assert read_lock_versions(lock, "a.x") == []
 
-    def test_returns_empty_for_missing_file(self, tmp_path: Path):
+    def test_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
+        """Test Returns empty for missing file."""
         assert read_lock_versions(tmp_path / "nope.lock", "a.x") == []
 
 
 class TestReadLockVersionConfig:
     """Cover read_lock_version_config returning None for missing model (line 290)."""
 
-    def test_returns_none_for_missing_model(self, tmp_path: Path):
+    def test_returns_none_for_missing_model(self, tmp_path: Path) -> None:
+        """Test Returns none for missing model."""
         from dbport.cli.context import read_lock_version_config
 
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
         assert read_lock_version_config(lock, "nonexistent.model") is None
 
-    def test_returns_none_when_no_version_key(self, tmp_path: Path):
+    def test_returns_none_when_no_version_key(self, tmp_path: Path) -> None:
+        """Test Returns none when no version key."""
         from dbport.cli.context import read_lock_version_config
 
         lock = tmp_path / "dbport.lock"
         lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\n')
         assert read_lock_version_config(lock, "a.x") is None
 
-    def test_returns_version_when_set(self, tmp_path: Path):
+    def test_returns_version_when_set(self, tmp_path: Path) -> None:
+        """Test Returns version when set."""
         from dbport.cli.context import read_lock_version_config
 
         lock = tmp_path / "dbport.lock"
-        lock.write_text(
-            '[models."a.x"]\nagency = "a"\ndataset_id = "x"\nversion = "2026-03-15"\n'
-        )
+        lock.write_text('[models."a.x"]\nagency = "a"\ndataset_id = "x"\nversion = "2026-03-15"\n')
         assert read_lock_version_config(lock, "a.x") == "2026-03-15"
 
-    def test_returns_none_for_missing_file(self, tmp_path: Path):
+    def test_returns_none_for_missing_file(self, tmp_path: Path) -> None:
+        """Test Returns none for missing file."""
         from dbport.cli.context import read_lock_version_config
 
         assert read_lock_version_config(tmp_path / "nope.lock", "a.x") is None

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import duckdb
+    import pyarrow as pa
 
 logger = logging.getLogger(__name__)
 
@@ -27,20 +31,18 @@ class DuckDBComputeAdapter:
 
     def __init__(self, path: Path) -> None:
         self._path = path
-        self._con: Any = None  # duckdb.DuckDBPyConnection, lazy-loaded
+        self._con: duckdb.DuckDBPyConnection | None = None
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
-    def _get_con(self) -> Any:
+    def _get_con(self) -> duckdb.DuckDBPyConnection:
         if self._con is None:
             try:
                 import duckdb
             except ImportError as exc:
-                raise RuntimeError(
-                    "duckdb is required. Install it: pip install duckdb"
-                ) from exc
+                raise RuntimeError("duckdb is required. Install it: pip install duckdb") from exc
             self._con = duckdb.connect(str(self._path))
             for schema in _INIT_SCHEMAS:
                 self._con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
@@ -62,9 +64,7 @@ class DuckDBComputeAdapter:
                 pass
             # Try DuckDB INSTALL via HTTPS
             try:
-                con.execute(
-                    f"SET custom_extension_repository = '{_EXTENSIONS_REPO}'"
-                )
+                con.execute(f"SET custom_extension_repository = '{_EXTENSIONS_REPO}'")
                 con.execute(f"INSTALL {ext}")
                 con.execute(f"LOAD {ext}")
                 continue
@@ -103,7 +103,7 @@ class DuckDBComputeAdapter:
     # ICompute
     # ------------------------------------------------------------------
 
-    def execute(self, sql: str, parameters: list[Any] | None = None) -> Any:
+    def execute(self, sql: str, parameters: list[object] | None = None) -> duckdb.DuckDBPyRelation:
         """Execute a SQL statement. Returns the DuckDB relation/cursor."""
         con = self._get_con()
         if parameters:
@@ -117,18 +117,22 @@ class DuckDBComputeAdapter:
 
     def relation_exists(self, schema: str, table: str) -> bool:
         """Return True if schema.table exists in DuckDB."""
-        result = self._get_con().execute(
-            "SELECT COUNT(*) FROM information_schema.tables "
-            "WHERE table_schema = ? AND table_name = ?",
-            [schema, table],
-        ).fetchone()
+        result = (
+            self._get_con()
+            .execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = ? AND table_name = ?",
+                [schema, table],
+            )
+            .fetchone()
+        )
         return bool(result and result[0] > 0)
 
-    def to_arrow_batches(self, sql: str, batch_size: int = 10_000) -> Any:
+    def to_arrow_batches(self, sql: str, batch_size: int = 10_000) -> pa.RecordBatchReader:
         """Stream the result of a SELECT as a PyArrow RecordBatchReader."""
         return self._get_con().execute(sql).to_arrow_reader(batch_size)
 
-    def register_arrow(self, view_name: str, arrow_object: Any) -> None:
+    def register_arrow(self, view_name: str, arrow_object: pa.Table | pa.RecordBatchReader) -> None:
         """Register an Arrow object (Table, RecordBatchReader, …) as a DuckDB view."""
         self._get_con().register(view_name, arrow_object)
 
@@ -137,6 +141,7 @@ class DuckDBComputeAdapter:
         self._get_con().unregister(view_name)
 
     def close(self) -> None:
+        """Release the DuckDB connection."""
         if self._con is not None:
             try:
                 self._con.close()

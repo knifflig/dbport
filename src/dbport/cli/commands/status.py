@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import typer
 
 from ..context import read_default_model, read_lock_models
+
+if TYPE_CHECKING:
+    from ..context import CliContext
 from ..errors import cli_error_handler
 from ..render import print_info, print_json, print_table, print_warning
 
@@ -18,15 +23,9 @@ status_app = typer.Typer(
 @status_app.callback(invoke_without_command=True)
 def status_cmd(
     ctx: typer.Context,
-    show_inputs: bool = typer.Option(
-        False, "--inputs", help="Show detailed input information."
-    ),
-    show_history: bool = typer.Option(
-        False, "--history", help="Show version publish history."
-    ),
-    show_raw: bool = typer.Option(
-        False, "--raw", help="Show raw lock file content."
-    ),
+    show_inputs: bool = typer.Option(False, "--inputs", help="Show detailed input information."),
+    show_history: bool = typer.Option(False, "--history", help="Show version publish history."),
+    show_raw: bool = typer.Option(False, "--raw", help="Show raw lock file content."),
 ) -> None:
     """Show resolved project and runtime state."""
     if ctx.invoked_subcommand is not None:
@@ -70,7 +69,7 @@ def status_cmd(
             _print_model_summary(key, m, show_inputs=show_inputs, show_history=show_history)
 
 
-def _handle_raw(cli_ctx) -> None:
+def _handle_raw(cli_ctx: CliContext) -> None:
     """Show raw lock file content."""
     if not cli_ctx.lockfile_path.exists():
         if cli_ctx.json_output:
@@ -88,7 +87,9 @@ def _handle_raw(cli_ctx) -> None:
         rprint(Text(raw))
 
 
-def _handle_json(cli_ctx, models: dict, *, show_inputs: bool, show_history: bool) -> None:
+def _handle_json(
+    cli_ctx: CliContext, models: dict, *, show_inputs: bool, show_history: bool
+) -> None:
     """Produce JSON output for the resolved model."""
     from ..context import _cwd_model_root, _find_model
 
@@ -152,9 +153,7 @@ def _handle_json(cli_ctx, models: dict, *, show_inputs: bool, show_history: bool
     print_json("status", data)
 
 
-def _print_model_summary(
-    key: str, m: dict, *, show_inputs: bool, show_history: bool
-) -> None:
+def _print_model_summary(key: str, m: dict, *, show_inputs: bool, show_history: bool) -> None:
     """Print human-readable summary for one model."""
     print_info("")
     print_info(f"[bold cyan]Model:[/] {key}")

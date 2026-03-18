@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ...adapters.primary.client import DBPort
 
 from ...domain.ports.compute import ICompute
 from ...domain.ports.lock import ILockStore
@@ -38,7 +41,7 @@ def resolve_run_hook(lock: ILockStore, model_root: str | None = None) -> str:
     return DEFAULT_RUN_HOOK
 
 
-def execute_hook(port: Any, hook: str) -> None:
+def execute_hook(port: DBPort, hook: str) -> None:
     """Execute a hook file against the active DBPort instance."""
     ext = Path(hook).suffix.lower()
 
@@ -55,7 +58,7 @@ def execute_hook(port: Any, hook: str) -> None:
     )
 
 
-def _exec_python_hook(port: Any, hook: str) -> None:
+def _exec_python_hook(port: DBPort, hook: str) -> None:
     """Execute a Python hook file with ``port`` available in scope.
 
     If the hook defines a top-level ``run(port)`` callable, invoke it after
@@ -73,7 +76,7 @@ def _exec_python_hook(port: Any, hook: str) -> None:
         )
     logger.info("Executing Python hook: %s", path)
     code = path.read_text(encoding="utf-8")
-    namespace: dict[str, Any] = {
+    namespace: dict[str, object] = {
         "port": port,
         "__file__": str(path),
         "__name__": "__dbport_hook__",
@@ -102,7 +105,7 @@ class RunService:
 
     def execute(
         self,
-        port: Any,
+        port: DBPort,
         *,
         version: str | None = None,
         mode: str | None = None,
@@ -122,6 +125,6 @@ class RunService:
         if version is not None:
             port.publish(version=version, mode=mode)
 
-    def _dispatch(self, port: Any, hook: str) -> None:
+    def _dispatch(self, port: DBPort, hook: str) -> None:
         """Route hook execution by file extension."""
         execute_hook(port, hook)

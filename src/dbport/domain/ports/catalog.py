@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+import pyarrow as pa
 
 if TYPE_CHECKING:
     from ..entities.input import IngestRecord, InputDeclaration
     from ..entities.version import DatasetVersion, VersionRecord
+    from ..ports.compute import ICompute
 
 
 @runtime_checkable
@@ -20,7 +23,7 @@ class ICatalog(Protocol):
         """Return True if the table exists in the warehouse."""
         ...
 
-    def load_arrow_schema(self, table_address: str) -> Any:
+    def load_arrow_schema(self, table_address: str) -> pa.Schema:
         """Return the PyArrow schema of an existing warehouse table."""
         ...
 
@@ -59,7 +62,7 @@ class ICatalog(Protocol):
     def ingest_into_compute(
         self,
         declaration: InputDeclaration,
-        compute: Any,
+        compute: ICompute,
         snapshot_id: int | None = None,
     ) -> int:
         """Load a warehouse table into DuckDB.
@@ -80,7 +83,7 @@ class ICatalog(Protocol):
         self,
         table_address: str,
         version: DatasetVersion,
-        compute: Any,
+        compute: ICompute,
         overwrite: bool = False,
     ) -> VersionRecord:
         """Write DuckDB output table to the warehouse.

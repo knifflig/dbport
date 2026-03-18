@@ -29,7 +29,7 @@ duckdb_path = "data/b.duckdb"
 """
 
 
-def _mock_dbport(model_root: str = "."):
+def _mock_dbport(model_root: str = ".") -> MagicMock:
     mock_port = MagicMock()
     mock_port.__enter__ = MagicMock(return_value=mock_port)
     mock_port.__exit__ = MagicMock(return_value=False)
@@ -39,7 +39,10 @@ def _mock_dbport(model_root: str = "."):
 
 
 class TestExecuteCommand:
-    def test_execute_uses_configured_hook_when_no_target(self, tmp_path: Path):
+    """Tests for TestExecuteCommand."""
+
+    def test_execute_uses_configured_hook_when_no_target(self, tmp_path: Path) -> None:
+        """Test Execute uses configured hook when no target."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
@@ -60,7 +63,8 @@ class TestExecuteCommand:
         assert result.exit_code == 0, result.output
         mp.execute.assert_called_once_with("SELECT 1")
 
-    def test_execute_help(self):
+    def test_execute_help(self) -> None:
+        """Test Execute help."""
         result = runner.invoke(
             app,
             [
@@ -73,7 +77,8 @@ class TestExecuteCommand:
         assert "sql" in result.output.lower()
         assert "py" in result.output.lower()
 
-    def test_execute_success(self, tmp_path: Path):
+    def test_execute_success(self, tmp_path: Path) -> None:
+        """Test Execute success."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport(str(tmp_path))
@@ -97,7 +102,8 @@ class TestExecuteCommand:
         assert "Executed" in result.output
         mp.execute.assert_called_once_with("sql/main.sql")
 
-    def test_execute_with_timing(self, tmp_path: Path):
+    def test_execute_with_timing(self, tmp_path: Path) -> None:
+        """Test Execute with timing."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -121,7 +127,8 @@ class TestExecuteCommand:
         assert result.exit_code == 0
         assert "Duration" in result.output
 
-    def test_execute_json_output(self, tmp_path: Path):
+    def test_execute_json_output(self, tmp_path: Path) -> None:
+        """Test Execute json output."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         mp = _mock_dbport()
@@ -148,7 +155,8 @@ class TestExecuteCommand:
         assert data["data"]["target"] == "sql/main.sql"
         assert "elapsed_seconds" in data["data"]
 
-    def test_exec_python_success(self, tmp_path: Path):
+    def test_exec_python_success(self, tmp_path: Path) -> None:
+        """Test Exec python success."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         (tmp_path / "main.py").write_text("port.execute('SELECT 1')", encoding="utf-8")
@@ -170,7 +178,8 @@ class TestExecuteCommand:
         assert result.exit_code == 0, result.output
         mp.execute.assert_called_once_with("SELECT 1")
 
-    def test_exec_python_run_callable_uses_injected_port(self, tmp_path: Path):
+    def test_exec_python_run_callable_uses_injected_port(self, tmp_path: Path) -> None:
+        """Test Exec python run callable uses injected port."""
         lock = tmp_path / "dbport.lock"
         _create_lock(lock, _MODEL_LOCK)
         (tmp_path / "main.py").write_text(
@@ -198,7 +207,8 @@ class TestExecuteCommand:
         assert result.exit_code == 0, result.output
         mp.execute.assert_called_once_with("SELECT 2")
 
-    def test_execute_no_model_fails(self, tmp_path: Path):
+    def test_execute_no_model_fails(self, tmp_path: Path) -> None:
+        """Test Execute no model fails."""
         lock = tmp_path / "dbport.lock"
         lock.write_text("# empty\n")
         result = runner.invoke(

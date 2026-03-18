@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pyarrow as pa
@@ -18,7 +19,7 @@ from dbport.domain.entities.input import InputDeclaration
 from dbport.infrastructure.credentials import WarehouseCreds
 
 
-def _make_creds(**overrides) -> WarehouseCreds:
+def _make_creds(**overrides: object) -> WarehouseCreds:
     defaults = dict(
         catalog_uri="https://catalog.example.com",
         catalog_token="tok",
@@ -29,21 +30,30 @@ def _make_creds(**overrides) -> WarehouseCreds:
 
 
 class TestSqlEscape:
-    def test_clean_string_unchanged(self):
+    """Tests for Sql Escape."""
+
+    def test_clean_string_unchanged(self) -> None:
+        """Clean string unchanged."""
         assert _sql_escape("hello") == "hello"
 
-    def test_single_quote_doubled(self):
+    def test_single_quote_doubled(self) -> None:
+        """Single quote doubled."""
         assert _sql_escape("O'Brien") == "O''Brien"
 
-    def test_multiple_quotes(self):
+    def test_multiple_quotes(self) -> None:
+        """Multiple quotes."""
         assert _sql_escape("it's a 'test'") == "it''s a ''test''"
 
-    def test_empty_string(self):
+    def test_empty_string(self) -> None:
+        """Empty string."""
         assert _sql_escape("") == ""
 
 
 class TestCredentialsEscapedInSql:
-    def test_s3_credentials_with_quotes_do_not_break_sql(self):
+    """Tests for Credentials Escaped In Sql."""
+
+    def test_s3_credentials_with_quotes_do_not_break_sql(self) -> None:
+        """S3 credentials with quotes do not break sql."""
         adapter = IcebergCatalogAdapter(
             _make_creds(
                 s3_endpoint="https://s3.example.com",
@@ -61,7 +71,8 @@ class TestCredentialsEscapedInSql:
         key_call = next(c for c in calls if "s3_access_key_id" in c)
         assert "key''with''quotes" in key_call
 
-    def test_catalog_token_with_quotes_escaped(self):
+    def test_catalog_token_with_quotes_escaped(self) -> None:
+        """Catalog token with quotes escaped."""
         adapter = IcebergCatalogAdapter(_make_creds(catalog_token="tok'en"))
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
@@ -72,7 +83,8 @@ class TestCredentialsEscapedInSql:
         secret_call = next(c for c in calls if "SECRET" in c)
         assert "tok''en" in secret_call
 
-    def test_warehouse_name_with_quotes_escaped(self):
+    def test_warehouse_name_with_quotes_escaped(self) -> None:
+        """Warehouse name with quotes escaped."""
         adapter = IcebergCatalogAdapter(_make_creds(warehouse="my'wh"))
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
@@ -85,24 +97,33 @@ class TestCredentialsEscapedInSql:
 
 
 class TestIcebergCatalogAdapterInit:
-    def test_stores_creds(self):
+    """Tests for Iceberg Catalog Adapter Init."""
+
+    def test_stores_creds(self) -> None:
+        """Stores creds."""
         creds = _make_creds()
         adapter = IcebergCatalogAdapter(creds)
         assert adapter._creds is creds
 
-    def test_catalog_lazy_before_first_use(self):
+    def test_catalog_lazy_before_first_use(self) -> None:
+        """Catalog lazy before first use."""
         adapter = IcebergCatalogAdapter(_make_creds())
         assert adapter._catalog is None
 
-    def test_warehouse_not_attached_before_first_use(self):
+    def test_warehouse_not_attached_before_first_use(self) -> None:
+        """Warehouse not attached before first use."""
         adapter = IcebergCatalogAdapter(_make_creds())
         assert adapter._warehouse_attached is False
 
-    def test_get_catalog_raises_runtime_error_without_pyiceberg(self, monkeypatch):
+    def test_get_catalog_raises_runtime_error_without_pyiceberg(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """_get_catalog() raises RuntimeError if pyiceberg is not installed."""
         real_import = builtins.__import__
 
-        def mock_import(name, *args, **kwargs):
+        def mock_import(name: str, *args: object, **kwargs: object) -> object:
+            """mock_import."""
             if "pyiceberg" in name:
                 raise ImportError("No module named 'pyiceberg'")
             return real_import(name, *args, **kwargs)
@@ -112,11 +133,12 @@ class TestIcebergCatalogAdapterInit:
         with pytest.raises(RuntimeError, match="pyiceberg"):
             adapter._get_catalog()
 
-    def test_get_catalog_uses_fsspec_file_io(self, monkeypatch):
+    def test_get_catalog_uses_fsspec_file_io(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """_get_catalog() sets py-io-impl to FsspecFileIO for Supabase S3 compatibility."""
         captured = {}
 
-        def fake_load_catalog(name, **kwargs):
+        def fake_load_catalog(name: str, **kwargs: object) -> object:
+            """fake_load_catalog."""
             captured.update(kwargs)
             return object()
 
@@ -135,32 +157,40 @@ class TestIcebergCatalogAdapterInit:
 
         assert captured.get("py-io-impl") == "pyiceberg.io.fsspec.FsspecFileIO"
 
-    def test_parse_address_valid(self):
+    def test_parse_address_valid(self) -> None:
+        """Parse address valid."""
         adapter = IcebergCatalogAdapter(_make_creds())
         assert adapter._parse_address("wifor.foo") == ("wifor", "foo")
 
-    def test_parse_address_with_underscores(self):
+    def test_parse_address_with_underscores(self) -> None:
+        """Parse address with underscores."""
         adapter = IcebergCatalogAdapter(_make_creds())
         assert adapter._parse_address("estat.nama_10r_3empers") == ("estat", "nama_10r_3empers")
 
-    def test_parse_address_invalid_no_dot(self):
+    def test_parse_address_invalid_no_dot(self) -> None:
+        """Parse address invalid no dot."""
         adapter = IcebergCatalogAdapter(_make_creds())
         with pytest.raises(ValueError, match="Invalid table address"):
             adapter._parse_address("no_dot")
 
-    def test_parse_address_invalid_special_chars(self):
+    def test_parse_address_invalid_special_chars(self) -> None:
+        """Parse address invalid special chars."""
         adapter = IcebergCatalogAdapter(_make_creds())
         with pytest.raises(ValueError, match="Invalid table address"):
             adapter._parse_address("foo.bar;DROP TABLE")
 
-    def test_parse_address_invalid_spaces(self):
+    def test_parse_address_invalid_spaces(self) -> None:
+        """Parse address invalid spaces."""
         adapter = IcebergCatalogAdapter(_make_creds())
         with pytest.raises(ValueError, match="Invalid table address"):
             adapter._parse_address("foo bar.baz")
 
 
 class TestEnsureWarehouseAttached:
-    def test_calls_ensure_extensions(self):
+    """Tests for Ensure Warehouse Attached."""
+
+    def test_calls_ensure_extensions(self) -> None:
+        """Calls ensure extensions."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
@@ -169,7 +199,8 @@ class TestEnsureWarehouseAttached:
 
         compute.ensure_extensions.assert_called_once()
 
-    def test_configures_s3_path_style(self):
+    def test_configures_s3_path_style(self) -> None:
+        """Configures s3 path style."""
         adapter = IcebergCatalogAdapter(
             _make_creds(
                 s3_endpoint="https://host.example.com/storage/v1/s3",
@@ -190,7 +221,8 @@ class TestEnsureWarehouseAttached:
         assert any("s3_secret_access_key" in c for c in calls)
         assert any("s3_region" in c for c in calls)
 
-    def test_creates_secret_and_attaches(self):
+    def test_creates_secret_and_attaches(self) -> None:
+        """Creates secret and attaches."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
@@ -201,7 +233,8 @@ class TestEnsureWarehouseAttached:
         assert any("SECRET dbport_iceberg_catalog" in c for c in calls)
         assert any("ATTACH" in c for c in calls)
 
-    def test_idempotent_attach(self):
+    def test_idempotent_attach(self) -> None:
+        """Idempotent attach."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
@@ -215,7 +248,8 @@ class TestEnsureWarehouseAttached:
         # Second call should not execute any SQL
         assert call_count_2 == call_count_1
 
-    def test_raises_when_extensions_unavailable(self):
+    def test_raises_when_extensions_unavailable(self) -> None:
+        """Raises when extensions unavailable."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
         compute.ensure_extensions.side_effect = RuntimeError("extension not found")
@@ -223,7 +257,8 @@ class TestEnsureWarehouseAttached:
         with pytest.raises(RuntimeError, match="extension not found"):
             adapter._ensure_warehouse_attached(compute)
 
-    def test_token_without_bearer_prefix(self):
+    def test_token_without_bearer_prefix(self) -> None:
+        """Token without bearer prefix."""
         adapter = IcebergCatalogAdapter(_make_creds(catalog_token="my_token"))
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (0,)
@@ -239,7 +274,7 @@ class TestEnsureWarehouseAttached:
 class TestIngestIntoCompute:
     """ingest_into_compute delegates to _ingest_via_arrow (Arrow is the primary path)."""
 
-    def _make_adapter_with_mock_catalog(self):
+    def _make_adapter_with_mock_catalog(self) -> tuple:
         import pyarrow as pa
 
         arrow_schema = pa.schema([pa.field("id", pa.int32())])
@@ -255,7 +290,8 @@ class TestIngestIntoCompute:
         adapter._catalog = mock_catalog
         return adapter, mock_catalog, mock_scan
 
-    def test_uses_arrow_scan(self):
+    def test_uses_arrow_scan(self) -> None:
+        """Uses arrow scan."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, mock_scan = self._make_adapter_with_mock_catalog()
@@ -267,7 +303,8 @@ class TestIngestIntoCompute:
         mock_scan.to_arrow_batch_reader.assert_called_once()
         compute.register_arrow.assert_called_once()
 
-    def test_applies_filters_as_pyiceberg_expressions(self):
+    def test_applies_filters_as_pyiceberg_expressions(self) -> None:
+        """Applies filters as pyiceberg expressions."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, mock_scan = self._make_adapter_with_mock_catalog()
@@ -283,7 +320,8 @@ class TestIngestIntoCompute:
         scan_call = mock_iceberg_table.scan.call_args
         assert scan_call.kwargs.get("row_filter") is not None
 
-    def test_returns_row_count(self):
+    def test_returns_row_count(self) -> None:
+        """Returns row count."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, _ = self._make_adapter_with_mock_catalog()
@@ -293,7 +331,7 @@ class TestIngestIntoCompute:
         result = adapter.ingest_into_compute(InputDeclaration(table_address="estat.foo"), compute)
         assert result == 42
 
-    def test_does_not_use_duckdb_warehouse(self):
+    def test_does_not_use_duckdb_warehouse(self) -> None:
         """Arrow path must not touch dbport_warehouse (no ATTACH needed)."""
         from dbport.domain.entities.input import InputDeclaration
 
@@ -308,7 +346,13 @@ class TestIngestIntoCompute:
 
 
 class TestIngestViaArrow:
-    def _make_adapter_with_mock_catalog(self, monkeypatch, snapshot_id=99):
+    """Tests for Ingest Via Arrow."""
+
+    def _make_adapter_with_mock_catalog(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        snapshot_id: int = 99,
+    ) -> tuple:
         """Return an adapter whose pyiceberg catalog is fully mocked."""
         import pyarrow as pa
 
@@ -329,7 +373,11 @@ class TestIngestViaArrow:
         adapter._catalog = mock_catalog
         return adapter, mock_catalog, mock_scan
 
-    def test_uses_pyiceberg_scan_and_registers_reader(self, monkeypatch):
+    def test_uses_pyiceberg_scan_and_registers_reader(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Uses pyiceberg scan and registers reader."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, mock_scan = self._make_adapter_with_mock_catalog(monkeypatch)
@@ -343,7 +391,8 @@ class TestIngestViaArrow:
         view_name = compute.register_arrow.call_args[0][0]
         assert view_name == "_dbport_ingest_tmp"
 
-    def test_creates_schema_and_ctas(self, monkeypatch):
+    def test_creates_schema_and_ctas(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Creates schema and ctas."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, _ = self._make_adapter_with_mock_catalog(monkeypatch)
@@ -357,7 +406,8 @@ class TestIngestViaArrow:
         assert any("CREATE OR REPLACE TABLE estat.bar" in c for c in calls)
         assert any("_dbport_ingest_tmp" in c for c in calls)
 
-    def test_unregisters_view_after_ctas(self, monkeypatch):
+    def test_unregisters_view_after_ctas(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unregisters view after ctas."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, _ = self._make_adapter_with_mock_catalog(monkeypatch)
@@ -368,13 +418,14 @@ class TestIngestViaArrow:
 
         compute.unregister_arrow.assert_called_once_with("_dbport_ingest_tmp")
 
-    def test_unregisters_even_on_ctas_error(self, monkeypatch):
+    def test_unregisters_even_on_ctas_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unregisters even on ctas error."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, _ = self._make_adapter_with_mock_catalog(monkeypatch)
         compute = MagicMock()
 
-        def _fail_on_ctas(sql, *args, **kwargs):
+        def _fail_on_ctas(sql: object, *args: object, **kwargs: object) -> MagicMock:
             if "CREATE OR REPLACE TABLE" in str(sql):
                 raise RuntimeError("disk full")
             return MagicMock(fetchone=lambda: (0,))
@@ -386,7 +437,11 @@ class TestIngestViaArrow:
 
         compute.unregister_arrow.assert_called_once_with("_dbport_ingest_tmp")
 
-    def test_applies_filters_as_pyiceberg_expressions(self, monkeypatch):
+    def test_applies_filters_as_pyiceberg_expressions(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Applies filters as pyiceberg expressions."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, mock_scan = self._make_adapter_with_mock_catalog(monkeypatch)
@@ -404,7 +459,8 @@ class TestIngestViaArrow:
         assert scan_call is not None
         assert scan_call.kwargs.get("row_filter") is not None
 
-    def test_returns_row_count(self, monkeypatch):
+    def test_returns_row_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Returns row count."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, _, _ = self._make_adapter_with_mock_catalog(monkeypatch)
@@ -414,7 +470,7 @@ class TestIngestViaArrow:
         result = adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         assert result == 7
 
-    def test_snapshot_id_passed_to_scan(self, monkeypatch):
+    def test_snapshot_id_passed_to_scan(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """snapshot_id is forwarded to iceberg_table.scan() (Fix A)."""
         from dbport.domain.entities.input import InputDeclaration
 
@@ -432,7 +488,7 @@ class TestIngestViaArrow:
         scan_call = mock_iceberg_table.scan.call_args
         assert scan_call.kwargs.get("snapshot_id") == 999
 
-    def test_no_snapshot_id_omits_kwarg(self, monkeypatch):
+    def test_no_snapshot_id_omits_kwarg(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When snapshot_id is None the kwarg is not forwarded to scan()."""
         from dbport.domain.entities.input import InputDeclaration
 
@@ -472,7 +528,8 @@ class TestIsTransientS3Error:
             "HTTP 429 Too Many Requests",
         ],
     )
-    def test_transient_errors_detected(self, msg):
+    def test_transient_errors_detected(self, msg: object) -> None:
+        """Transient errors detected."""
         exc = Exception(msg)
         assert IcebergCatalogAdapter._is_transient_s3_error(exc) is True
 
@@ -486,7 +543,8 @@ class TestIsTransientS3Error:
             "Permission denied",
         ],
     )
-    def test_non_transient_errors_not_matched(self, msg):
+    def test_non_transient_errors_not_matched(self, msg: object) -> None:
+        """Non transient errors not matched."""
         exc = Exception(msg)
         assert IcebergCatalogAdapter._is_transient_s3_error(exc) is False
 
@@ -494,7 +552,7 @@ class TestIsTransientS3Error:
 class TestIngestRetry:
     """_ingest_via_arrow retries on transient S3 errors."""
 
-    def _make_adapter_with_failing_scan(self, fail_count: int):
+    def _make_adapter_with_failing_scan(self, fail_count: int) -> None:
         """Return adapter where scan.to_arrow_batch_reader() fails N times then succeeds."""
         import pyarrow as pa
 
@@ -503,10 +561,12 @@ class TestIngestRetry:
 
         call_count = [0]
 
-        def make_scan():
+        def make_scan() -> None:
+            """make_scan."""
             mock_scan = MagicMock()
 
-            def to_reader():
+            def to_reader() -> object:
+                """to_reader."""
                 call_count[0] += 1
                 if call_count[0] <= fail_count:
                     raise OSError(
@@ -531,7 +591,8 @@ class TestIngestRetry:
         adapter._INGEST_RETRY_BACKOFF = (0, 0, 0)
         return adapter, call_count
 
-    def test_retries_on_transient_s3_error(self):
+    def test_retries_on_transient_s3_error(self) -> None:
+        """Retries on transient s3 error."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, call_count = self._make_adapter_with_failing_scan(fail_count=2)
@@ -542,7 +603,8 @@ class TestIngestRetry:
         assert result == 3
         assert call_count[0] == 3  # 2 failures + 1 success
 
-    def test_gives_up_after_max_retries(self):
+    def test_gives_up_after_max_retries(self) -> None:
+        """Gives up after max retries."""
         from dbport.domain.entities.input import InputDeclaration
 
         adapter, call_count = self._make_adapter_with_failing_scan(fail_count=5)
@@ -553,13 +615,13 @@ class TestIngestRetry:
             adapter._ingest_via_arrow(InputDeclaration(table_address="estat.bar"), compute)
         assert call_count[0] == 3  # tried 3 times (max retries)
 
-    def test_non_transient_error_not_retried(self):
+    def test_non_transient_error_not_retried(self) -> None:
         """Non-transient errors propagate immediately."""
         import pyarrow as pa
 
         from dbport.domain.entities.input import InputDeclaration
 
-        arrow_schema = pa.schema([pa.field("id", pa.int32())])
+        pa.schema([pa.field("id", pa.int32())])
 
         mock_scan = MagicMock()
         mock_scan.to_arrow_batch_reader.side_effect = RuntimeError("disk full")
@@ -595,9 +657,9 @@ class TestResolveInputSnapshot:
         # Stub get_table_property to read from our mock
         import json
 
-        meta = json.loads(metadata_json)
+        json.loads(metadata_json)
 
-        def _get_prop(table_address, key):
+        def _get_prop(table_address: str, key: str) -> object:
             return mock_table.properties.get(key)
 
         adapter.get_table_property = _get_prop
@@ -613,13 +675,15 @@ class TestResolveInputSnapshot:
             }
         )
 
-    def test_returns_none_none_for_table_without_dbport_metadata(self):
+    def test_returns_none_none_for_table_without_dbport_metadata(self) -> None:
+        """Returns none none for table without dbport metadata."""
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter.get_table_property = lambda addr, key: None
         result = adapter.resolve_input_snapshot("wifor.foo", None)
         assert result == (None, None)
 
-    def test_returns_latest_version_and_snapshot(self):
+    def test_returns_latest_version_and_snapshot(self) -> None:
+        """Returns latest version and snapshot."""
         meta = self._meta_json(
             latest="2026-03-09",
             versions=[
@@ -632,7 +696,8 @@ class TestResolveInputSnapshot:
         assert version == "2026-03-09"
         assert snap == 99
 
-    def test_returns_specific_version_and_snapshot(self):
+    def test_returns_specific_version_and_snapshot(self) -> None:
+        """Returns specific version and snapshot."""
         meta = self._meta_json(
             latest="2026-03-09",
             versions=[
@@ -645,7 +710,8 @@ class TestResolveInputSnapshot:
         assert version == "2025-01-01"
         assert snap == 10
 
-    def test_raises_for_unknown_specific_version(self):
+    def test_raises_for_unknown_specific_version(self) -> None:
+        """Raises for unknown specific version."""
         meta = self._meta_json(
             latest="2026-03-09",
             versions=[{"version": "2026-03-09", "iceberg_snapshot_id": 99}],
@@ -654,7 +720,7 @@ class TestResolveInputSnapshot:
         with pytest.raises(ValueError, match="not found"):
             adapter.resolve_input_snapshot("wifor.foo", "2020-01-01")
 
-    def test_returns_latest_version_without_snapshot_when_not_in_versions_list(self):
+    def test_returns_latest_version_without_snapshot_when_not_in_versions_list(self) -> None:
         """Pre-fix tables have last_updated_data_at but empty versions list."""
         meta = self._meta_json(latest="2026-03-09", versions=[])
         adapter = self._make_adapter_with_metadata(meta)
@@ -662,7 +728,8 @@ class TestResolveInputSnapshot:
         assert version == "2026-03-09"
         assert snap is None
 
-    def test_malformed_metadata_returns_none_none(self):
+    def test_malformed_metadata_returns_none_none(self) -> None:
+        """Malformed metadata returns none none."""
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter.get_table_property = lambda addr, key: "not valid json{"
         result = adapter.resolve_input_snapshot("wifor.foo", None)
@@ -670,14 +737,17 @@ class TestResolveInputSnapshot:
 
 
 class TestInspectInput:
-    def _make_table(self, *, metadata_json: str | None = None):
+    """Tests for Inspect Input."""
+
+    def _make_table(self, *, metadata_json: str | None = None) -> object:
         mock_table = MagicMock()
         mock_table.properties = {}
         if metadata_json is not None:
             mock_table.properties["dbport.metadata_json"] = metadata_json
         return mock_table
 
-    def test_inspect_input_resolves_latest_version_snapshot_and_rows(self):
+    def test_inspect_input_resolves_latest_version_snapshot_and_rows(self) -> None:
+        """Inspect input resolves latest version snapshot and rows."""
         import json
 
         metadata_json = json.dumps(
@@ -705,7 +775,8 @@ class TestInspectInput:
         assert record.last_snapshot_timestamp_ms == 123456
         assert record.rows_loaded == 7
 
-    def test_inspect_input_rejects_explicit_version_without_dbport_metadata(self):
+    def test_inspect_input_rejects_explicit_version_without_dbport_metadata(self) -> None:
+        """Inspect input rejects explicit version without dbport metadata."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
         mock_table = self._make_table(metadata_json=None)
@@ -717,7 +788,8 @@ class TestInspectInput:
         with pytest.raises(ValueError, match="cannot be resolved"):
             adapter.inspect_input(InputDeclaration(table_address="wifor.foo", version="2026-03-15"))
 
-    def test_inspect_input_uses_snapshot_summary_without_filters(self):
+    def test_inspect_input_uses_snapshot_summary_without_filters(self) -> None:
+        """Inspect input uses snapshot summary without filters."""
         import json
 
         metadata_json = json.dumps(
@@ -743,11 +815,12 @@ class TestInspectInput:
         assert record.rows_loaded == 1234
         mock_table.scan.assert_not_called()
 
-    def test_inspect_input_handles_pyiceberg_summary_iteration_shape(self):
+    def test_inspect_input_handles_pyiceberg_summary_iteration_shape(self) -> None:
+        """Inspect input handles pyiceberg summary iteration shape."""
         import json
 
         class _SummaryLike(dict):
-            def __iter__(self):
+            def __iter__(self) -> Iterator:
                 yield ("total-records", "1234")
 
         metadata_json = json.dumps(
@@ -773,9 +846,8 @@ class TestInspectInput:
         assert record.rows_loaded == 1234
         mock_table.scan.assert_not_called()
 
-
-    def test_inspect_input_no_snapshot_falls_back_to_current(self):
-        """When resolve_input_snapshot returns no snap_id, fallback to current_snapshot (line 366)."""
+    def test_inspect_input_no_snapshot_falls_back_to_current(self) -> None:
+        """No snap_id falls back to current_snapshot."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
         mock_table = self._make_table(metadata_json=None)
@@ -792,7 +864,7 @@ class TestInspectInput:
         assert record.last_snapshot_timestamp_ms == 777
         assert record.rows_loaded == 3
 
-    def test_inspect_input_row_count_with_filters(self):
+    def test_inspect_input_row_count_with_filters(self) -> None:
         """When filters are applied, _inspect_input_row_count scans with row_filter (line 337)."""
         import json
 
@@ -829,7 +901,9 @@ class TestInspectInput:
 
 
 class TestCatalogConnectionFailures:
-    def test_table_exists_returns_false_on_exception(self):
+    """Tests for Catalog Connection Failures."""
+
+    def test_table_exists_returns_false_on_exception(self) -> None:
         """table_exists() swallows exceptions and returns False."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -837,7 +911,7 @@ class TestCatalogConnectionFailures:
         adapter._catalog = mock_catalog
         assert adapter.table_exists("wifor.foo") is False
 
-    def test_load_arrow_schema_propagates_on_missing_table(self):
+    def test_load_arrow_schema_propagates_on_missing_table(self) -> None:
         """load_arrow_schema() lets LookupError propagate."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -846,7 +920,7 @@ class TestCatalogConnectionFailures:
         with pytest.raises(LookupError):
             adapter.load_arrow_schema("wifor.foo")
 
-    def test_current_snapshot_returns_none_on_load_failure(self):
+    def test_current_snapshot_returns_none_on_load_failure(self) -> None:
         """current_snapshot() returns (None, None) when load_table fails."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -854,7 +928,7 @@ class TestCatalogConnectionFailures:
         adapter._catalog = mock_catalog
         assert adapter.current_snapshot("wifor.foo") == (None, None)
 
-    def test_current_snapshot_returns_none_when_no_snapshot(self):
+    def test_current_snapshot_returns_none_when_no_snapshot(self) -> None:
         """current_snapshot() returns (None, None) when table has no snapshot."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -865,7 +939,7 @@ class TestCatalogConnectionFailures:
         adapter._catalog = mock_catalog
         assert adapter.current_snapshot("wifor.foo") == (None, None)
 
-    def test_current_snapshot_falls_back_to_metadata_snapshot_id(self):
+    def test_current_snapshot_falls_back_to_metadata_snapshot_id(self) -> None:
         """current_snapshot() reads metadata.current_snapshot_id when current_snapshot() fails."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -878,7 +952,7 @@ class TestCatalogConnectionFailures:
         assert snap_id == 42
         assert snap_ts is None
 
-    def test_current_snapshot_returns_snapshot_id_and_timestamp(self):
+    def test_current_snapshot_returns_snapshot_id_and_timestamp(self) -> None:
         """current_snapshot() returns both id and timestamp_ms from snapshot object."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -893,7 +967,7 @@ class TestCatalogConnectionFailures:
         assert snap_id == 123
         assert snap_ts == 1700000000000
 
-    def test_get_table_property_returns_none_on_exception(self):
+    def test_get_table_property_returns_none_on_exception(self) -> None:
         """get_table_property() returns None when catalog raises."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -901,7 +975,7 @@ class TestCatalogConnectionFailures:
         adapter._catalog = mock_catalog
         assert adapter.get_table_property("wifor.foo", "any.key") is None
 
-    def test_get_table_property_returns_value(self):
+    def test_get_table_property_returns_value(self) -> None:
         """get_table_property() returns the value from table properties."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -911,7 +985,7 @@ class TestCatalogConnectionFailures:
         adapter._catalog = mock_catalog
         assert adapter.get_table_property("wifor.foo", "dbport.key") == "value"
 
-    def test_update_table_properties_delegates(self):
+    def test_update_table_properties_delegates(self) -> None:
         """update_table_properties() delegates to _write_table_properties."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -924,7 +998,7 @@ class TestCatalogConnectionFailures:
         mock_tx.set_properties.assert_called_once_with({"k": "v"})
         mock_tx.commit_transaction.assert_called_once()
 
-    def test_update_column_docs_delegates(self):
+    def test_update_column_docs_delegates(self) -> None:
         """update_column_docs() delegates to _write_column_docs."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -939,7 +1013,9 @@ class TestCatalogConnectionFailures:
 
 
 class TestEnsureWarehouseAttachedEdgeCases:
-    def test_ensure_extensions_delegated_to_compute(self):
+    """Tests for Ensure Warehouse Attached Edge Cases."""
+
+    def test_ensure_extensions_delegated_to_compute(self) -> None:
         """Extension loading is delegated to compute.ensure_extensions()."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
@@ -948,7 +1024,7 @@ class TestEnsureWarehouseAttachedEdgeCases:
         adapter._ensure_warehouse_attached(compute)
         compute.ensure_extensions.assert_called_once()
 
-    def test_already_attached_warehouse_skips_attach(self):
+    def test_already_attached_warehouse_skips_attach(self) -> None:
         """When warehouse already in duckdb_databases, ATTACH is skipped."""
         adapter = IcebergCatalogAdapter(_make_creds())
         compute = MagicMock()
@@ -959,7 +1035,9 @@ class TestEnsureWarehouseAttachedEdgeCases:
 
 
 class TestWriteTableProperties:
-    def test_uses_transaction_api(self):
+    """Tests for Write Table Properties."""
+
+    def test_uses_transaction_api(self) -> None:
         """Prefers transaction -> set_properties -> commit_transaction."""
         mock_table = MagicMock()
         mock_tx = MagicMock()
@@ -968,7 +1046,7 @@ class TestWriteTableProperties:
         mock_tx.set_properties.assert_called_once_with({"k": "v"})
         mock_tx.commit_transaction.assert_called_once()
 
-    def test_falls_back_to_update_properties(self):
+    def test_falls_back_to_update_properties(self) -> None:
         """When no transaction API, uses update_properties context manager."""
         mock_table = MagicMock(spec=[])  # no attributes by default
         mock_updater = MagicMock()
@@ -978,7 +1056,7 @@ class TestWriteTableProperties:
         _write_table_properties(mock_table, {"k": "v"})
         mock_updater.set.assert_called_once_with("k", "v")
 
-    def test_raises_when_no_api_available(self):
+    def test_raises_when_no_api_available(self) -> None:
         """Raises RuntimeError when neither API is available."""
         mock_table = object()  # no transaction or update_properties
         with pytest.raises(RuntimeError, match="does not support writing table properties"):
@@ -986,7 +1064,10 @@ class TestWriteTableProperties:
 
 
 class TestWriteColumnDocs:
-    def test_calls_update_schema_with_docs(self):
+    """Tests for Write Column Docs."""
+
+    def test_calls_update_schema_with_docs(self) -> None:
+        """Calls update schema with docs."""
         mock_table = MagicMock()
         mock_update = MagicMock()
         mock_table.update_schema.return_value.__enter__ = lambda self: mock_update
@@ -994,14 +1075,17 @@ class TestWriteColumnDocs:
         _write_column_docs(mock_table, {"geo": "Geographic area"})
         mock_update.update_column.assert_called_once_with("geo", doc="Geographic area")
 
-    def test_raises_when_no_update_schema(self):
+    def test_raises_when_no_update_schema(self) -> None:
+        """Raises when no update schema."""
         mock_table = object()
         with pytest.raises(RuntimeError, match="does not support schema updates"):
             _write_column_docs(mock_table, {"geo": "doc"})
 
 
 class TestLoadArrowSchema:
-    def test_returns_arrow_schema(self):
+    """Tests for Load Arrow Schema."""
+
+    def test_returns_arrow_schema(self) -> None:
         """load_arrow_schema returns the PyArrow schema from the warehouse table."""
         import pyarrow as pa
 
@@ -1019,7 +1103,9 @@ class TestLoadArrowSchema:
 
 
 class TestIngestViaArrowImportError:
-    def test_raises_runtime_error_without_pyiceberg(self, monkeypatch):
+    """Tests for Ingest Via Arrow Import Error."""
+
+    def test_raises_runtime_error_without_pyiceberg(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """_ingest_via_arrow raises RuntimeError if pyiceberg is not installed."""
         import builtins as _builtins
 
@@ -1027,7 +1113,8 @@ class TestIngestViaArrowImportError:
 
         real_import = _builtins.__import__
 
-        def mock_import(name, *args, **kwargs):
+        def mock_import(name: str, *args: object, **kwargs: object) -> object:
+            """mock_import."""
             if "pyiceberg" in name:
                 raise ImportError("No module named 'pyiceberg'")
             return real_import(name, *args, **kwargs)
@@ -1039,7 +1126,9 @@ class TestIngestViaArrowImportError:
 
 
 class TestResolveInputSnapshotNoLastUpdated:
-    def test_returns_none_none_when_last_updated_data_at_missing(self):
+    """Tests for Resolve Input Snapshot No Last Updated."""
+
+    def test_returns_none_none_when_last_updated_data_at_missing(self) -> None:
         """Metadata exists but lacks last_updated_data_at → (None, None)."""
         import json
 
@@ -1051,7 +1140,9 @@ class TestResolveInputSnapshotNoLastUpdated:
 
 
 class TestCurrentSnapshotMetadataFallbackException:
-    def test_returns_none_none_when_metadata_access_raises(self):
+    """Tests for Current Snapshot Metadata Fallback Exception."""
+
+    def test_returns_none_none_when_metadata_access_raises(self) -> None:
         """current_snapshot() returns (None, None) when metadata fallback also throws."""
         adapter = IcebergCatalogAdapter(_make_creds())
         mock_catalog = MagicMock()
@@ -1068,13 +1159,19 @@ class TestCurrentSnapshotMetadataFallbackException:
 
 
 class TestStreamingArrowCommitFailedImportError:
-    def test_fallback_when_pyiceberg_exceptions_unavailable(self, monkeypatch):
-        """_write_via_streaming_arrow falls back to Exception when CommitFailedException is not importable."""
+    """Tests for Streaming Arrow Commit Failed Import Error."""
+
+    def test_fallback_when_pyiceberg_exceptions_unavailable(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Falls back to Exception when CommitFailedException unavailable."""
         import builtins as _builtins
 
         real_import = _builtins.__import__
 
-        def mock_import(name, *args, **kwargs):
+        def mock_import(name: str, *args: object, **kwargs: object) -> object:
+            """mock_import."""
             if name == "pyiceberg.exceptions":
                 raise ImportError("No module named 'pyiceberg.exceptions'")
             return real_import(name, *args, **kwargs)
@@ -1111,7 +1208,7 @@ class TestStreamingArrowCommitFailedImportError:
 class TestProgressCallbackIntegration:
     """Test that progress callbacks fire correctly during ingest and write."""
 
-    def test_ingest_fires_progress_callbacks(self):
+    def test_ingest_fires_progress_callbacks(self) -> None:
         """_ingest_via_arrow calls started/finished on the progress callback."""
         import pyarrow as pa
 
@@ -1135,7 +1232,7 @@ class TestProgressCallbackIntegration:
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (3,)
 
-        def _consume_registered_reader(_view_name, arrow_object):
+        def _consume_registered_reader(_view_name: str, arrow_object: object) -> None:
             arrow_object.read_all()
 
         compute.register_arrow.side_effect = _consume_registered_reader
@@ -1152,7 +1249,7 @@ class TestProgressCallbackIntegration:
         cb.finished.assert_called_once()
         assert "3" in cb.finished.call_args[0][0]
 
-    def test_ingest_uses_snapshot_row_estimate_and_batch_updates(self):
+    def test_ingest_uses_snapshot_row_estimate_and_batch_updates(self) -> None:
         """When snapshot summary exposes row totals, ingest shows determinate progress."""
         import pyarrow as pa
 
@@ -1182,7 +1279,7 @@ class TestProgressCallbackIntegration:
         compute = MagicMock()
         compute.execute.return_value.fetchone.return_value = (3,)
 
-        def _consume_registered_reader(_view_name, arrow_object):
+        def _consume_registered_reader(_view_name: str, arrow_object: object) -> None:
             arrow_object.read_all()
 
         compute.register_arrow.side_effect = _consume_registered_reader
@@ -1198,7 +1295,7 @@ class TestProgressCallbackIntegration:
         cb.update.assert_any_call(2)
         cb.update.assert_any_call(1)
 
-    def test_ingest_retry_fires_failed_callback(self):
+    def test_ingest_retry_fires_failed_callback(self) -> None:
         """On transient error, the progress callback's failed() is called."""
         import pyarrow as pa
 
@@ -1209,10 +1306,12 @@ class TestProgressCallbackIntegration:
         arrow_table = pa.table({"id": [1, 2, 3]})
         call_count = [0]
 
-        def make_scan():
+        def make_scan() -> None:
+            """make_scan."""
             mock_scan = MagicMock()
 
-            def to_reader():
+            def to_reader() -> object:
+                """to_reader."""
                 call_count[0] += 1
                 if call_count[0] <= 1:
                     raise OSError("InvalidKey: transient error")
@@ -1245,7 +1344,7 @@ class TestProgressCallbackIntegration:
         cb.failed.assert_called_once()
         assert "retrying" in cb.failed.call_args[0][0]
 
-    def test_ingest_final_failure_calls_finished_not_failed(self):
+    def test_ingest_final_failure_calls_finished_not_failed(self) -> None:
         """When all retries exhausted, cb.finished() is called (not failed)."""
         from dbport.domain.entities.input import InputDeclaration
         from dbport.infrastructure.progress import progress_callback
@@ -1274,7 +1373,7 @@ class TestProgressCallbackIntegration:
         # Last attempt calls finished() (not failed) before raising
         assert cb.finished.call_count >= 1
 
-    def test_streaming_arrow_fires_progress_callbacks(self):
+    def test_streaming_arrow_fires_progress_callbacks(self) -> None:
         """_write_via_streaming_arrow calls started/update/finished."""
         import pyarrow as pa
 
@@ -1316,7 +1415,7 @@ class TestProgressCallbackIntegration:
         cb.finished.assert_called_once()
         assert "wifor.emp" in cb.finished.call_args[0][0]
 
-    def test_write_versioned_already_completed_fires_log(self):
+    def test_write_versioned_already_completed_fires_log(self) -> None:
         """write_versioned logs via cb.log() when version already completed."""
         from dbport.domain.entities.version import DatasetVersion
         from dbport.infrastructure.progress import progress_callback
@@ -1354,7 +1453,7 @@ class TestProgressCallbackIntegration:
         assert result.completed is True
         assert result.rows == 100
 
-    def test_write_versioned_duckdb_fallback_fires_failed_and_log(self):
+    def test_write_versioned_duckdb_fallback_fires_failed_and_log(self) -> None:
         """write_versioned calls cb.log and cb.failed on DuckDB→Arrow fallback."""
         import pyarrow as pa
 
@@ -1406,7 +1505,7 @@ class TestProgressCallbackIntegration:
         cb.failed.assert_called_once()
         assert "Arrow fallback" in cb.failed.call_args[0][0]
 
-    def test_ingest_retry_without_failed_method_calls_finished(self):
+    def test_ingest_retry_without_failed_method_calls_finished(self) -> None:
         """When cb has no failed() method, retry calls cb.finished() instead."""
         import pyarrow as pa
 
@@ -1417,10 +1516,12 @@ class TestProgressCallbackIntegration:
         arrow_table = pa.table({"id": [1, 2, 3]})
         call_count = [0]
 
-        def make_scan():
+        def make_scan() -> None:
+            """make_scan."""
             mock_scan = MagicMock()
 
-            def to_reader():
+            def to_reader() -> object:
+                """to_reader."""
                 call_count[0] += 1
                 if call_count[0] <= 1:
                     raise OSError("InvalidKey: transient error")
@@ -1452,7 +1553,7 @@ class TestProgressCallbackIntegration:
         # On retry, finished() should be called (since no failed() exists)
         assert cb.finished.call_count >= 1
 
-    def test_write_versioned_duckdb_success_fires_finished(self):
+    def test_write_versioned_duckdb_success_fires_finished(self) -> None:
         """write_versioned calls cb.finished() on DuckDB success path."""
         from dbport.domain.entities.version import DatasetVersion
         from dbport.infrastructure.progress import progress_callback
@@ -1493,7 +1594,7 @@ class TestProgressCallbackIntegration:
         assert "Published" in cb.finished.call_args[0][0]
         assert result.rows == 5
 
-    def test_write_versioned_duckdb_fallback_without_failed_method(self):
+    def test_write_versioned_duckdb_fallback_without_failed_method(self) -> None:
         """When cb has no failed(), DuckDB fallback calls cb.finished() instead."""
         import pyarrow as pa
 
@@ -1542,7 +1643,7 @@ class TestProgressCallbackIntegration:
         # Without failed(), falls back to finished()
         assert any("Arrow fallback" in str(c) for c in cb.finished.call_args_list)
 
-    def test_write_versioned_duckdb_non_fallback_error_calls_finished(self):
+    def test_write_versioned_duckdb_non_fallback_error_calls_finished(self) -> None:
         """write_versioned calls cb.finished() on non-fallback DuckDB errors."""
         from dbport.domain.entities.version import DatasetVersion
         from dbport.infrastructure.progress import progress_callback
@@ -1584,11 +1685,13 @@ class TestProgressCallbackIntegration:
 class TestSnapshotTimestampFromTable:
     """Tests for _snapshot_timestamp_from_table (lines 282-315)."""
 
-    def test_none_snapshot_id_returns_none(self):
+    def test_none_snapshot_id_returns_none(self) -> None:
+        """None snapshot id returns none."""
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(MagicMock(), None)
         assert result is None
 
-    def test_snapshot_by_id_found(self):
+    def test_snapshot_by_id_found(self) -> None:
+        """Snapshot by id found."""
         mock_table = MagicMock()
         mock_snap = MagicMock()
         mock_snap.timestamp_ms = 1710000000000
@@ -1596,7 +1699,8 @@ class TestSnapshotTimestampFromTable:
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
         assert result == 1710000000000
 
-    def test_snapshot_by_id_raises_falls_back_to_current(self):
+    def test_snapshot_by_id_raises_falls_back_to_current(self) -> None:
+        """Snapshot by id raises falls back to current."""
         mock_table = MagicMock()
         mock_table.snapshot_by_id.side_effect = Exception("not found")
         mock_snap = MagicMock()
@@ -1606,7 +1710,8 @@ class TestSnapshotTimestampFromTable:
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
         assert result == 1710000000000
 
-    def test_snapshot_by_id_returns_none_falls_back_to_current(self):
+    def test_snapshot_by_id_returns_none_falls_back_to_current(self) -> None:
+        """Snapshot by id returns none falls back to current."""
         mock_table = MagicMock()
         mock_table.snapshot_by_id.return_value = None
         mock_snap = MagicMock()
@@ -1616,7 +1721,8 @@ class TestSnapshotTimestampFromTable:
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 456)
         assert result == 1710100000000
 
-    def test_current_snapshot_id_mismatch_returns_none(self):
+    def test_current_snapshot_id_mismatch_returns_none(self) -> None:
+        """Current snapshot id mismatch returns none."""
         mock_table = MagicMock()
         mock_table.snapshot_by_id.return_value = None
         mock_snap = MagicMock()
@@ -1625,14 +1731,16 @@ class TestSnapshotTimestampFromTable:
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 456)
         assert result is None
 
-    def test_current_snapshot_raises_returns_none(self):
+    def test_current_snapshot_raises_returns_none(self) -> None:
+        """Current snapshot raises returns none."""
         mock_table = MagicMock()
         mock_table.snapshot_by_id.return_value = None
         mock_table.current_snapshot.side_effect = Exception("broken")
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
         assert result is None
 
-    def test_no_snapshot_by_id_attr_uses_current(self):
+    def test_no_snapshot_by_id_attr_uses_current(self) -> None:
+        """No snapshot by id attr uses current."""
         mock_table = type("FakeTable", (), {})()
         mock_snap = MagicMock()
         mock_snap.snapshot_id = 42
@@ -1641,7 +1749,8 @@ class TestSnapshotTimestampFromTable:
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 42)
         assert result == 9999
 
-    def test_timestamp_ms_not_int_returns_none(self):
+    def test_timestamp_ms_not_int_returns_none(self) -> None:
+        """Timestamp ms not int returns none."""
         mock_table = MagicMock()
         mock_snap = MagicMock()
         mock_snap.timestamp_ms = "not_a_number"
@@ -1649,7 +1758,8 @@ class TestSnapshotTimestampFromTable:
         result = IcebergCatalogAdapter._snapshot_timestamp_from_table(mock_table, 123)
         assert result is None
 
-    def test_timestamp_ms_none_returns_none(self):
+    def test_timestamp_ms_none_returns_none(self) -> None:
+        """Timestamp ms none returns none."""
         mock_table = MagicMock()
         mock_snap = MagicMock()
         mock_snap.timestamp_ms = None
@@ -1661,19 +1771,23 @@ class TestSnapshotTimestampFromTable:
 class TestBuildRowFilter:
     """Tests for _build_row_filter (lines 263-280)."""
 
-    def test_none_filters_returns_none(self):
+    def test_none_filters_returns_none(self) -> None:
+        """None filters returns none."""
         result = IcebergCatalogAdapter._build_row_filter(None)
         assert result is None
 
-    def test_empty_filters_returns_none(self):
+    def test_empty_filters_returns_none(self) -> None:
+        """Empty filters returns none."""
         result = IcebergCatalogAdapter._build_row_filter({})
         assert result is None
 
-    def test_single_filter_returns_equal_to(self):
+    def test_single_filter_returns_equal_to(self) -> None:
+        """Single filter returns equal to."""
         result = IcebergCatalogAdapter._build_row_filter({"wstatus": "EMP"})
         assert result is not None
 
-    def test_multiple_filters_returns_and_expression(self):
+    def test_multiple_filters_returns_and_expression(self) -> None:
+        """Multiple filters returns and expression."""
         result = IcebergCatalogAdapter._build_row_filter({"wstatus": "EMP", "geo": "DE"})
         assert result is not None
 
@@ -1681,31 +1795,34 @@ class TestBuildRowFilter:
 class TestSnapshotSummary:
     """Tests for _snapshot_summary (lines 539-562)."""
 
-    def test_callable_summary(self):
+    def test_callable_summary(self) -> None:
+        """Callable summary."""
         snapshot = MagicMock()
         snapshot.summary.return_value = {"total-records": "100"}
         result = IcebergCatalogAdapter._snapshot_summary(snapshot)
         assert result == {"total-records": "100"}
 
-    def test_callable_summary_raises(self):
+    def test_callable_summary_raises(self) -> None:
+        """Callable summary raises."""
         snapshot = MagicMock()
         snapshot.summary.side_effect = Exception("broken")
         result = IcebergCatalogAdapter._snapshot_summary(snapshot)
         assert result == {}
 
-    def test_dict_summary_attr(self):
+    def test_dict_summary_attr(self) -> None:
+        """Dict summary attr."""
         snapshot = type("Snap", (), {"summary": {"total-records": "50"}})()
         result = IcebergCatalogAdapter._snapshot_summary(snapshot)
         assert result == {"total-records": "50"}
 
-    def test_summary_with_tuple_items(self):
+    def test_summary_with_tuple_items(self) -> None:
         """When iterating a Mapping yields tuples (key, value)."""
 
         class TupleMapping:
-            def __iter__(self):
+            def __iter__(self) -> Iterator:
                 return iter([("total-records", "200")])
 
-            def __getitem__(self, key):
+            def __getitem__(self, key: str) -> str:
                 return {"total-records": "200"}[key]
 
         from collections.abc import Mapping
@@ -1717,16 +1834,19 @@ class TestSnapshotSummary:
         result = IcebergCatalogAdapter._snapshot_summary(snapshot)
         assert result == {"total-records": "200"}
 
-    def test_summary_iteration_raises(self):
+    def test_summary_iteration_raises(self) -> None:
+        """Summary iteration raises."""
+
         class BrokenMapping(dict):
-            def __iter__(self):
+            def __iter__(self) -> Iterator:
                 raise RuntimeError("boom")
 
         snapshot = type("Snap", (), {"summary": BrokenMapping()})()
         result = IcebergCatalogAdapter._snapshot_summary(snapshot)
         assert result == {}
 
-    def test_no_summary_attr(self):
+    def test_no_summary_attr(self) -> None:
+        """No summary attr."""
         snapshot = type("Snap", (), {})()
         result = IcebergCatalogAdapter._snapshot_summary(snapshot)
         assert result == {}
@@ -1735,15 +1855,17 @@ class TestSnapshotSummary:
 class TestEstimateIngestTotalRows:
     """Tests for _estimate_ingest_total_rows (lines 564-609)."""
 
-    def _make_adapter(self):
+    def _make_adapter(self) -> IcebergCatalogAdapter:
         return IcebergCatalogAdapter(_make_creds())
 
-    def test_returns_none_with_filter(self):
+    def test_returns_none_with_filter(self) -> None:
+        """Returns none with filter."""
         adapter = self._make_adapter()
         result = adapter._estimate_ingest_total_rows(MagicMock(), snapshot_id=1, has_filter=True)
         assert result is None
 
-    def test_uses_snapshot_by_id(self):
+    def test_uses_snapshot_by_id(self) -> None:
+        """Uses snapshot by id."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_snap = MagicMock()
@@ -1752,7 +1874,8 @@ class TestEstimateIngestTotalRows:
         result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
         assert result == 1000
 
-    def test_snapshot_by_id_raises_falls_back_to_current(self):
+    def test_snapshot_by_id_raises_falls_back_to_current(self) -> None:
+        """Snapshot by id raises falls back to current."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_table.snapshot_by_id.side_effect = Exception("not found")
@@ -1762,7 +1885,8 @@ class TestEstimateIngestTotalRows:
         result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
         assert result == 500
 
-    def test_no_snapshot_returns_none(self):
+    def test_no_snapshot_returns_none(self) -> None:
+        """No snapshot returns none."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_table.snapshot_by_id.return_value = None
@@ -1770,7 +1894,8 @@ class TestEstimateIngestTotalRows:
         result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=42, has_filter=False)
         assert result is None
 
-    def test_no_snapshot_id_uses_current(self):
+    def test_no_snapshot_id_uses_current(self) -> None:
+        """No snapshot id uses current."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_snap = MagicMock()
@@ -1779,7 +1904,8 @@ class TestEstimateIngestTotalRows:
         result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=None, has_filter=False)
         assert result == 300
 
-    def test_no_rows_in_summary_returns_none(self):
+    def test_no_rows_in_summary_returns_none(self) -> None:
+        """No rows in summary returns none."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_snap = MagicMock()
@@ -1788,7 +1914,8 @@ class TestEstimateIngestTotalRows:
         result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=1, has_filter=False)
         assert result is None
 
-    def test_invalid_row_count_returns_none(self):
+    def test_invalid_row_count_returns_none(self) -> None:
+        """Invalid row count returns none."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_snap = MagicMock()
@@ -1797,7 +1924,8 @@ class TestEstimateIngestTotalRows:
         result = adapter._estimate_ingest_total_rows(mock_table, snapshot_id=1, has_filter=False)
         assert result is None
 
-    def test_current_snapshot_raises_returns_none(self):
+    def test_current_snapshot_raises_returns_none(self) -> None:
+        """Current snapshot raises returns none."""
         adapter = self._make_adapter()
         mock_table = MagicMock()
         mock_table.snapshot_by_id.return_value = None
@@ -1809,12 +1937,13 @@ class TestEstimateIngestTotalRows:
 class TestWriteViaDuckdb:
     """Tests for _write_via_duckdb (lines 714-759)."""
 
-    def _make_adapter(self):
+    def _make_adapter(self) -> object:
         adapter = IcebergCatalogAdapter(_make_creds())
         adapter._warehouse_attached = True
         return adapter
 
-    def test_overwrite_drops_then_creates(self):
+    def test_overwrite_drops_then_creates(self) -> None:
+        """Overwrite drops then creates."""
         adapter = self._make_adapter()
         mock_compute = MagicMock()
         adapter._write_via_duckdb("test.t1", mock_compute, overwrite=True)
@@ -1822,12 +1951,14 @@ class TestWriteViaDuckdb:
         assert any("DROP TABLE" in c for c in calls)
         assert any("CREATE TABLE" in c for c in calls)
 
-    def test_overwrite_create_fails_after_drop_logs_error(self):
+    def test_overwrite_create_fails_after_drop_logs_error(self) -> None:
+        """Overwrite create fails after drop logs error."""
         adapter = self._make_adapter()
         mock_compute = MagicMock()
         call_count = [0]
 
-        def side_effect(sql, *args, **kwargs):
+        def side_effect(sql: object, *args: object, **kwargs: object) -> None:
+            """side_effect."""
             call_count[0] += 1
             if "CREATE TABLE" in sql:
                 raise RuntimeError("create failed")
@@ -1836,20 +1967,22 @@ class TestWriteViaDuckdb:
         with pytest.raises(RuntimeError, match="create failed"):
             adapter._write_via_duckdb("test.t1", mock_compute, overwrite=True)
 
-    def test_non_overwrite_insert(self):
+    def test_non_overwrite_insert(self) -> None:
+        """Non overwrite insert."""
         adapter = self._make_adapter()
         mock_compute = MagicMock()
         adapter._write_via_duckdb("test.t1", mock_compute, overwrite=False)
         calls = [c.args[0] for c in mock_compute.execute.call_args_list]
         assert any("INSERT INTO" in c for c in calls)
 
-    def test_overwrite_drop_fails_table_not_exists(self):
+    def test_overwrite_drop_fails_table_not_exists(self) -> None:
         """When DROP TABLE fails (table doesn't exist), CREATE TABLE still runs."""
         adapter = self._make_adapter()
         mock_compute = MagicMock()
         call_log = []
 
-        def side_effect(sql, *args, **kwargs):
+        def side_effect(sql: object, *args: object, **kwargs: object) -> None:
+            """side_effect."""
             call_log.append(sql)
             if "DROP TABLE" in sql:
                 raise Exception("Table not found")
@@ -1859,12 +1992,13 @@ class TestWriteViaDuckdb:
         assert any("CREATE TABLE" in c for c in call_log)
         assert not any("DROP TABLE" in c and "CREATE TABLE" in c for c in call_log)
 
-    def test_non_overwrite_insert_fails_falls_back_to_create(self):
+    def test_non_overwrite_insert_fails_falls_back_to_create(self) -> None:
+        """Non overwrite insert fails falls back to create."""
         adapter = self._make_adapter()
         mock_compute = MagicMock()
-        call_count = [0]
 
-        def side_effect(sql, *args, **kwargs):
+        def side_effect(sql: object, *args: object, **kwargs: object) -> None:
+            """side_effect."""
             if "INSERT INTO" in sql:
                 raise RuntimeError("table not found")
 

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 from ...domain.entities.schema import ColumnDef, DatasetSchema, SqlDdl
 from ...domain.ports.catalog import ICatalog
@@ -37,7 +40,7 @@ _ARROW_TO_DUCKDB: dict[str, str] = {
 }
 
 
-def _arrow_type_to_duckdb(arrow_type: Any) -> str:
+def _arrow_type_to_duckdb(arrow_type: pa.DataType) -> str:
     """Convert a PyArrow type to a DuckDB SQL type string."""
     type_str = str(arrow_type)
 
@@ -98,9 +101,7 @@ class AutoSchemaService:
 
         # Check warehouse
         if not self._catalog.table_exists(table_address):
-            logger.debug(
-                "Table %s not found in warehouse", table_address
-            )
+            logger.debug("Table %s not found in warehouse", table_address)
             return None
 
         # Fetch PyArrow schema from warehouse

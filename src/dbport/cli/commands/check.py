@@ -45,14 +45,12 @@ def check_cmd(
                 checks.append({"name": "lockfile_readable", "status": "fail", "detail": str(exc)})
 
         # 3. DuckDB
-        duckdb_ok = False
         try:
             import duckdb
 
             conn = duckdb.connect(":memory:")
             conn.execute("SELECT 1")
             conn.close()
-            duckdb_ok = True
             checks.append(
                 {"name": "duckdb", "status": "pass", "detail": f"duckdb {duckdb.__version__}"}
             )

@@ -4,11 +4,34 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any
+import threading
+import time as _time
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    ProgressColumn,
+    SpinnerColumn,
+    Task,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from rich.spinner import Spinner
 from rich.table import Table
+from rich.table import Table as RichTable
+from rich.text import Text
+from rich.tree import Tree
+
+if TYPE_CHECKING:
+    from rich.console import ConsoleOptions, RenderResult
 
 # Module-level console; replaced in tests or when --no-color is set.
 _console = Console(stderr=True)
@@ -16,14 +39,17 @@ _stdout = Console()
 
 
 def get_console() -> Console:
+    """Return the stderr console used for logging and progress."""
     return _console
 
 
 def get_stdout() -> Console:
+    """Return the stdout console used for primary output."""
     return _stdout
 
 
 def set_no_color(no_color: bool) -> None:
+    """Disable color output on both consoles."""
     global _console, _stdout
     if no_color:
         _console = Console(stderr=True, no_color=True, highlight=False)
@@ -48,8 +74,9 @@ def configure_cli_logging(*, verbose: bool, quiet: bool) -> None:
 # -- JSON output -------------------------------------------------------------
 
 
-def print_json(command: str, data: Any, *, ok: bool = True) -> None:
-    payload = {"ok": ok, "command": command, "data": data}
+def print_json(command: str, data: dict | list | str | None, *, ok: bool = True) -> None:
+    """Write a JSON response to stdout."""
+    payload: dict[str, object] = {"ok": ok, "command": command, "data": data}
     sys.stdout.write(json.dumps(payload, indent=2, default=str) + "\n")
 
 
@@ -57,22 +84,27 @@ def print_json(command: str, data: Any, *, ok: bool = True) -> None:
 
 
 def print_success(msg: str) -> None:
+    """Print a success message to stdout."""
     _stdout.print(f"[green bold]OK[/] {msg}")
 
 
 def print_error(msg: str) -> None:
+    """Print an error message to stderr."""
     _console.print(f"[red bold]Error:[/] {msg}")
 
 
 def print_warning(msg: str) -> None:
+    """Print a warning message to stderr."""
     _console.print(f"[yellow bold]Warning:[/] {msg}")
 
 
 def print_info(msg: str) -> None:
+    """Print an informational message to stdout."""
     _stdout.print(msg)
 
 
 def print_table(title: str, columns: list[str], rows: list[list[str]]) -> None:
+    """Print a Rich table to stdout."""
     table = Table(title=title, show_header=True)
     for col in columns:
         table.add_column(col)
@@ -82,26 +114,11 @@ def print_table(title: str, columns: list[str], rows: list[list[str]]) -> None:
 
 
 def print_panel(title: str, content: str) -> None:
+    """Print a Rich panel to stdout."""
     _stdout.print(Panel(content, title=title, expand=False))
 
 
 # -- Progress helpers --------------------------------------------------------
-
-from collections.abc import Generator
-from contextlib import contextmanager
-
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    ProgressColumn,
-    SpinnerColumn,
-    Task,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
-from rich.text import Text
 
 
 class _ConditionalColumn(ProgressColumn):
@@ -157,6 +174,7 @@ class RichProgressAdapter:
         self._task_id: int | None = None
 
     def started(self, description: str, total: int | None = None) -> None:
+        """Start tracking a new progress task."""
         # Finish any previous task that was not explicitly finished
         if self._task_id is not None:
             self.finished()
@@ -165,10 +183,12 @@ class RichProgressAdapter:
         )
 
     def update(self, advance: int) -> None:
+        """Advance the progress indicator by the given amount."""
         if self._task_id is not None:
             self._progress.update(self._task_id, advance=advance)
 
     def log(self, message: str) -> None:
+        """Print a log message above the progress bar."""
         self._progress.console.print(message)
 
     def failed(self, message: str | None = None) -> None:
@@ -181,6 +201,7 @@ class RichProgressAdapter:
         self._task_id = None
 
     def finished(self, message: str | None = None) -> None:
+        """Mark the current task as completed."""
         if self._task_id is None:
             return
         task = self._progress.tasks[self._task_id]
@@ -229,15 +250,6 @@ def cli_progress(*, enabled: bool = True) -> Generator[None]:
 
 # -- Tree progress helpers ---------------------------------------------------
 
-import threading
-import time as _time
-from collections.abc import Callable
-
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table as RichTable
-from rich.tree import Tree
-
 
 def _render_bar(fraction: float, width: int = 20) -> str:
     """Render a text-based progress bar using Rich markup."""
@@ -258,7 +270,7 @@ class _LiveSpinnerLabel:
         self._spinner = Spinner("dots")
         self._start = start if start is not None else _time.monotonic()
 
-    def __rich_console__(self, console, options):
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         grid = RichTable.grid(padding=(0, 1))
         elapsed = _fmt_elapsed(_time.monotonic() - self._start)
         grid.add_row(
@@ -294,7 +306,7 @@ class _LiveProgressLabel:
         self._start = start if start is not None else _time.monotonic()
         self._eta = eta
 
-    def __rich_console__(self, console, options):
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         from rich.markup import render as render_markup
 
         elapsed = _fmt_elapsed(_time.monotonic() - self._start)
@@ -441,7 +453,8 @@ class ModelNode(_TreeProgressNode):
         self._phase_order: list[str] = []
 
     @contextmanager
-    def phase(self, key: str, *, title: str, icon: str):
+    def phase(self, key: str, *, title: str, icon: str) -> Generator[_PhaseNode]:
+        """Create a scoped phase under this model's progress tree."""
         phase = self._ensure_phase(key, title=title, icon=icon)
         with _model_progress_context(phase):
             error: Exception | None = None
@@ -457,6 +470,7 @@ class ModelNode(_TreeProgressNode):
     # -- Model-level finish (called by cli_tree_progress) --------------------
 
     def finish_model(self, error: Exception | None = None) -> None:
+        """Finalize this model's progress branch."""
         with self._lock:
             # Auto-finish any dangling step
             if self._current_node is not None:
@@ -575,7 +589,7 @@ class _PhaseNode(_TreeProgressNode):
 
 
 @contextmanager
-def _model_progress_context(node: ModelNode):
+def _model_progress_context(node: ModelNode) -> Generator[ModelNode]:
     """Set progress_callback to *node* for the current thread."""
     from ..infrastructure.progress import progress_callback
 
@@ -607,7 +621,7 @@ def cli_tree_progress(
     if not enabled:
 
         @contextmanager
-        def _noop_ctx(model_key: str):
+        def _noop_ctx(model_key: str) -> Generator[None]:
             yield None
 
         yield _noop_ctx
@@ -619,7 +633,7 @@ def cli_tree_progress(
     with Live(tree, console=_console, refresh_per_second=8, transient=True) as live:
 
         @contextmanager
-        def model_context(model_key: str):
+        def model_context(model_key: str) -> Generator[ModelNode]:
             with lock:
                 branch = tree.add(_LiveSpinnerLabel(model_key, style="bold blue"))
                 live.update(tree)

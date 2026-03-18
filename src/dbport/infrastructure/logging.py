@@ -7,7 +7,10 @@ Idempotent: safe to call multiple times (use force=True to reconfigure).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 _configured = False
 
@@ -17,7 +20,7 @@ _NOISY_LOGGERS = ("pyiceberg", "fsspec", "s3fs", "urllib3", "botocore")
 def setup_logging(
     level: int = logging.INFO,
     *,
-    console: Any | None = None,
+    console: Console | None = None,
     force: bool = False,
 ) -> None:
     """Configure the ``dbport`` logger (not root). Idempotent unless *force*.
@@ -45,9 +48,7 @@ def setup_logging(
         from rich.logging import RichHandler
 
         if console is not None:
-            handler = RichHandler(
-                rich_tracebacks=True, show_path=False, console=console
-            )
+            handler = RichHandler(rich_tracebacks=True, show_path=False, console=console)
         else:
             handler = RichHandler(rich_tracebacks=True, show_path=False)
     except ImportError:

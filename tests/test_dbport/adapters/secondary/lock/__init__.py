@@ -1,0 +1,1 @@
+"""Lock adapter test package."""

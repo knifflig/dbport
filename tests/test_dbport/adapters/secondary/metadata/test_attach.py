@@ -14,47 +14,56 @@ from dbport.adapters.secondary.metadata.attach import (
 
 
 class _FakeCatalog:
-    def __init__(self):
+    def __init__(self) -> None:
         self.properties: dict[str, str] = {}
         self.column_docs: dict[str, str] = {}
 
-    def update_table_properties(self, table_address, properties):
+    def update_table_properties(self, table_address: str, properties: dict[str, str]) -> None:
+        """update_table_properties."""
         self.properties.update(properties)
 
-    def update_column_docs(self, table_address, column_docs):
+    def update_column_docs(self, table_address: str, column_docs: dict[str, str]) -> None:
+        """update_column_docs."""
         self.column_docs.update(column_docs)
 
 
 class TestAttachMetadataJson:
+    """Tests for Attach Metadata Json."""
+
     def _make_metadata_bytes(self, content: dict) -> bytes:
         return json.dumps(content).encode("utf-8")
 
-    def test_writes_metadata_json_property(self):
+    def test_writes_metadata_json_property(self) -> None:
+        """Writes metadata json property."""
         catalog = _FakeCatalog()
         md_bytes = self._make_metadata_bytes({"agency_id": "wifor"})
         attach_metadata_json(catalog, "wifor.emp", md_bytes)
         assert "dbport.metadata_json" in catalog.properties
 
-    def test_writes_sha256_property(self):
+    def test_writes_sha256_property(self) -> None:
+        """Writes sha256 property."""
         catalog = _FakeCatalog()
         md_bytes = self._make_metadata_bytes({"agency_id": "wifor"})
         attach_metadata_json(catalog, "wifor.emp", md_bytes)
         assert "dbport.metadata_sha256" in catalog.properties
 
-    def test_writes_gzip_base64_property(self):
+    def test_writes_gzip_base64_property(self) -> None:
+        """Writes gzip base64 property."""
         catalog = _FakeCatalog()
         md_bytes = self._make_metadata_bytes({"x": 1})
         attach_metadata_json(catalog, "wifor.emp", md_bytes)
         assert "dbport.metadata_json_gz" in catalog.properties
 
-    def test_sha256_matches_content(self):
+    def test_sha256_matches_content(self) -> None:
+        """Sha256 matches content."""
         catalog = _FakeCatalog()
         md_bytes = self._make_metadata_bytes({"agency_id": "wifor", "dataset_id": "emp"})
         attach_metadata_json(catalog, "wifor.emp", md_bytes)
         expected_sha = hashlib.sha256(md_bytes).hexdigest()
         assert catalog.properties["dbport.metadata_sha256"] == expected_sha
 
-    def test_gzip_base64_decompresses_to_original(self):
+    def test_gzip_base64_decompresses_to_original(self) -> None:
+        """Gzip base64 decompresses to original."""
         catalog = _FakeCatalog()
         md_bytes = self._make_metadata_bytes({"agency_id": "wifor"})
         attach_metadata_json(catalog, "wifor.emp", md_bytes)
@@ -62,7 +71,8 @@ class TestAttachMetadataJson:
         decompressed = gzip.decompress(base64.b64decode(gz_b64))
         assert decompressed == md_bytes
 
-    def test_metadata_json_property_is_valid_json(self):
+    def test_metadata_json_property_is_valid_json(self) -> None:
+        """Metadata json property is valid json."""
         catalog = _FakeCatalog()
         md_bytes = self._make_metadata_bytes({"agency_id": "wifor", "dataset_id": "emp"})
         attach_metadata_json(catalog, "wifor.emp", md_bytes)
@@ -71,13 +81,17 @@ class TestAttachMetadataJson:
 
 
 class TestAttachCodelistCsv:
-    def test_writes_column_doc(self):
+    """Tests for Attach Codelist Csv."""
+
+    def test_writes_column_doc(self) -> None:
+        """Writes column doc."""
         catalog = _FakeCatalog()
         csv_bytes = b"code,name\nDE,DE\nFR,FR\n"
         attach_codelist_csv(catalog, "wifor.emp", "geo", csv_bytes)
         assert "geo" in catalog.column_docs
 
-    def test_column_doc_contains_gzip_base64(self):
+    def test_column_doc_contains_gzip_base64(self) -> None:
+        """Column doc contains gzip base64."""
         catalog = _FakeCatalog()
         csv_bytes = b"code,name\nDE,DE\n"
         attach_codelist_csv(catalog, "wifor.emp", "geo", csv_bytes)
@@ -86,14 +100,16 @@ class TestAttachCodelistCsv:
         decompressed = gzip.decompress(base64.b64decode(gz_b64))
         assert decompressed == csv_bytes
 
-    def test_column_doc_contains_sha256(self):
+    def test_column_doc_contains_sha256(self) -> None:
+        """Column doc contains sha256."""
         catalog = _FakeCatalog()
         csv_bytes = b"code,name\nDE,DE\n"
         attach_codelist_csv(catalog, "wifor.emp", "geo", csv_bytes)
         doc = json.loads(catalog.column_docs["geo"])
         assert doc["dbport"]["csv_sha256"] == hashlib.sha256(csv_bytes).hexdigest()
 
-    def test_codelist_entry_fields_included(self):
+    def test_codelist_entry_fields_included(self) -> None:
+        """Codelist entry fields included."""
         catalog = _FakeCatalog()
         csv_bytes = b"code,name\nDE,DE\n"
 
@@ -110,12 +126,20 @@ class TestAttachCodelistCsv:
 
 
 class TestAttachCodelistCsvEdgeCases:
-    def test_skips_when_no_update_column_docs(self):
+    """Tests for Attach Codelist Csv Edge Cases."""
+
+    def test_skips_when_no_update_column_docs(self) -> None:
         """When catalog has no update_column_docs, logs warning and skips."""
 
         class _NoCatalog:
-            def update_table_properties(self, table_address, properties):
+            def update_table_properties(
+                self,
+                table_address: str,
+                properties: dict[str, str],
+            ) -> None:
+                """update_table_properties."""
                 pass
+
             # No update_column_docs method
 
         catalog = _NoCatalog()

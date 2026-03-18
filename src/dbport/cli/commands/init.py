@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
 from ..context import read_lock_models
+
+if TYPE_CHECKING:
+    from ..context import CliContext
 from ..errors import cli_error_handler
 from ..render import cli_progress, print_error, print_info, print_json, print_success
 
@@ -107,7 +111,7 @@ def _resolve_model_key(
 
 
 def _scaffold_model(
-    cli_ctx,
+    cli_ctx: CliContext,
     name: str,
     template: str,
     dataset: str | None,

@@ -9,7 +9,10 @@ from dbport.domain.entities.codelist import CodelistEntry, ColumnCodelist
 
 
 class TestCodelistEntry:
-    def test_minimal_construction(self):
+    """Tests for CodelistEntry."""
+
+    def test_minimal_construction(self) -> None:
+        """Test construction with only required fields."""
         entry = CodelistEntry(
             column_name="geo",
             column_pos=0,
@@ -23,22 +26,30 @@ class TestCodelistEntry:
         assert entry.codelist_labels is None
         assert entry.attach_table is None
 
-    def test_full_construction(self):
+    def test_full_construction(self) -> None:
+        """Test construction with all fields."""
         entry = CodelistEntry(
             column_name="geo",
             column_pos=1,
             codelist_id="NUTS2024",
             codelist_type="categorical",
             codelist_kind="hierarchical",
-            codelist_labels={"en": "NUTS 2024 Regions", "de": "NUTS 2024 Regionen"},
+            codelist_labels={
+                "en": "NUTS 2024 Regions",
+                "de": "NUTS 2024 Regionen",
+            },
             attach_table="wifor.cl_nuts2024",
         )
         assert entry.codelist_id == "NUTS2024"
         assert entry.codelist_kind == "hierarchical"
-        assert entry.codelist_labels == {"en": "NUTS 2024 Regions", "de": "NUTS 2024 Regionen"}
+        assert entry.codelist_labels == {
+            "en": "NUTS 2024 Regions",
+            "de": "NUTS 2024 Regionen",
+        }
         assert entry.attach_table == "wifor.cl_nuts2024"
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
+        """Test that instances are immutable."""
         entry = CodelistEntry(
             column_name="geo",
             column_pos=0,
@@ -47,29 +58,35 @@ class TestCodelistEntry:
         with pytest.raises((TypeError, ValidationError)):
             entry.codelist_id = "other"  # type: ignore[misc]
 
-    def test_missing_column_name(self):
+    def test_missing_column_name(self) -> None:
+        """Test that column_name is required."""
         with pytest.raises(ValidationError):
             CodelistEntry(column_pos=0, codelist_id="geo")  # type: ignore[call-arg]
 
-    def test_missing_column_pos(self):
+    def test_missing_column_pos(self) -> None:
+        """Test that column_pos is required."""
         with pytest.raises(ValidationError):
             CodelistEntry(column_name="geo", codelist_id="geo")  # type: ignore[call-arg]
 
-    def test_equality(self):
+    def test_equality(self) -> None:
+        """Test equality of identical entries."""
         a = CodelistEntry(column_name="geo", column_pos=0, codelist_id="geo")
         b = CodelistEntry(column_name="geo", column_pos=0, codelist_id="geo")
         assert a == b
 
-    def test_inequality(self):
+    def test_inequality(self) -> None:
+        """Test inequality of different entries."""
         a = CodelistEntry(column_name="geo", column_pos=0, codelist_id="geo")
         b = CodelistEntry(column_name="year", column_pos=1, codelist_id="year")
         assert a != b
 
-    def test_column_pos_zero(self):
+    def test_column_pos_zero(self) -> None:
+        """Test that column_pos zero is valid."""
         entry = CodelistEntry(column_name="ts", column_pos=0, codelist_id="ts")
         assert entry.column_pos == 0
 
-    def test_optional_fields_default_none(self):
+    def test_optional_fields_default_none(self) -> None:
+        """Test that optional fields default to None."""
         entry = CodelistEntry(column_name="geo", column_pos=0, codelist_id="geo")
         assert entry.codelist_type is None
         assert entry.codelist_labels is None
@@ -77,11 +94,15 @@ class TestCodelistEntry:
 
 
 class TestColumnCodelist:
-    def test_empty_construction(self):
+    """Tests for ColumnCodelist."""
+
+    def test_empty_construction(self) -> None:
+        """Test construction with no entries."""
         cl = ColumnCodelist()
         assert cl.entries == {}
 
-    def test_construction_with_entries(self):
+    def test_construction_with_entries(self) -> None:
+        """Test construction with multiple entries."""
         e1 = CodelistEntry(column_name="geo", column_pos=0, codelist_id="geo")
         e2 = CodelistEntry(column_name="year", column_pos=1, codelist_id="year")
         cl = ColumnCodelist(entries={"geo": e1, "year": e2})
@@ -89,12 +110,14 @@ class TestColumnCodelist:
         assert cl.entries["geo"] == e1
         assert cl.entries["year"] == e2
 
-    def test_frozen(self):
+    def test_frozen(self) -> None:
+        """Test that instances are immutable."""
         cl = ColumnCodelist()
         with pytest.raises((TypeError, ValidationError)):
             cl.entries = {}  # type: ignore[misc]
 
-    def test_entries_keyed_by_column_name(self):
+    def test_entries_keyed_by_column_name(self) -> None:
+        """Test that entries are keyed by column name."""
         e = CodelistEntry(
             column_name="geo",
             column_pos=0,

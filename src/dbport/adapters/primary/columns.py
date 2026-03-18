@@ -83,6 +83,7 @@ class ColumnRegistry:
         self._cache: dict[str, ColumnConfig] = {}
 
     def __getattr__(self, column_name: str) -> ColumnConfig:
+        """Return a ColumnConfig for the given column name."""
         if column_name.startswith("_"):
             raise AttributeError(column_name)
         if column_name not in self._cache:

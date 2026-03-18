@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-logger = logging.getLogger(__name__)
-
 from ...domain.entities.dataset import DatasetKey
 from ...domain.ports.catalog import ICatalog
+
+logger = logging.getLogger(__name__)
 
 
 class FetchService:
