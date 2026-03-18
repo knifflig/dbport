@@ -292,7 +292,7 @@ The version selector navigates between real paths locally. The docs version labe
 ## See Also
 
 - `docs/client.md` — user-facing usage guide (no internals)
-- `docs/dbport.md` — product concept and positioning
+- `docs/getting-started/about.md` — product positioning and audience
 - `examples/minimal/main.py` — full Python client API example
 - `examples/minimal_cli/run.sh` — full CLI-driven workflow example
 - `.claude/.env` — credentials (git-ignored)

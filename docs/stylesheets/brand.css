@@ -8,6 +8,12 @@
   --md-primary-fg-color--light: #4F7EA8;   /* Tide Blue */
   --md-primary-fg-color--dark: #16354F;    /* Deep Current */
   --md-accent-fg-color: #E07A5F;           /* Signal Coral */
+
+  /* Semantic — admonitions, alerts */
+  --md-admonition-fg-color--success: #2F7D5C;
+  --md-admonition-fg-color--warning: #C58A1C;
+  --md-admonition-fg-color--failure: #B44949;
+  --md-admonition-fg-color--info: #2F6FA3;
 }
 
 /* ---------- Dark mode ---------- */
