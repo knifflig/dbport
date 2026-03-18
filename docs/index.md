@@ -48,7 +48,7 @@ That is a complete lifecycle: inputs loaded from an Iceberg warehouse, SQL trans
 
 ---
 
-## Why teams use DBPort
+## Why using DBPort
 
 <div class="grid cards" markdown>
 
