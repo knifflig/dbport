@@ -268,6 +268,8 @@ See also: [`port.columns.<name>.attach()`](python.md#attach) (Python API equival
 
 Sync a model from the catalog. Opens the model via DBPort and performs init-time sync (schema auto-detection, local state sync, `last_fetched_at` update).
 
+`last_fetched_at` is a warehouse-check heartbeat. It records that DBPort evaluated the model in the current warehouse, even if no inputs changed and no publish happened. It should not be read as evidence that transforms ran or that a new version was written.
+
 ```bash
 dbp model sync
 dbp model sync wifor.emp__regional_trends

@@ -15,6 +15,17 @@ DBPort manages metadata automatically. You never write `metadata.json` or codeli
 | `inputs` | Load calls | Accumulated across all loads |
 | `versions` | Auto (append) | Every publish |
 
+## What `last_fetched_at` means
+
+`last_fetched_at` is an orchestration heartbeat, not a publish marker.
+
+- It records that DBPort checked the model in the warehouse.
+- It can update even when no inputs changed.
+- It does not mean transforms ran.
+- It does not mean a new version was published.
+
+This field exists to support process chains such as: a model run starts, DBPort checks the warehouse and inputs, determines that nothing changed, and exits without executing transforms or publishing data. In that case, `last_fetched_at` still shows that the model was evaluated.
+
 ## Codelists
 
 On publish, a codelist is auto-generated for each output column from its distinct values. You can customize this behavior per column.

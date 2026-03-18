@@ -235,3 +235,4 @@ __marimo__/
 # uv cache
 .uv-cache/
 uv.lock
+*.env

@@ -4,6 +4,23 @@ This roadmap tracks planned work beyond the current release. Items are ordered b
 
 ---
 
+## Warehouse-aware sync and lock rebinding
+
+**Impact:** very high | **Effort:** medium | **Timeline:** next up
+
+DBPort needs a lighter and more explicit sync story when users switch to a different warehouse or catalog. The current lock file is repo-scoped, which can make cached local state look like current warehouse state after a credential change.
+
+This work will make sync, status, and publish behave relative to the active warehouse binding. The goal is to keep the normal path lightweight while making warehouse divergence explicit and safe:
+
+- scope lock state to the active warehouse binding
+- make sync and status reflect the current warehouse context more clearly
+- avoid false idempotent publish skips when bootstrapping a fresh warehouse
+- prompt only for destructive reconciliation, not for normal refreshes
+
+This is primarily a product consistency task: users should be able to switch warehouses naturally without having to guess whether DBPort is showing local cache, current warehouse state, or both.
+
+---
+
 ## Extension system
 
 **Impact:** very high | **Effort:** medium | **Timeline:** next up

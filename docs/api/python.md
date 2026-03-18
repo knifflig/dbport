@@ -89,6 +89,8 @@ Creating a `DBPort` instance runs through four phases:
     | Update `last_fetched_at` | Writes a timestamp to the warehouse table properties (no new snapshot) | Logged at debug level; skipped |
     | Reload inputs | Reloads all inputs declared in `dbport.lock` into DuckDB (only when `load_inputs_on_init=True`) | Per-input errors logged; other inputs still loaded |
 
+`last_fetched_at` is intended as a liveness signal for orchestration. It means DBPort checked the model in the warehouse. It can advance on a no-op run where inputs are unchanged, transforms are not executed, and nothing is published.
+
 ### Full mode vs. `config_only`
 
 | Aspect | Full mode (default) | `config_only=True` |
