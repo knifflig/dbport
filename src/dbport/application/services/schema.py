@@ -36,7 +36,7 @@ class DefineSchemaService:
 
     def with_catalog(
         self, catalog: ICatalog | None, table_address: str | None
-    ) -> "DefineSchemaService":
+    ) -> DefineSchemaService:
         """Attach optional warehouse context for early schema drift checks."""
         self._catalog = catalog
         self._table_address = table_address

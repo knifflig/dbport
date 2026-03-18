@@ -482,7 +482,7 @@ class ModelNode(_TreeProgressNode):
     def _mark_failed(self) -> None:
         self._model_failed = True
 
-    def _ensure_phase(self, key: str, *, title: str, icon: str) -> "_PhaseNode":
+    def _ensure_phase(self, key: str, *, title: str, icon: str) -> _PhaseNode:
         with self._lock:
             if key in self._phases:  # pragma: no cover — phase reuse path
                 return self._phases[key]

@@ -11,7 +11,7 @@ from pathlib import Path
 import typer
 
 from ..errors import cli_error_handler
-from ..render import print_error, print_info, print_json, print_success, print_table, print_warning
+from ..render import print_error, print_info, print_json, print_success, print_table
 
 CONFIG_HELP = "Manage repo defaults and model-specific configuration."
 
@@ -603,7 +603,7 @@ def _handle_attach_for_model(cli_ctx, model_key: str, column: str, table: str) -
 
 def _update_column_metadata(cli_ctx, model_key: str, column: str, overrides: dict) -> None:
     from ...adapters.primary.client import DBPort
-    from ..context import resolve_model_paths_from_data, read_lock_models
+    from ..context import read_lock_models, resolve_model_paths_from_data
 
     models = read_lock_models(cli_ctx.lockfile_path)
     model_data = models[model_key]
@@ -635,7 +635,7 @@ def _update_column_metadata(cli_ctx, model_key: str, column: str, overrides: dic
 
 def _attach_column_table(cli_ctx, model_key: str, column: str, table: str) -> None:
     from ...adapters.primary.client import DBPort
-    from ..context import resolve_model_paths_from_data, read_lock_models
+    from ..context import read_lock_models, resolve_model_paths_from_data
 
     models = read_lock_models(cli_ctx.lockfile_path)
     model_data = models[model_key]

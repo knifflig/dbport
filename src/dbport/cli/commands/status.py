@@ -90,7 +90,7 @@ def _handle_raw(cli_ctx) -> None:
 
 def _handle_json(cli_ctx, models: dict, *, show_inputs: bool, show_history: bool) -> None:
     """Produce JSON output for the resolved model."""
-    from ..context import _cwd_model_root, _find_model, read_default_model
+    from ..context import _cwd_model_root, _find_model
 
     # Resolve which model to display
     default_key = read_default_model(cli_ctx.lockfile_path)
